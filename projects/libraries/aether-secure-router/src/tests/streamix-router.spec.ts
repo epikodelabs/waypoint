@@ -2,7 +2,6 @@ import { ensureAngularTestEnvironment } from './angular-testbed.init';
 
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   layout,
   lazyLayout,
@@ -81,13 +80,12 @@ describe('StreamixRouter: flat routes and layouts', () => {
 
   beforeEach(() => {
     TestBed.resetTestingModule();
-    vi.spyOn(window.history, 'pushState');
-    vi.spyOn(window.history, 'replaceState');
+    spyOn(window.history, 'pushState').and.callThrough();
+    spyOn(window.history, 'replaceState').and.callThrough();
     window.history.replaceState(null, '', '/');
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     router?.dispose();
     outlet?.remove();
   });
