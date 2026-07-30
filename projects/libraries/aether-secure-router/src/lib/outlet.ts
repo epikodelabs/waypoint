@@ -9,8 +9,8 @@ import {
 
 import { StreamixRouter } from './streamix-router';
 
-@Directive({ selector: 'streamix-outlet', standalone: true })
-export class StreamixOutlet implements OnInit {
+@Directive({ selector: 'router-outlet', standalone: true })
+export class RouterOutlet implements OnInit {
   private readonly router = inject(StreamixRouter);
   private readonly element = inject(ElementRef<HTMLElement>).nativeElement;
   private readonly destroyRef = inject(DestroyRef);

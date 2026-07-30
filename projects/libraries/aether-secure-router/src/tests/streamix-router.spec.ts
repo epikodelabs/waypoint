@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { getTestBed, TestBed } from '@angular/core/testing';
 import {
   BrowserTestingModule,
   platformBrowserTesting,
@@ -9,6 +9,7 @@ import {
   lazyLayout,
   lazyRoute,
   provideStreamixRouter,
+  RouterOutlet,
   route,
   StreamixRouter,
   type StreamixRoutes,
@@ -19,14 +20,16 @@ class HomeComponent {}
 
 @Component({
   standalone: true,
-  template: '<h2>Parent</h2><div data-router-outlet></div>',
+  imports: [RouterOutlet],
+  template: '<h2>Parent</h2><router-outlet></router-outlet>',
   host: { 'parent-cmp': '' },
 })
 class ParentComponent {}
 
 @Component({
   standalone: true,
-  template: '<h2>Shell</h2><div data-router-outlet></div>',
+  imports: [RouterOutlet],
+  template: '<h2>Shell</h2><router-outlet></router-outlet>',
   host: { 'shell-cmp': '' },
 })
 class ShellComponent {}
@@ -60,10 +63,14 @@ describe('StreamixRouter: flat routes and layouts', () => {
 
   // Initialize Angular test environment once for the entire suite
   beforeAll(() => {
-    TestBed.initTestEnvironment(
-      BrowserTestingModule,
-      platformBrowserTesting(),
-    );
+    try {
+      getTestBed().platform;
+    } catch {
+      TestBed.initTestEnvironment(
+        BrowserTestingModule,
+        platformBrowserTesting(),
+      );
+    }
   });
 
   function getOutletContent(): string {

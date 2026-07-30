@@ -1,7 +1,22 @@
 export const OUTLET_ACTIVATE_EVENT = 'vanilla-router-activate';
 export const OUTLET_DEACTIVATE_EVENT = 'vanilla-router-deactivate';
 export const ROUTER_LOCATION_CHANGE_EVENT = 'vanilla-router-locationchange';
-export const OUTLET_ATTRIBUTE = 'data-router-outlet';
+
+const OUTLET_QUERY = 'router-outlet';
+
+function isOutletElement(
+  element: HTMLElement,
+  targetName: string,
+): boolean {
+  const tagName = element.tagName.toLowerCase();
+  if (
+    tagName !== 'router-outlet'
+  ) {
+    return false;
+  }
+
+  return (element.getAttribute('name') ?? '') === targetName;
+}
 
 export function dispatchOutletLifecycleEvent(
   target: EventTarget,
@@ -19,22 +34,11 @@ export function dispatchRouterLocationChange(): void {
   window.dispatchEvent(new CustomEvent(ROUTER_LOCATION_CHANGE_EVENT));
 }
 
-/**
- * Finds a router outlet inside a node.
- *
- * - name === undefined | null | '' → primary (unnamed) outlet
- * - name provided → looks for data-router-outlet="name"
- */
 export function findOutlet(
   node: Node,
   name?: string | null,
 ): HTMLElement | null {
-  if (
-    !(
-      node instanceof Element ||
-      node instanceof DocumentFragment
-    )
-  ) {
+  if (!(node instanceof Element || node instanceof DocumentFragment)) {
     return null;
   }
 
@@ -42,19 +46,22 @@ export function findOutlet(
 
   if (
     node instanceof HTMLElement &&
-    node.getAttribute(OUTLET_ATTRIBUTE) === targetName
+    isOutletElement(node, targetName)
   ) {
     return node;
   }
 
   return (
     Array.from(
-      node.querySelectorAll<HTMLElement>(
-        `[${OUTLET_ATTRIBUTE}]`,
-      ),
-    ).find(
-      element =>
-        element.getAttribute(OUTLET_ATTRIBUTE) === targetName,
+      node.querySelectorAll<HTMLElement>(OUTLET_QUERY),
+    ).find(element =>
+      isOutletElement(element, targetName),
     ) ?? null
   );
+}
+
+export function findContainingOutlet(
+  node: Element,
+): HTMLElement | null {
+  return node.closest<HTMLElement>(OUTLET_QUERY);
 }

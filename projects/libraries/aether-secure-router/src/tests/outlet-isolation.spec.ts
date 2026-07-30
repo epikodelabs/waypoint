@@ -4,16 +4,16 @@ import {
   BrowserTestingModule,
   platformBrowserTesting,
 } from '@angular/platform-browser/testing';
-import { StreamixOutlet } from 'aether-secure-router';
+import { RouterOutlet } from 'aether-secure-router';
 
 @Component({
   standalone: true,
-  imports: [StreamixOutlet],
-  template: '<streamix-outlet />',
+  imports: [RouterOutlet],
+  template: '<router-outlet></router-outlet>',
 })
 class OutletHost {}
 
-describe('StreamixOutlet isolation', () => {
+describe('RouterOutlet isolation', () => {
   beforeAll(() => {
     try {
       getTestBed().platform;
@@ -26,13 +26,13 @@ describe('StreamixOutlet isolation', () => {
   });
 
   it('should compile as a standalone directive', async () => {
-    expect(StreamixOutlet).toBeTruthy();
-    expect((StreamixOutlet as any).ɵdir).toBeTruthy();
+    expect(RouterOutlet).toBeTruthy();
+    expect((RouterOutlet as any).ɵdir).toBeTruthy();
 
     await TestBed.configureTestingModule({
       imports: [OutletHost],
     }).compileComponents();
 
-    expect().nothing();
+    expect(true).toBe(true);
   });
 });
