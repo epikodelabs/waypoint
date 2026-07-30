@@ -1,38 +1,27 @@
+import { ensureAngularTestEnvironment } from './angular-testbed.init';
+
 import { Component } from '@angular/core';
-import { getTestBed, TestBed } from '@angular/core/testing';
-import {
-  BrowserTestingModule,
-  platformBrowserTesting,
-} from '@angular/platform-browser/testing';
+import { TestBed } from '@angular/core/testing';
 import { RouterOutlet } from 'aether-secure-router';
+
+ensureAngularTestEnvironment();
 
 @Component({
   standalone: true,
   imports: [RouterOutlet],
-  template: '<router-outlet></router-outlet>',
+  template: '<router-outlet />',
 })
-class OutletHost {}
+class RouterOutletHost {}
 
 describe('RouterOutlet isolation', () => {
-  beforeAll(() => {
-    try {
-      getTestBed().platform;
-    } catch {
-      TestBed.initTestEnvironment(
-        BrowserTestingModule,
-        platformBrowserTesting(),
-      );
-    }
-  });
-
-  it('should compile as a standalone directive', async () => {
+  it('should compile the Angular-compatible router-outlet selector', async () => {
     expect(RouterOutlet).toBeTruthy();
-    expect((RouterOutlet as any).ɵdir).toBeTruthy();
+    expect((RouterOutlet as any)['ɵdir']).toBeTruthy();
 
     await TestBed.configureTestingModule({
-      imports: [OutletHost],
+      imports: [RouterOutletHost],
     }).compileComponents();
 
-    expect(true).toBe(true);
+    expect().nothing();
   });
 });

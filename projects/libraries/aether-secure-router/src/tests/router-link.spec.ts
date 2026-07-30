@@ -1,17 +1,43 @@
+import { ensureAngularTestEnvironment } from './angular-testbed.init';
+
 import { Component } from '@angular/core';
-import { getTestBed, TestBed } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import {
-  BrowserTestingModule,
-  platformBrowserTesting,
-} from '@angular/platform-browser/testing';
-import {
-  provideStreamixRouter,
-  route,
   RouterLink,
   RouterOutlet,
   StreamixRouter,
-  type StreamixRoutes,
+  provideStreamixRouter,
+  route,
 } from 'aether-secure-router';
+
+ensureAngularTestEnvironment();
+
+function delay(ms = 0): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function dispatchAnchorClick(target: HTMLAnchorElement): boolean {
+  const event = new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+  });
+
+  let defaultPrevented = false;
+  const cleanupListener = (currentEvent: MouseEvent) => {
+    defaultPrevented = currentEvent.defaultPrevented;
+    currentEvent.preventDefault();
+  };
+
+  document.addEventListener('click', cleanupListener);
+  try {
+    target.dispatchEvent(event);
+  } finally {
+    document.removeEventListener('click', cleanupListener);
+  }
+
+  return defaultPrevented;
+}
 
 @Component({
   standalone: true,
@@ -28,69 +54,59 @@ class AboutComponent {}
 @Component({
   standalone: true,
   imports: [RouterLink, RouterOutlet],
-  template: `
-    <a id="about-link" routerLink="/about">About</a>
-    <router-outlet></router-outlet>
-  `,
+  template: '<a [routerLink]="target">About</a><router-outlet />',
 })
-class RouterLinkHostComponent {}
+class RouterLinkHostComponent {
+  target = '/about';
+}
 
-describe('RouterLink', () => {
-  beforeAll(() => {
-    try {
-      getTestBed().platform;
-    } catch {
-      TestBed.initTestEnvironment(
-        BrowserTestingModule,
-        platformBrowserTesting(),
-      );
-    }
-  });
+describe('StreamixRouterLink', () => {
+  let router: StreamixRouter;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
     window.history.replaceState(null, '', '/');
   });
 
-  it('renders hrefs and navigates on click', async () => {
-    const routes = [
-      route('/', HomeComponent),
-      route('/about', AboutComponent),
-    ] as const satisfies StreamixRoutes;
+  afterEach(() => {
+    router?.dispose();
+  });
 
+  it('binds href for routerLink and navigates through anchor clicks', async () => {
     await TestBed.configureTestingModule({
-      imports: [RouterLinkHostComponent],
-      providers: [...provideStreamixRouter(routes)],
+      imports: [
+        HomeComponent,
+        AboutComponent,
+        RouterLinkHostComponent,
+      ],
+      providers: [
+        ...provideStreamixRouter([
+          route('/', HomeComponent),
+          route('/about', AboutComponent),
+        ]),
+      ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(
-      RouterLinkHostComponent,
-    );
-    const router = TestBed.inject(StreamixRouter);
+    const fixture = TestBed.createComponent(RouterLinkHostComponent);
+    router = TestBed.inject(StreamixRouter);
 
     fixture.detectChanges();
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await delay();
     fixture.detectChanges();
 
-    const link = fixture.nativeElement.querySelector(
-      '#about-link',
-    ) as HTMLAnchorElement | null;
+    const host = fixture.nativeElement as HTMLElement;
+    const anchor = host.querySelector('a');
 
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toBe('/about');
+    expect(anchor).not.toBeNull();
+    expect(anchor?.getAttribute('href')).toBe('/about');
 
-    link?.dispatchEvent(
-      new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-      }),
-    );
+    const defaultPrevented = dispatchAnchorClick(anchor as HTMLAnchorElement);
 
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await delay();
     fixture.detectChanges();
 
-    expect(router.state.path).toBe('/about');
-    expect(fixture.nativeElement.innerHTML).toContain('About');
+    expect(defaultPrevented).toBeTrue();
+    expect(router.state.current?.path).toBe('/about');
+    expect(host.textContent).toContain('About');
   });
 });

@@ -1,9 +1,8 @@
+import { ensureAngularTestEnvironment } from './angular-testbed.init';
+
 import { Component } from '@angular/core';
-import { getTestBed, TestBed } from '@angular/core/testing';
-import {
-  BrowserTestingModule,
-  platformBrowserTesting,
-} from '@angular/platform-browser/testing';
+import { TestBed } from '@angular/core/testing';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   layout,
   lazyLayout,
@@ -15,13 +14,15 @@ import {
   type StreamixRoutes,
 } from 'aether-secure-router';
 
+ensureAngularTestEnvironment();
+
 @Component({ standalone: true, template: '<h1>Home</h1>' })
 class HomeComponent {}
 
 @Component({
   standalone: true,
   imports: [RouterOutlet],
-  template: '<h2>Parent</h2><router-outlet></router-outlet>',
+  template: '<h2>Parent</h2><router-outlet />',
   host: { 'parent-cmp': '' },
 })
 class ParentComponent {}
@@ -29,14 +30,15 @@ class ParentComponent {}
 @Component({
   standalone: true,
   imports: [RouterOutlet],
-  template: '<h2>Shell</h2><router-outlet></router-outlet>',
+  template: '<h2>Shell</h2><router-outlet />',
   host: { 'shell-cmp': '' },
 })
 class ShellComponent {}
 
 @Component({
-  standalone: true, template: '<h3>Child</h3>',
-  host: { 'child-cmp': '' }
+  standalone: true,
+  template: '<h3>Child</h3>',
+  host: { 'child-cmp': '' },
 })
 class ChildComponent {}
 
@@ -53,6 +55,13 @@ describe('StreamixRouter: flat routes and layouts', () => {
 
   function bootstrap(routes: StreamixRoutes): void {
     TestBed.configureTestingModule({
+      imports: [
+        HomeComponent,
+        ParentComponent,
+        ShellComponent,
+        ChildComponent,
+        SettingsComponent,
+      ],
       providers: [...provideStreamixRouter(routes)],
     });
 
@@ -60,18 +69,6 @@ describe('StreamixRouter: flat routes and layouts', () => {
     router = TestBed.inject(StreamixRouter);
     router.connect('', outlet);
   }
-
-  // Initialize Angular test environment once for the entire suite
-  beforeAll(() => {
-    try {
-      getTestBed().platform;
-    } catch {
-      TestBed.initTestEnvironment(
-        BrowserTestingModule,
-        platformBrowserTesting(),
-      );
-    }
-  });
 
   function getOutletContent(): string {
     return outlet.innerHTML;
@@ -84,20 +81,19 @@ describe('StreamixRouter: flat routes and layouts', () => {
 
   beforeEach(() => {
     TestBed.resetTestingModule();
-    spyOn(window.history, 'pushState').and.callThrough();
-    spyOn(window.history, 'replaceState').and.callThrough();
+    vi.spyOn(window.history, 'pushState');
+    vi.spyOn(window.history, 'replaceState');
     window.history.replaceState(null, '', '/');
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     router?.dispose();
     outlet?.remove();
   });
 
   it('renders a leaf route without a layout', async () => {
-    const routes = [
-      route('/', HomeComponent),
-    ] as const satisfies StreamixRoutes;
+    const routes = [route('/', HomeComponent)] as const satisfies StreamixRoutes;
 
     bootstrap(routes);
     await navigate('/');
@@ -135,7 +131,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
     expect(content).toContain('<h3>Child</h3>');
   });
 
-  it('inherits the layout path prefix' , async () => {
+  it('inherits the layout path prefix', async () => {
     const routes = [
       layout('/admin', ParentComponent, [
         route('/settings', SettingsComponent),
@@ -166,11 +162,9 @@ describe('StreamixRouter: flat routes and layouts', () => {
 
   it('renders a lazy layout around an eager leaf route', async () => {
     const routes = [
-      lazyLayout(
-        '/admin',
-        async () => ParentComponent,
-        [route('/child', ChildComponent)],
-      ),
+      lazyLayout('/admin', async () => ParentComponent, [
+        route('/child', ChildComponent),
+      ]),
     ] as const satisfies StreamixRoutes;
 
     bootstrap(routes);
@@ -183,11 +177,9 @@ describe('StreamixRouter: flat routes and layouts', () => {
 
   it('renders a lazy layout around a lazy leaf route', async () => {
     const routes = [
-      lazyLayout(
-        '/admin',
-        async () => ParentComponent,
-        [lazyRoute('/lazy-child', async () => ChildComponent)],
-      ),
+      lazyLayout('/admin', async () => ParentComponent, [
+        lazyRoute('/lazy-child', async () => ChildComponent),
+      ]),
     ] as const satisfies StreamixRoutes;
 
     bootstrap(routes);
@@ -253,7 +245,6 @@ describe('StreamixRouter: flat routes and layouts', () => {
     await navigate('/');
     const content = getOutletContent();
     expect(content).toContain('<h1>Home</h1>');
-    // After navigating to '/', both the primary and sidebar outlets should render.
     expect(sidebarOutlet.innerHTML).toContain('<h3>Settings</h3>');
 
     router.disconnect('sidebar', sidebarOutlet);
