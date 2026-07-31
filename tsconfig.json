@@ -2,7 +2,7 @@
   "compileOnSave": false,
   "compilerOptions": {
     "paths": {
-      "waypoint": [
+      "@epikodelabs/waypoint": [
         "./projects/libraries/waypoint/src/public-api.ts"
       ]
     },
@@ -32,6 +32,9 @@
     },
     {
       "path": "./projects/libraries/waypoint/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/apps/app1/tsconfig.json"
     }
   ]
 }
