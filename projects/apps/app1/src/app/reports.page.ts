@@ -3,6 +3,7 @@ import { StreamixRouterLink } from '@epikodelabs/waypoint';
 
 @Component({
   standalone: true,
+  selector: 'app-reports-page',
   imports: [StreamixRouterLink],
   template: `
     <section class="page">
