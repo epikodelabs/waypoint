@@ -4,7 +4,7 @@ import {
   adaptRouteComponent,
   bindRouteInputs,
   type StreamixRouteProviders,
-} from 'aether-secure-router';
+} from 'waypoint';
 
 @Component({
   template: '',

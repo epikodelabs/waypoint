@@ -1,9 +1,9 @@
 {
   "srcDirs": [
-    "projects/libraries/aether-secure-router/src/lib"
+    "projects/libraries/waypoint/src/lib"
   ],
   "testDirs": [
-    "projects/libraries/aether-secure-router/src/tests"
+    "projects/libraries/waypoint/src/tests"
   ],
   "exclude": [
     "**/node_modules/**"

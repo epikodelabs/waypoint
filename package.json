@@ -1,12 +1,12 @@
 {
-  "name": "app1",
-  "version": "0.0.0",
+  "name": "waypoint",
+  "version": "1.0.1",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve app1",
-    "build": "ng build app1",
-    "watch": "ng build app1 --watch --configuration development",
-    "test": "ng test app1"
+    "start": "ng build waypoint --watch --configuration development",
+    "build": "ng build waypoint",
+    "watch": "ng build waypoint --watch --configuration development",
+    "test": "ng test waypoint"
   },
   "private": true,
   "packageManager": "npm@10.9.8",
@@ -24,8 +24,8 @@
     "@angular/build": "^22.0.8",
     "@angular/cli": "^22.0.8",
     "@angular/compiler-cli": "^22.0.0",
-    "@epikodelabs/testify": "^1.0.33",
-    "@types/jasmine": "^5.1.15",
+    "@epikodelabs/testify": "^1.0.36",
+    "@types/jasmine": "^6.0.0",
     "jsdom": "^28.0.0",
     "ng-packagr": "^22.0.0",
     "prettier": "^3.8.1",

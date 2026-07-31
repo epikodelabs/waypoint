@@ -11,7 +11,7 @@ import {
   route,
   StreamixRouter,
   type StreamixRoutes,
-} from 'aether-secure-router';
+} from 'waypoint';
 
 ensureAngularTestEnvironment();
 

@@ -6,23 +6,23 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "aether-secure-router": {
+    "waypoint": {
       "projectType": "library",
-      "root": "projects/libraries/aether-secure-router",
-      "sourceRoot": "projects/libraries/aether-secure-router/src",
+      "root": "projects/libraries/waypoint",
+      "sourceRoot": "projects/libraries/waypoint/src",
       "prefix": "lib",
       "architect": {
         "build": {
           "builder": "@angular/build:ng-packagr",
           "options": {
-            "project": "projects/libraries/aether-secure-router/ng-package.json"
+            "project": "projects/libraries/waypoint/ng-package.json"
           },
           "configurations": {
             "production": {
-              "tsConfig": "projects/libraries/aether-secure-router/tsconfig.lib.prod.json"
+              "tsConfig": "projects/libraries/waypoint/tsconfig.lib.prod.json"
             },
             "development": {
-              "tsConfig": "projects/libraries/aether-secure-router/tsconfig.lib.json"
+              "tsConfig": "projects/libraries/waypoint/tsconfig.lib.json"
             }
           },
           "defaultConfiguration": "production"
@@ -30,7 +30,7 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "tsConfig": "projects/libraries/aether-secure-router/tsconfig.spec.json"
+            "tsConfig": "projects/libraries/waypoint/tsconfig.spec.json"
           }
         }
       }

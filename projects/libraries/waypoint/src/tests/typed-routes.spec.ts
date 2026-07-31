@@ -1,4 +1,4 @@
-import { layout, route, s, type StreamixRoutes, type StreamixRouter } from 'aether-secure-router';
+import { layout, route, s, type StreamixRoutes, type StreamixRouter } from 'waypoint';
 
 class DashboardLayout {}
 class DashboardPage {}
