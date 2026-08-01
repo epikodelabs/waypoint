@@ -6,7 +6,7 @@ import {
   RouterOutlet,
   StreamixRouterLink,
 } from '@epikodelabs/waypoint';
-import { DemoSessionService, DemoUser } from './demo-session.service';
+import { DemoSessionService } from '../../../app1/src/app/demo-session.service';
 
 @Component({
   selector: 'app-root',
@@ -19,9 +19,5 @@ import { DemoSessionService, DemoUser } from './demo-session.service';
   styleUrl: './app.css',
 })
 export class App {
-  readonly session = inject(DemoSessionService);
-
-  get currentUser(): DemoUser {
-    return this.session.currentUser();
-  }
+  protected readonly session = inject(DemoSessionService);
 }
