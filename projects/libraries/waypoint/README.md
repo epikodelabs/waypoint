@@ -81,12 +81,19 @@ const projectRoute = route(
 export const routes = [
   layout('/app', AppShellComponent, [
     projectRoute,
-    route('/projects/:projectId', ProjectSidebarComponent, {
-      outlet: 'sidebar',
-    }),
   ]),
 ] as const satisfies StreamixRoutes;
 ```
+
+If you use a named outlet, its companion route intentionally shares the same path as the primary route:
+
+```ts
+route('/projects/:projectId', ProjectSidebarComponent, {
+  outlet: 'sidebar',
+})
+```
+
+That route is not a second independently matched page. It is extra content rendered alongside the primary route for the same URL.
 
 ## Why this shape
 
