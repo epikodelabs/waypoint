@@ -36,6 +36,14 @@ class ShellComponent {}
 
 @Component({
   standalone: true,
+  imports: [RouterOutlet],
+  template: '<h2>Shell</h2><router-outlet name="sidebar" /><router-outlet />',
+  host: { 'shell-sidebar-cmp': '' },
+})
+class ShellWithSidebarComponent {}
+
+@Component({
+  standalone: true,
   template: '<h3>Child</h3>',
   host: { 'child-cmp': '' },
 })
@@ -58,6 +66,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
         HomeComponent,
         ParentComponent,
         ShellComponent,
+        ShellWithSidebarComponent,
         ChildComponent,
         SettingsComponent,
       ],
@@ -246,5 +255,46 @@ describe('StreamixRouter: flat routes and layouts', () => {
     expect(sidebarOutlet.innerHTML).toContain('<h3>Settings</h3>');
 
     router.disconnect('sidebar', sidebarOutlet);
+  });
+
+  it('connects named outlets declared inside a layout component', async () => {
+    const routes = [
+      layout('/app', ShellWithSidebarComponent, [
+        route('/child', ChildComponent),
+        route('/child', SettingsComponent, { outlet: 'sidebar' }),
+      ]),
+    ] as const satisfies StreamixRoutes;
+
+    bootstrap(routes);
+    await navigate('/app/child');
+
+    const content = getOutletContent();
+    expect(content).toContain('<h2>Shell</h2>');
+    expect(content).toContain('<h3>Child</h3>');
+    expect(content).toContain('<h3>Settings</h3>');
+  });
+
+  it('keeps named outlet navigation working across layout re-renders', async () => {
+    const routes = [
+      layout('/app', ShellWithSidebarComponent, [
+        route('/child', ChildComponent),
+        route('/child', SettingsComponent, { outlet: 'sidebar' }),
+        route('/settings', SettingsComponent),
+        route('/settings', HomeComponent, { outlet: 'sidebar' }),
+      ]),
+    ] as const satisfies StreamixRoutes;
+
+    bootstrap(routes);
+
+    await navigate('/app/child');
+    expect(getOutletContent()).toContain('<h3>Child</h3>');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+
+    await navigate('/app/settings');
+
+    const content = getOutletContent();
+    expect(content).toContain('<h3>Settings</h3>');
+    expect(content).toContain('<h1>Home</h1>');
+    expect(router.state.path).toBe('/app/settings');
   });
 });
