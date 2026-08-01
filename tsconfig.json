@@ -26,10 +26,10 @@
   "files": [],
   "references": [
     {
-      "path": "./projects/libraries/switchboard/tsconfig.lib.json"
+      "path": "./projects/libraries/waypoint/tsconfig.lib.json"
     },
     {
-      "path": "./projects/libraries/switchboard/tsconfig.spec.json"
+      "path": "./projects/libraries/waypoint/tsconfig.spec.json"
     },
     {
       "path": "./projects/apps/app1/tsconfig.app.json"
