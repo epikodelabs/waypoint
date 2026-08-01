@@ -1,65 +1,103 @@
-# App1
+# Waypoint Workspace
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.0.8.
+This is an Angular routing workspace centered on the `@epikodelabs/waypoint` library.
 
-## Development server
+The library is built around three ideas:
 
-To start a local development server, run:
+- `path` matches URLs
+- `name` identifies primary routes in the app model
+- `frame` owns route lifecycle hooks
+
+This keeps routing, typed navigation, and route lifecycle in one definition instead of spreading them across Angular guard and resolver classes.
+
+## Model
+
+In Waypoint, a route is a navigation contract. A primary route can define:
+
+- `name`
+- `path`
+- typed `paramsSchema`
+- typed `querySchema`
+- component or lazy component
+- frame hooks:
+  - `beforeEnter`
+  - `beforeLeave`
+  - `prepare`
+  - `afterEnter`
+
+Layouts compose shells and shared UI without forcing the app into a deep route tree.
+
+Named outlets are supported for coordinated multi-outlet rendering. Secondary outlet entries are subordinate to the primary route for the same path.
+
+## Example
+
+```ts
+const workspaceRoute = route(
+  '/workspace/:projectId',
+  frame(WorkspacePage, {
+    prepare: [
+      context => ({
+        snapshot: inject(DemoSessionService)
+          .buildWorkspaceSnapshot(Number(context.params['projectId'] ?? 0)),
+      }),
+    ],
+  }),
+  {
+    name: 'workspace',
+    paramsSchema: {
+      projectId: s.number({ min: 1 }),
+    },
+    querySchema: {
+      view: s.string('overview'),
+      page: s.number({ default: 1, min: 1 }),
+    },
+  },
+);
+```
+
+That definition answers three separate questions in one place:
+
+- what URL is this: `path`
+- what route is this in the app: `name`
+- what must happen around navigation: `frame`
+
+## Workspace
+
+- `projects/libraries/waypoint` - the routing library
+- `projects/apps/app1` - demo app that exercises layouts, frames, typed navigation, and named outlets
+
+## Development
+
+Build the library:
+
+```bash
+ng build waypoint --configuration development
+```
+
+Run the demo app:
 
 ```bash
 ng serve app1
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Tests
 
-## Code scaffolding
+The library specs run with the Testify Jasmine harness.
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build app1
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-This repo runs the `waypoint` library specs with the Testify Jasmine harness. Use:
+Run the suite:
 
 ```bash
 npm test
 ```
 
-For interactive browser mode:
+Interactive browser mode:
 
 ```bash
 npm run test:watch
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
+Coverage:
 
 ```bash
-ng e2e
+npm run test:coverage
 ```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
