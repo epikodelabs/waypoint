@@ -99,6 +99,29 @@ Waypoint tries to keep the model simple:
 
 That gives you one route definition instead of separate route config, resolver classes, guard classes, and ad hoc data-loading conventions.
 
+## Limitations vs Angular Router
+
+Waypoint is intentionally narrower than Angular Router. The current tradeoffs are:
+
+- standalone-first components and directives
+- no `NgModule` router integration such as `RouterModule.forRoot()` or `RouterModule.forChild()`
+- no `loadChildren` / lazy `NgModule` boundaries; lazy loading is component- or layout-based
+- no class-based guards or resolver classes; the model is function-based hooks and `inject()`
+- no `CanLoad`; route lifecycle is expressed through `beforeEnter`, `beforeLeave`, `prepare`, and `afterEnter`
+- no matrix-parameter model
+- no Angular `Route` object compatibility layer; Waypoint uses its own route definitions
+- no full Angular route tree semantics; layouts are composition primitives, not nested router-state nodes
+
+There are also explicit restrictions around secondary outlets:
+
+- secondary outlet entries cannot define their own `name`
+- secondary outlet entries cannot define `paramsSchema` or `querySchema`
+- secondary outlet entries cannot redirect
+- secondary outlet entries must share the exact path of their primary route
+- primary routes own group-level preload and view-transition behavior
+
+So the library is a better fit when you want a smaller, typed routing surface with explicit lifecycle hooks, and a worse fit when you need broad Angular Router feature parity.
+
 ## Testing
 
 This workspace uses the Testify Jasmine harness for library specs:

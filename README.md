@@ -61,6 +61,20 @@ That definition answers three separate questions in one place:
 - what route is this in the app: `name`
 - what must happen around navigation: `frame`
 
+## Limitations
+
+Compared to Angular Router, the library currently takes a narrower approach:
+
+- standalone-first components and directives
+- no `NgModule` router API
+- no `loadChildren`
+- no class-based guards or resolver classes
+- no matrix params
+- no full Angular route-tree semantics
+- restricted secondary outlet routes that stay subordinate to a primary route
+
+The full comparison lives in `projects/libraries/waypoint/README.md`.
+
 ## Workspace
 
 - `projects/libraries/waypoint` - the routing library
