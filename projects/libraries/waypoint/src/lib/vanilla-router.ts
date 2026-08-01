@@ -107,6 +107,7 @@ export interface Route {
   name?: string;
   path: string;
   outlet?: string;
+  sourceRoute?: unknown;
   /** Same-path named outlets activated atomically with this primary route. */
   outlets?: readonly Route[];
   load?: () => MaybePromise<LoadedRoute>;
@@ -117,6 +118,29 @@ export interface Route {
   canActivate?: CanActivateFn[];
   canDeactivate?: CanDeactivateFn[];
   resolve?: Record<string, Resolve>;
+}
+
+export interface NavigationTransition {
+  readonly from: ActivatedRoute | null;
+  readonly to: ActivatedRoute;
+  readonly signal: AbortSignal;
+}
+
+export type NavigationTransitionFn = (
+  transition: NavigationTransition,
+) => MaybePromise<GuardResult | void>;
+
+export interface NavigationTransitionDefinition {
+  readonly from?: (
+    route: ActivatedRoute | null,
+  ) => boolean;
+  readonly to?: (
+    route: ActivatedRoute,
+  ) => boolean;
+  readonly beforeEnter?: readonly NavigationTransitionFn[];
+  readonly prepare?: readonly NavigationTransitionFn[];
+  readonly beforeLeave?: readonly NavigationTransitionFn[];
+  readonly afterEnter?: readonly NavigationTransitionFn[];
 }
 
 export type NavigationPhase = 'recognizing' | 'guarding' | 'resolving' | 'loading' | null;
@@ -173,6 +197,7 @@ export interface Router {
 
 export interface RouterConfig {
   routes: Route[];
+  transitions?: readonly NavigationTransitionDefinition[];
   /**
    * Default DOM outlet used when no custom named-outlet renderer is supplied.
    */
@@ -351,6 +376,13 @@ function executeResolver(resolver: Resolve, route: NavigationContext): MaybeProm
   return typeof resolver === 'function' ? resolver(route) : resolver.resolve(route);
 }
 
+function executeTransition(
+  transition: NavigationTransitionFn,
+  context: NavigationTransition,
+): MaybePromise<GuardResult | void> {
+  return transition(context);
+}
+
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw new DOMException('Navigation aborted', 'AbortError');
 }
@@ -487,6 +519,7 @@ export function createRouter(config: RouterConfig): Router {
   const renderNotFound = config.renderNotFound;
   const renderError = config.renderError;
   const commitOutlets = config.commit;
+  const transitions = config.transitions ?? [];
   const navigateExternal = config.navigateExternal ?? ((url: URL) => window.location.assign(url.href));
   const baseHref = normalizeBaseHref(config.baseHref ?? '/');
   const maxRedirects = config.maxRedirects ?? 10;
@@ -525,6 +558,82 @@ export function createRouter(config: RouterConfig): Router {
 
   function resolveOutlet(): HTMLElement | null {
     return config.outlet ?? document.getElementById('app');
+  }
+
+  function matchesTransitionDefinition(
+    definition: NavigationTransitionDefinition,
+    from: ActivatedRoute | null,
+    to: ActivatedRoute,
+  ): boolean {
+    return (definition.from?.(from) ?? true)
+      && (definition.to?.(to) ?? true);
+  }
+
+  function collectTransitionPhase(
+    phase: keyof Pick<
+      NavigationTransitionDefinition,
+      'beforeEnter' | 'prepare' | 'beforeLeave' | 'afterEnter'
+    >,
+    from: ActivatedRoute | null,
+    to: ActivatedRoute,
+  ): readonly NavigationTransitionFn[] {
+    const handlers: NavigationTransitionFn[] = [];
+
+    for (const definition of transitions) {
+      if (!matchesTransitionDefinition(definition, from, to)) {
+        continue;
+      }
+
+      handlers.push(...(definition[phase] ?? []));
+    }
+
+    return handlers;
+  }
+
+  async function runTransitionPhase(
+    phase: keyof Pick<
+      NavigationTransitionDefinition,
+      'beforeEnter' | 'prepare' | 'beforeLeave'
+    >,
+    from: ActivatedRoute | null,
+    to: ActivatedRoute,
+    signal: AbortSignal,
+  ): Promise<GuardResult> {
+    const handlers = collectTransitionPhase(phase, from, to);
+
+    for (const handler of handlers) {
+      const result = await executeTransition(handler, {
+        from,
+        to,
+        signal,
+      });
+      throwIfAborted(signal);
+
+      if (result === undefined || result === true) {
+        continue;
+      }
+
+      return result;
+    }
+
+    return true;
+  }
+
+  function runAfterEnterTransitions(
+    from: ActivatedRoute | null,
+    to: ActivatedRoute,
+  ): void {
+    const handlers = collectTransitionPhase('afterEnter', from, to);
+
+    for (const handler of handlers) {
+      void Promise.resolve(
+        executeTransition(handler, {
+          from,
+          to,
+          signal: new AbortController().signal,
+        }),
+      ).catch(error => trace('afterEnter transition failed', error));
+    }
   }
 
   function createStatusRoute(url: URL): ActivatedRoute {
@@ -1093,20 +1202,20 @@ export function createRouter(config: RouterConfig): Router {
     const match = recognize(path);
     throwIfAborted(signal);
 
-    setPhase(request, 'guarding');
-    const deactivationResult = await runCanDeactivateGuards(request.url, signal);
-    if (deactivationResult === false) {
-      return { type: 'blocked', request };
-    }
-
-    const deactivationRedirect = deactivationResult
-      ? readRedirect(deactivationResult)
-      : null;
-    if (deactivationRedirect) {
-      return { type: 'redirect', request, ...deactivationRedirect };
-    }
-
     if (!match) {
+      setPhase(request, 'guarding');
+      const deactivationResult = await runCanDeactivateGuards(request.url, signal);
+      if (deactivationResult === false) {
+        return { type: 'blocked', request };
+      }
+
+      const deactivationRedirect = deactivationResult
+        ? readRedirect(deactivationResult)
+        : null;
+      if (deactivationRedirect) {
+        return { type: 'redirect', request, ...deactivationRedirect };
+      }
+
       return { type: 'not-found', request };
     }
 
@@ -1170,6 +1279,50 @@ export function createRouter(config: RouterConfig): Router {
       config: route,
     }));
 
+    setPhase(request, 'guarding');
+
+    const beforeLeaveResult = await runTransitionPhase(
+      'beforeLeave',
+      currentState,
+      baseRoutes[0],
+      signal,
+    );
+    if (beforeLeaveResult === false) {
+      return { type: 'blocked', request };
+    }
+
+    const beforeLeaveRedirect = readRedirect(beforeLeaveResult);
+    if (beforeLeaveRedirect) {
+      return { type: 'redirect', request, ...beforeLeaveRedirect };
+    }
+
+    const deactivationResult = await runCanDeactivateGuards(request.url, signal);
+    if (deactivationResult === false) {
+      return { type: 'blocked', request };
+    }
+
+    const deactivationRedirect = deactivationResult
+      ? readRedirect(deactivationResult)
+      : null;
+    if (deactivationRedirect) {
+      return { type: 'redirect', request, ...deactivationRedirect };
+    }
+
+    const beforeEnterResult = await runTransitionPhase(
+      'beforeEnter',
+      currentState,
+      baseRoutes[0],
+      signal,
+    );
+    if (beforeEnterResult === false) {
+      return { type: 'blocked', request };
+    }
+
+    const beforeEnterRedirect = readRedirect(beforeEnterResult);
+    if (beforeEnterRedirect) {
+      return { type: 'redirect', request, ...beforeEnterRedirect };
+    }
+
     for (let index = 0; index < loadedRoutes.length; index++) {
       const context: NavigationContext = {
         ...baseRoutes[index],
@@ -1187,6 +1340,21 @@ export function createRouter(config: RouterConfig): Router {
           return { type: 'blocked', request };
         }
       }
+    }
+
+    const prepareResult = await runTransitionPhase(
+      'prepare',
+      currentState,
+      baseRoutes[0],
+      signal,
+    );
+    if (prepareResult === false) {
+      return { type: 'blocked', request };
+    }
+
+    const prepareRedirect = readRedirect(prepareResult);
+    if (prepareRedirect) {
+      return { type: 'redirect', request, ...prepareRedirect };
     }
 
     setPhase(request, 'resolving');
@@ -1437,6 +1605,7 @@ export function createRouter(config: RouterConfig): Router {
 
     switch (result.type) {
       case 'success': {
+        const previousRoute = currentState;
         runWithViewTransition({
           url: result.request.url,
           from: currentState,
@@ -1521,6 +1690,7 @@ export function createRouter(config: RouterConfig): Router {
         restoreScroll(result.request.historyUpdate);
         settleRequest(result.request, true);
         notifyStateChange();
+        runAfterEnterTransitions(previousRoute, result.route);
         return;
       }
       case 'redirect': {

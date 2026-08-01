@@ -1,31 +1,71 @@
-import { layout, route, s, type StreamixRoutes, type StreamixRouter } from 'waypoint';
+import {
+  defineTransitions,
+  layout,
+  route,
+  s,
+  transition,
+  type StreamixRoutes,
+  type StreamixRouter,
+} from 'waypoint';
 
 class DashboardLayout {}
 class DashboardPage {}
 class SettingsPage {}
 
+const dashboardRoute = route('/dashboard/:projectId', DashboardPage, {
+  name: 'dashboard',
+  paramsSchema: {
+    projectId: s.number({ min: 1 }),
+  },
+  querySchema: {
+    tab: s.string('overview'),
+    page: s.number({ default: 1, min: 1 }),
+    filters: s.array(),
+    draft: s.optional(s.boolean()),
+  },
+});
+
+const settingsRoute = route('/settings', SettingsPage, {
+  name: 'settings',
+  querySchema: {
+    section: s.string('general'),
+  },
+});
+
 const routes = [
   layout('/app', DashboardLayout, [
-    route('/dashboard/:projectId', DashboardPage, {
-      name: 'dashboard',
-      paramsSchema: {
-        projectId: s.number({ min: 1 }),
-      },
-      querySchema: {
-        tab: s.string('overview'),
-        page: s.number({ default: 1, min: 1 }),
-        filters: s.array(),
-        draft: s.optional(s.boolean()),
-      },
-    }),
-    route('/settings', SettingsPage, {
-      name: 'settings',
-      querySchema: {
-        section: s.string('general'),
-      },
-    }),
+    dashboardRoute,
+    settingsRoute,
   ]),
 ] as const satisfies StreamixRoutes;
+
+const transitions = defineTransitions([
+  transition({
+    to: dashboardRoute,
+    prepare: [
+      ({ to }) => {
+        const projectId: number = to.params.projectId;
+        const tab: string = to.query.tab;
+        void projectId;
+        void tab;
+      },
+    ],
+  }),
+  transition({
+    from: dashboardRoute,
+    to: settingsRoute,
+    beforeLeave: [
+      ({ from, to }) => {
+        const projectId: number = from.params.projectId;
+        const section: string = to.query.section;
+        void projectId;
+        void section;
+      },
+    ],
+  }),
+]) as const;
+
+void transitions;
 
 function assertNamedNavigation(router: StreamixRouter<typeof routes>): void {
   void router.navigateTo.dashboard({
@@ -61,5 +101,9 @@ function assertNamedNavigation(router: StreamixRouter<typeof routes>): void {
 describe('typed routes typings', () => {
   it('discovers named leaf routes nested inside layouts', () => {
     expect(typeof assertNamedNavigation).toBe('function');
+  });
+
+  it('infers transition route snapshots from route values', () => {
+    expect(transitions.length).toBe(2);
   });
 });

@@ -376,9 +376,9 @@ export class IntroPage {
           </label>
           <p>
             @if (session.adminAccess()) {
-              The <code>canActivate</code> guard will allow the admin route.
+              The <code>beforeEnter</code> transition will allow the admin route.
             } @else {
-              The <code>canActivate</code> guard redirects to access settings.
+              The <code>beforeEnter</code> transition redirects to access settings.
             }
           </p>
         </div>
@@ -394,7 +394,7 @@ export class IntroPage {
           </label>
           <p>
             When enabled, leaving the editor route triggers a native
-            confirmation dialog through <code>canDeactivate</code>.
+            confirmation dialog through <code>beforeLeave</code>.
           </p>
         </div>
 
@@ -536,7 +536,7 @@ export class DemoShellComponent {
     },
     {
       label: 'Editor',
-      description: 'canDeactivate confirmation path with a dirty-state toggle',
+      description: 'beforeLeave confirmation path with a dirty-state toggle',
       target: {
         name: 'editor',
         params: { draftId: 7 },
@@ -848,7 +848,7 @@ export class SettingsSidebarComponent {}
     <section class="page">
       <header class="page-header">
         <div>
-          <p class="eyebrow">canDeactivate route</p>
+          <p class="eyebrow">beforeLeave transition</p>
           <h1>Draft {{ draftId() }}</h1>
         </div>
         <span class="status-pill">{{ mode() }} mode</span>
@@ -942,7 +942,7 @@ export class EditorSidebarComponent {}
     <section class="page">
       <header class="page-header">
         <div>
-          <p class="eyebrow">canActivate + resolve</p>
+          <p class="eyebrow">beforeEnter transition + resolve</p>
           <h1>Admin console</h1>
         </div>
         <span class="status-pill">guard passed</span>

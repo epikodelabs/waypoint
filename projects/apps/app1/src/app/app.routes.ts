@@ -1,10 +1,12 @@
 import { inject } from '@angular/core';
 import {
+  defineTransitions,
   lazyRoute,
   layout,
   redirectRoute,
   route,
   s,
+  transition,
   type StreamixRoutes,
 } from '@epikodelabs/waypoint';
 
@@ -23,6 +25,65 @@ import {
 } from './demo-pages';
 import { DemoSessionService } from './demo-session.service';
 
+const workspaceRoute = route('/workspace/:projectId', WorkspacePage, {
+  name: 'workspace',
+  paramsSchema: {
+    projectId: s.number({ min: 1 }),
+  },
+  querySchema: {
+    view: s.string('overview'),
+    page: s.number({ default: 1, min: 1 }),
+    filters: s.array(),
+    draft: s.optional(s.boolean()),
+  },
+  resolve: {
+    snapshot: context => {
+      const projectId = Number(
+        context.params['projectId'] ?? 0,
+      );
+
+      return inject(DemoSessionService)
+        .buildWorkspaceSnapshot(projectId);
+    },
+  },
+});
+
+const settingsRoute = route('/settings', SettingsPage, {
+  name: 'settings',
+  querySchema: {
+    section: s.string('general'),
+  },
+});
+
+const editorRoute = route('/editor/:draftId', EditorPage, {
+  name: 'editor',
+  paramsSchema: {
+    draftId: s.number({ min: 1 }),
+  },
+  querySchema: {
+    mode: s.string('write'),
+  },
+});
+
+const reportsRoute = lazyRoute(
+  '/reports',
+  () =>
+    import('./reports.page')
+      .then(module => module.ReportsPage),
+  {
+    name: 'reports',
+  },
+);
+
+const adminRoute = route('/admin', AdminPage, {
+  name: 'admin',
+  resolve: {
+    audit: () =>
+      inject(DemoSessionService)
+        .createAdminAudit(),
+  },
+});
+
 export const routes = [
   route('/', IntroPage),
   redirectRoute(
@@ -34,95 +95,55 @@ export const routes = [
       '',
       '/app/workspace/101?view=overview&page=1&filters=open&filters=recent',
     ),
-    route('/workspace/:projectId', WorkspacePage, {
-      name: 'workspace',
-      paramsSchema: {
-        projectId: s.number({ min: 1 }),
-      },
-      querySchema: {
-        view: s.string('overview'),
-        page: s.number({ default: 1, min: 1 }),
-        filters: s.array(),
-        draft: s.optional(s.boolean()),
-      },
-      resolve: {
-        snapshot: context => {
-          const projectId = Number(
-            context.params['projectId'] ?? 0,
-          );
-
-          return inject(DemoSessionService)
-            .buildWorkspaceSnapshot(projectId);
-        },
-      },
-    }),
+    workspaceRoute,
     route('/workspace/:projectId', WorkspaceSidebarComponent, {
       outlet: 'sidebar',
     }),
-    route('/settings', SettingsPage, {
-      name: 'settings',
-      querySchema: {
-        section: s.string('general'),
-      },
-    }),
+    settingsRoute,
     route('/settings', SettingsSidebarComponent, {
       outlet: 'sidebar',
     }),
-    route('/editor/:draftId', EditorPage, {
-      name: 'editor',
-      paramsSchema: {
-        draftId: s.number({ min: 1 }),
-      },
-      querySchema: {
-        mode: s.string('write'),
-      },
-      canDeactivate: [
-        () => {
-          const session = inject(DemoSessionService);
-
-          return !session.draftDirty()
-            || window.confirm(
-              'Leave the draft and discard unsaved changes?',
-            );
-        },
-      ],
-    }),
+    editorRoute,
     route('/editor/:draftId', EditorSidebarComponent, {
       outlet: 'sidebar',
     }),
-    lazyRoute(
-      '/reports',
-      () =>
-        import('./reports.page')
-          .then(module => module.ReportsPage),
-      {
-        name: 'reports',
-      },
-    ),
+    reportsRoute,
     route('/reports', ReportsSidebarComponent, {
       outlet: 'sidebar',
     }),
-    route('/admin', AdminPage, {
-      name: 'admin',
-      canActivate: [
-        () => {
-          const session = inject(DemoSessionService);
-
-          return session.adminAccess()
-            || {
-              redirectTo: '/app/settings?section=access',
-              replace: true,
-            };
-        },
-      ],
-      resolve: {
-        audit: () =>
-          inject(DemoSessionService)
-            .createAdminAudit(),
-      },
-    }),
+    adminRoute,
     route('/admin', AdminSidebarComponent, {
       outlet: 'sidebar',
     }),
   ]),
 ] as const satisfies StreamixRoutes;
+
+export const transitions = defineTransitions([
+  transition({
+    from: editorRoute,
+    beforeLeave: [
+      () => {
+        const session = inject(DemoSessionService);
+
+        return !session.draftDirty()
+          || window.confirm(
+            'Leave the draft and discard unsaved changes?',
+          );
+      },
+    ],
+  }),
+  transition({
+    to: adminRoute,
+    beforeEnter: [
+      () => {
+        const session = inject(DemoSessionService);
+
+        return session.adminAccess()
+          || {
+            redirectTo: '/app/settings?section=access',
+            replace: true,
+          };
+      },
+    ],
+  }),
+]);

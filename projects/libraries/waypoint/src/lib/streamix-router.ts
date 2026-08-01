@@ -38,6 +38,18 @@ import {
 } from './route-renderer';
 
 import type {
+  AnyRouteTransitionDefinition,
+  RouteSnapshot as StreamixRouteSnapshot,
+  RouteTransitionDefinition as StreamixTransitionDefinition,
+  TransitionDecision,
+  TransitionFn,
+} from './transitions';
+
+import {
+  matchesTransitionTarget,
+} from './transitions';
+
+import type {
   MaybePromise,
   StreamixLayout,
   StreamixLayoutOptions,
@@ -77,8 +89,10 @@ import {
   type CanDeactivateFn,
   createRouter,
   type ActivatedRoute,
+  type NavigationTransitionFn,
   type NavigationContext,
   type NavigationOptions,
+  type NavigationTransitionDefinition,
   type PreloadingStrategy,
   type Route,
   type RouteRenderContext,
@@ -100,6 +114,8 @@ export interface StreamixRouterOptions {
     PreloadingStrategy;
   readonly viewTransitions?:
     ViewTransitionsOption;
+  readonly transitions?:
+    readonly AnyRouteTransitionDefinition[];
 }
 
 export const STREAMIX_ROUTE =
@@ -363,6 +379,113 @@ function adaptLoaders(
   );
 }
 
+function adaptTransitionDecision(
+  value: TransitionDecision,
+): boolean | string | { redirectTo: string; replace?: boolean } | void {
+  if (value === undefined || value === true || value === false || typeof value === 'string') {
+    return value;
+  }
+
+  if (value instanceof URL) {
+    return value.href;
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    'redirectTo' in value
+  ) {
+    const rawRedirect =
+      value.redirectTo as any;
+    const redirectTo =
+      rawRedirect instanceof URL
+        ? rawRedirect.href
+        : String(rawRedirect);
+
+    return {
+      ...value,
+      redirectTo,
+    };
+  }
+
+  return undefined;
+}
+
+function toTransitionSnapshot(
+  route: ActivatedRoute | null,
+): StreamixRouteSnapshot | null {
+  if (!route) {
+    return null;
+  }
+
+  return {
+    route: route.config.sourceRoute as StreamixRouteSnapshot['route'],
+    path: route.path,
+    params: route.params as StreamixRouteSnapshot['params'],
+    query: route.query as StreamixRouteSnapshot['query'],
+    data: route.data,
+    historyState: route.historyState,
+    url: route.url,
+  };
+}
+
+function adaptTransitionHandler(
+  handler: TransitionFn,
+  injector: EnvironmentInjector,
+): NavigationTransitionFn {
+  return async transition => {
+    const value =
+      await execute(
+        injector,
+        handler as (
+          context: {
+            from: StreamixRouteSnapshot | null;
+            to: StreamixRouteSnapshot;
+            signal: AbortSignal;
+          },
+        ) => MaybePromise<TransitionDecision>,
+        {
+          from: toTransitionSnapshot(transition.from),
+          to: toTransitionSnapshot(transition.to)!,
+          signal: transition.signal,
+        },
+      );
+
+    return adaptTransitionDecision(value);
+  };
+}
+
+function adaptTransitions(
+  transitions:
+    readonly StreamixTransitionDefinition[] | undefined,
+  injector: EnvironmentInjector,
+): readonly NavigationTransitionDefinition[] | undefined {
+  return transitions?.map(definition => ({
+    from: route =>
+      matchesTransitionTarget(
+        definition.from,
+        route,
+      ),
+    to: route =>
+      matchesTransitionTarget(
+        definition.to,
+        route,
+      ),
+    beforeEnter: definition.beforeEnter?.map(handler =>
+      adaptTransitionHandler(handler, injector),
+    ),
+    prepare: definition.prepare?.map(handler =>
+      adaptTransitionHandler(handler, injector),
+    ),
+    beforeLeave: definition.beforeLeave?.map(handler =>
+      adaptTransitionHandler(handler, injector),
+    ),
+    afterEnter: definition.afterEnter?.map(handler =>
+      adaptTransitionHandler(handler, injector),
+    ),
+  }));
+}
+
 function adaptParamsParser(
   route: StreamixRoute,
   injector: EnvironmentInjector,
@@ -432,6 +555,7 @@ function adaptRoute(
     name: route.name,
     path,
     outlet: route.outlet,
+    sourceRoute: route,
     redirectTo,
     data: route.data,
     preload: route.preload,
@@ -698,6 +822,12 @@ export class StreamixRouter<
         preloading:
           this.configuration
             .preloading,
+
+        transitions:
+          adaptTransitions(
+            this.configuration.transitions,
+            this.injector,
+          ),
 
         viewTransitions:
           this.configuration
