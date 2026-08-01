@@ -1,18 +1,35 @@
-function component(name) {
-  return Object.freeze({
-    kind: 'component',
-    name,
-  });
+function readRuntime() {
+  const runtime =
+    globalThis.__app2ProtectedRouteRuntime;
+
+  if (!runtime) {
+    throw new Error(
+      'Protected route runtime is not registered.',
+    );
+  }
+
+  return runtime;
 }
 
-export const IntroPage = component('IntroPage');
-export const DemoShellComponent = component('DemoShellComponent');
-export const WorkspacePage = component('WorkspacePage');
-export const WorkspaceSidebarComponent = component('WorkspaceSidebarComponent');
-export const SettingsPage = component('SettingsPage');
-export const SettingsSidebarComponent = component('SettingsSidebarComponent');
-export const EditorPage = component('EditorPage');
-export const EditorSidebarComponent = component('EditorSidebarComponent');
-export const AdminPage = component('AdminPage');
-export const AdminSidebarComponent = component('AdminSidebarComponent');
-export const ReportsSidebarComponent = component('ReportsSidebarComponent');
+export const IntroPage =
+  readRuntime().components.IntroPage;
+export const DemoShellComponent =
+  readRuntime().components.DemoShellComponent;
+export const WorkspacePage =
+  readRuntime().components.WorkspacePage;
+export const WorkspaceSidebarComponent =
+  readRuntime().components.WorkspaceSidebarComponent;
+export const SettingsPage =
+  readRuntime().components.SettingsPage;
+export const SettingsSidebarComponent =
+  readRuntime().components.SettingsSidebarComponent;
+export const EditorPage =
+  readRuntime().components.EditorPage;
+export const EditorSidebarComponent =
+  readRuntime().components.EditorSidebarComponent;
+export const AdminPage =
+  readRuntime().components.AdminPage;
+export const AdminSidebarComponent =
+  readRuntime().components.AdminSidebarComponent;
+export const ReportsSidebarComponent =
+  readRuntime().components.ReportsSidebarComponent;

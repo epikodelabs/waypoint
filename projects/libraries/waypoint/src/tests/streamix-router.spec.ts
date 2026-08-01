@@ -9,6 +9,7 @@ import {
   provideStreamixRouter,
   RouterOutlet,
   route,
+  type StreamixRouterOptions,
   StreamixRouter,
   type StreamixRoutes,
 } from '@epikodelabs/waypoint';
@@ -60,7 +61,10 @@ describe('StreamixRouter: flat routes and layouts', () => {
   let outlet: HTMLElement;
   let router: StreamixRouter;
 
-  function bootstrap(routes: StreamixRoutes): void {
+  function bootstrap(
+    routes: StreamixRoutes,
+    options: StreamixRouterOptions = {},
+  ): void {
     TestBed.configureTestingModule({
       imports: [
         HomeComponent,
@@ -70,7 +74,12 @@ describe('StreamixRouter: flat routes and layouts', () => {
         ChildComponent,
         SettingsComponent,
       ],
-      providers: [...provideStreamixRouter(routes)],
+      providers: [
+        ...provideStreamixRouter(
+          routes,
+          options,
+        ),
+      ],
     });
 
     outlet = document.createElement('div');
@@ -295,6 +304,57 @@ describe('StreamixRouter: flat routes and layouts', () => {
     const content = getOutletContent();
     expect(content).toContain('<h3>Settings</h3>');
     expect(content).toContain('<h1>Home</h1>');
+    expect(router.state.path).toBe('/app/settings');
+  });
+
+  it('composes a missing route branch before named navigation', async () => {
+    const resolveRoutes =
+      jasmine.createSpy('resolveRoutes')
+        .and.callFake(
+          async (url: URL) => {
+            if (url.pathname !== '/app/settings') {
+              return null;
+            }
+
+            return [
+              layout('/app', ParentComponent, [
+                route('/settings', SettingsComponent, {
+                  name: 'settings',
+                }),
+              ]),
+            ] as const satisfies StreamixRoutes;
+          },
+        );
+
+    bootstrap(
+      [
+        route('/', HomeComponent),
+      ] as const satisfies StreamixRoutes,
+      {
+        namedRoutes: [
+          {
+            name: 'settings',
+            path: '/app/settings',
+          },
+        ],
+        resolveRoutes,
+      },
+    );
+
+    expect(
+      router.href({
+        name: 'settings',
+      }),
+    ).toBe('/app/settings');
+
+    await router.navigate({
+      name: 'settings',
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(resolveRoutes).toHaveBeenCalled();
+    expect(getOutletContent()).toContain('<h2>Parent</h2>');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
     expect(router.state.path).toBe('/app/settings');
   });
 });

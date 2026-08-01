@@ -1,15 +1,36 @@
 import {
   ApplicationConfig,
-  mergeApplicationConfig,
+  ApplicationModule,
+  importProvidersFrom,
 } from '@angular/core';
-import { provideClientHydration } from '@angular/platform-browser';
-import { appConfig as browserConfig } from '../../../app1/src/app/app.config';
+import {
+  BrowserModule,
+} from '@angular/platform-browser';
+import {
+  provideBrowserGlobalErrorListeners,
+} from '@angular/core';
+import {
+  provideStreamixRouter,
+} from '@epikodelabs/waypoint';
+import {
+  loadProtectedRouteBranch,
+} from './protected-route-loader';
+import {
+  namedRoutes,
+  routes,
+} from './app.routes';
 
-const hydrationConfig: ApplicationConfig = {
-  providers: [provideClientHydration()],
+export const appConfig: ApplicationConfig = {
+  providers: [
+    importProvidersFrom(
+      ApplicationModule,
+      BrowserModule,
+    ),
+    provideBrowserGlobalErrorListeners(),
+    ...provideStreamixRouter(routes, {
+      viewTransitions: true,
+      namedRoutes,
+      resolveRoutes: loadProtectedRouteBranch,
+    }),
+  ],
 };
-
-export const appConfig = mergeApplicationConfig(
-  browserConfig,
-  hydrationConfig,
-);

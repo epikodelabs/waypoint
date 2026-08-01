@@ -11,6 +11,9 @@ export * from './typed-routes';
 export * from './vanilla-router';
 export {
     provideStreamixRouter, STREAMIX_ROUTE,
-    STREAMIX_ROUTE_CONTEXT, StreamixRouter, type StreamixRouterOptions
+    STREAMIX_ROUTE_CONTEXT,
+    StreamixRouter,
+    type StreamixNamedRouteDefinition,
+    type StreamixRouterOptions
 } from './streamix-router';
 

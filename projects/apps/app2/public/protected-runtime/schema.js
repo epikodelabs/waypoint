@@ -1,28 +1,15 @@
-function marker(kind, config = {}) {
-  return Object.freeze({
-    kind,
-    ...config,
-  });
+function readRuntime() {
+  const runtime =
+    globalThis.__app2ProtectedRouteRuntime;
+
+  if (!runtime) {
+    throw new Error(
+      'Protected route runtime is not registered.',
+    );
+  }
+
+  return runtime;
 }
 
-export const s = Object.freeze({
-  string(defaultValue) {
-    return marker('string', {
-      default: defaultValue,
-    });
-  },
-  number(config = {}) {
-    return marker('number', config);
-  },
-  array() {
-    return marker('array');
-  },
-  boolean() {
-    return marker('boolean');
-  },
-  optional(inner) {
-    return marker('optional', {
-      inner,
-    });
-  },
-});
+export const s =
+  readRuntime().s;

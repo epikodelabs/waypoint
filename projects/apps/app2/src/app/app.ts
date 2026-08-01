@@ -1,5 +1,6 @@
 import {
   Component,
+  effect,
   inject,
 } from '@angular/core';
 import {
@@ -7,6 +8,7 @@ import {
   StreamixRouterLink,
 } from '@epikodelabs/waypoint';
 import { DemoSessionService } from '../../../app1/src/app/demo-session.service';
+import { registerProtectedRouteRuntime } from './protected-route-runtime';
 
 @Component({
   selector: 'app-root',
@@ -20,4 +22,20 @@ import { DemoSessionService } from '../../../app1/src/app/demo-session.service';
 })
 export class App {
   protected readonly session = inject(DemoSessionService);
+
+  constructor() {
+    registerProtectedRouteRuntime();
+
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    effect(() => {
+      const identity =
+        this.session.currentUserId();
+
+      document.cookie =
+        `identity=${encodeURIComponent(identity)}; Path=/; SameSite=Lax`;
+    });
+  }
 }

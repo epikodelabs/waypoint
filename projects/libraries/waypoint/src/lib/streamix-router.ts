@@ -29,6 +29,7 @@ import {
   compileRoutes,
   createRouteRegistry,
   groupRoutes,
+  type RouteRegistryRecord,
 } from './route-compiler';
 
 import {
@@ -60,8 +61,10 @@ import {
 } from './router-events';
 
 import {
+  isPathInsideBase,
   resolveRouterUrl,
   routerHref,
+  stripBaseHref,
 } from './router-url';
 
 import {
@@ -70,7 +73,8 @@ import {
   serializeParams,
   serializeQuery,
   type InferParamType,
-  type ParamSchemaRecord
+  type ParamSchemaRecord,
+  type QuerySchemaRecord,
 } from './query-schema';
 
 import {
@@ -105,6 +109,22 @@ export interface StreamixRouterOptions {
     PreloadingStrategy;
   readonly viewTransitions?:
     ViewTransitionsOption;
+  readonly namedRoutes?:
+    readonly StreamixNamedRouteDefinition[];
+  readonly resolveRoutes?: (
+    url: URL,
+  ) => Promise<
+    StreamixRoutes |
+    null |
+    undefined
+  >;
+}
+
+export interface StreamixNamedRouteDefinition {
+  readonly name: string;
+  readonly path: string;
+  readonly paramsSchema?: ParamSchemaRecord;
+  readonly querySchema?: QuerySchemaRecord;
 }
 
 export const STREAMIX_ROUTE =
@@ -121,7 +141,7 @@ interface RouterConfiguration<
   TRoutes extends StreamixRoutes =
     StreamixRoutes,
 > extends StreamixRouterOptions {
-  readonly routes: TRoutes;
+  routes: TRoutes;
 }
 
 const ROUTER_CONFIGURATION =
@@ -756,7 +776,16 @@ export class StreamixRouter<
   private readonly injector: EnvironmentInjector;
   private readonly destroyRef: DestroyRef;
   private readonly appBaseHref: string;
-  private readonly registry: ReturnType<typeof createRouteRegistry>;
+  private registry: ReturnType<typeof createRouteRegistry>;
+  private readonly namedRouteCatalog = new Map<
+    string,
+    StreamixNamedRouteDefinition
+  >();
+  private readonly resolvingRouteKeys = new Map<
+    string,
+    Promise<boolean>
+  >();
+  private readonly unresolvedRouteKeys = new Set<string>();
   private engine: Router | null = null;
   private currentState: RouterState = EMPTY_ROUTER_STATE;
   private readonly outlets = new Map<string, HTMLElement[]>();
@@ -765,7 +794,7 @@ export class StreamixRouter<
   public readonly hrefTo: TypedHref<TRoutes>;
 
   constructor(
-    private readonly configuration: RouterConfiguration<TRoutes>,
+    private configuration: RouterConfiguration<TRoutes>,
   ) {
     this.appRef = inject(ApplicationRef);
     this.injector = inject(EnvironmentInjector);
@@ -779,6 +808,12 @@ export class StreamixRouter<
     ) ?? '/';
 
     this.registry = createRouteRegistry(this.configuration.routes);
+    for (const route of this.configuration.namedRoutes ?? []) {
+      this.namedRouteCatalog.set(
+        route.name,
+        route,
+      );
+    }
     this.navigateTo =
       this.createNavigateProxy();
 
@@ -929,7 +964,7 @@ export class StreamixRouter<
 
         renderNotFound: (
           targetName,
-          _url,
+          url,
           _router,
         ) => {
           const target =
@@ -951,6 +986,10 @@ export class StreamixRouter<
 
           target.replaceChildren(
             heading,
+          );
+
+          void this.resolveRoutesForUrl(
+            url,
           );
         },
 
@@ -1068,21 +1107,10 @@ export class StreamixRouter<
     options?:
       NavigationOptions,
   ): Promise<boolean> {
-    const href =
-      this.href(target);
-
-    if (href === null) {
-      return Promise.resolve(
-        false,
-      );
-    }
-
-    return this
-      .requireEngine()
-      .navigate(
-        href,
-        options,
-      );
+    return this.navigateResolved(
+      target,
+      options,
+    );
   }
 
   href(
@@ -1190,8 +1218,9 @@ export class StreamixRouter<
       NamedNavigationTarget,
   ): string | null {
     const record =
-      this.registry.namedRoutes
-        .get(target.name);
+      this.readNamedRouteRecord(
+        target.name,
+      );
 
     if (!record) {
       return null;
@@ -1222,6 +1251,405 @@ export class StreamixRouter<
     return this.resolveHref(
       `${path}${query}`,
     );
+  }
+
+  private async navigateResolved(
+    target: NavigationTarget,
+    options?:
+      NavigationOptions,
+  ): Promise<boolean> {
+    const href =
+      this.href(target);
+
+    if (href === null) {
+      return false;
+    }
+
+    const url =
+      resolveRouterUrl(
+        href,
+        this.baseHref,
+        window.location,
+        'navigate',
+      );
+
+    if (
+      url.origin ===
+        window.location.origin &&
+      isPathInsideBase(
+        url.pathname,
+        this.baseHref,
+      )
+    ) {
+      await this.resolveRoutesForUrl(
+        url,
+      );
+    }
+
+    return this
+      .requireEngine()
+      .navigate(
+        href,
+        options,
+      );
+  }
+
+  private readNamedRouteRecord(
+    name: string,
+  ):
+    | RouteRegistryRecord
+    | {
+        readonly route: Pick<
+          StreamixRoute,
+          'paramsSchema' | 'querySchema'
+        >;
+        readonly fullPath: string;
+      }
+    | undefined {
+    const existing =
+      this.registry.namedRoutes.get(
+        name,
+      );
+
+    if (existing) {
+      return existing;
+    }
+
+    const deferred =
+      this.namedRouteCatalog.get(
+        name,
+      );
+
+    if (!deferred) {
+      return undefined;
+    }
+
+    return {
+      fullPath: deferred.path,
+      route: {
+        paramsSchema:
+          deferred.paramsSchema,
+        querySchema:
+          deferred.querySchema,
+      },
+    };
+  }
+
+  private matchesRegisteredRoute(
+    url: URL,
+  ): boolean {
+    const path =
+      stripBaseHref(
+        url.pathname,
+        this.baseHref,
+      );
+
+    return this.registry.groups.some(
+      group =>
+        matchesCompiledPath(
+          group.path,
+          path,
+        ),
+    );
+  }
+
+  private async resolveRoutesForUrl(
+    url: URL,
+  ): Promise<boolean> {
+    if (
+      !this.configuration
+        .resolveRoutes
+    ) {
+      return false;
+    }
+
+    if (
+      this.matchesRegisteredRoute(
+        url,
+      )
+    ) {
+      return false;
+    }
+
+    const key =
+      stripBaseHref(
+        url.pathname,
+        this.baseHref,
+      );
+
+    if (
+      this.unresolvedRouteKeys.has(
+        key,
+      )
+    ) {
+      return false;
+    }
+
+    const pending =
+      this.resolvingRouteKeys.get(
+        key,
+      );
+
+    if (pending) {
+      return pending;
+    }
+
+    const resolution =
+      Promise.resolve(
+        this.configuration
+          .resolveRoutes(url),
+      )
+        .then(routes => {
+          if (
+            !routes ||
+            routes.length === 0
+          ) {
+            this.unresolvedRouteKeys.add(
+              key,
+            );
+            return false;
+          }
+
+          this.unresolvedRouteKeys.delete(
+            key,
+          );
+          this.mergeRoutes(
+            routes,
+          );
+          this.restartEngine();
+          return true;
+        })
+        .catch(error => {
+          this.unresolvedRouteKeys.add(
+            key,
+          );
+          throw error;
+        })
+        .finally(() => {
+          this.resolvingRouteKeys.delete(
+            key,
+          );
+        });
+
+    this.resolvingRouteKeys.set(
+      key,
+      resolution,
+    );
+
+    return resolution;
+  }
+
+  private mergeRoutes(
+    routes: StreamixRoutes,
+  ): void {
+    const merged =
+      Object.freeze([
+        ...this.configuration.routes,
+        ...routes,
+      ]) as TRoutes;
+
+    this.configuration = {
+      ...this.configuration,
+      routes: merged,
+    };
+    this.registry =
+      createRouteRegistry(
+        this.configuration.routes,
+      );
+  }
+
+  private restartEngine():
+    void {
+    if (!this.engine) {
+      return;
+    }
+
+    const previous =
+      this.engine;
+
+    previous.dispose();
+    this.engine = null;
+    this.currentState =
+      EMPTY_ROUTER_STATE;
+
+    const nextEngine =
+      this.createEngine();
+
+    nextEngine.start();
+    this.engine =
+      nextEngine;
+    this.currentState =
+      snapshotRouterState(
+        nextEngine.state,
+      );
+  }
+
+  private createEngine():
+    Router {
+    return createRouter({
+      routes:
+        adaptRoutes(
+          this.configuration.routes,
+          this.appRef,
+          this.injector,
+        ),
+
+      baseHref:
+        this.baseHref,
+
+      enableTracing:
+        this.configuration
+          .enableTracing,
+
+      maxRedirects:
+        this.configuration
+          .maxRedirects,
+
+      onSameUrlNavigation:
+        this.configuration
+          .onSameUrlNavigation,
+
+      scrollRestoration:
+        this.configuration
+          .scrollRestoration,
+
+      preloading:
+        this.configuration
+          .preloading,
+
+      transitions:
+        [
+          ...adaptFrameTransitions(
+            this.registry.groups,
+            this.injector,
+          ),
+        ],
+
+      viewTransitions:
+        this.configuration
+          .viewTransitions,
+
+      render: (
+        targetName,
+        node,
+      ) => {
+        const target =
+          this.getOutlet(
+            targetName,
+          );
+
+        if (!target) {
+          throw new Error(
+            `StreamixRouter outlet "${targetName}" is not connected.`,
+          );
+        }
+
+        target.replaceChildren(
+          node,
+        );
+      },
+
+      commit: (outlets) => {
+        for (const outlet of outlets) {
+          if (!this.outlets.has(outlet.name)) {
+            throw new Error(`Router outlet "${outlet.name}" is not connected.`);
+          }
+        }
+
+        for (const outlet of outlets) {
+          const target = this.getOutlet(outlet.name);
+
+          if (!target) {
+            throw new Error(`Router outlet "${outlet.name}" is not connected.`);
+          }
+
+          target.replaceChildren(outlet.node);
+          dispatchOutletLifecycleEvent(
+            target,
+            OUTLET_ACTIVATE_EVENT,
+            outlet.component,
+          );
+        }
+      },
+
+      renderNotFound: (
+        targetName,
+        url,
+        _router,
+      ) => {
+        const target =
+          this.getOutlet(
+            targetName,
+          );
+
+        if (!target) {
+          return;
+        }
+
+        const heading =
+          document.createElement(
+            'h1',
+          );
+
+        heading.textContent =
+          '404 вЂ” Page Not Found';
+
+        target.replaceChildren(
+          heading,
+        );
+
+        void this.resolveRoutesForUrl(
+          url,
+        );
+      },
+
+      renderError: (
+        targetName,
+        _error,
+        _router,
+      ) => {
+        const target =
+          this.getOutlet(
+            targetName,
+          );
+
+        if (!target) {
+          return;
+        }
+
+        const heading =
+          document.createElement(
+            'h1',
+          );
+
+        heading.textContent =
+          'Page failed to load';
+
+        target.replaceChildren(
+          heading,
+        );
+      },
+
+      onStateChange:
+        state => {
+          this.currentState =
+            snapshotRouterState(
+              state,
+            );
+        },
+
+      onOutletActivate:
+        (
+          target,
+          component,
+        ) => {
+          dispatchOutletLifecycleEvent(
+            target,
+            OUTLET_ACTIVATE_EVENT,
+            component,
+          );
+        },
+    });
   }
 
   private createNavigateProxy():
@@ -1302,6 +1730,31 @@ export class StreamixRouter<
       registered.length - 1
     ] ?? null;
   }
+}
+
+function matchesCompiledPath(
+  pattern: string,
+  pathname: string,
+): boolean {
+  const regex = new RegExp(
+    `^${pattern
+      .split('/')
+      .map(segment => {
+        if (!segment) {
+          return '';
+        }
+
+        return segment.startsWith(':')
+          ? '[^/]+'
+          : segment.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              '\\$&',
+            );
+      })
+      .join('/')}$`,
+  );
+
+  return regex.test(pathname);
 }
 
 
