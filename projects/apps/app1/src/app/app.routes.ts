@@ -1,12 +1,11 @@
 import { inject } from '@angular/core';
 import {
-  defineTransitions,
+  frame,
   lazyRoute,
   layout,
   redirectRoute,
   route,
   s,
-  transition,
   type StreamixRoutes,
 } from '@epikodelabs/waypoint';
 
@@ -25,28 +24,36 @@ import {
 } from './demo-pages';
 import { DemoSessionService } from './demo-session.service';
 
-const workspaceRoute = route('/workspace/:projectId', WorkspacePage, {
-  name: 'workspace',
-  paramsSchema: {
-    projectId: s.number({ min: 1 }),
-  },
-  querySchema: {
-    view: s.string('overview'),
-    page: s.number({ default: 1, min: 1 }),
-    filters: s.array(),
-    draft: s.optional(s.boolean()),
-  },
-  resolve: {
-    snapshot: context => {
-      const projectId = Number(
-        context.params['projectId'] ?? 0,
-      );
+const workspaceRoute = route(
+  '/workspace/:projectId',
+  frame(WorkspacePage, {
+    prepare: [
+      context => {
+        const projectId = Number(
+          context.params['projectId'] ?? 0,
+        );
 
-      return inject(DemoSessionService)
-        .buildWorkspaceSnapshot(projectId);
+        return {
+          snapshot:
+            inject(DemoSessionService)
+              .buildWorkspaceSnapshot(projectId),
+        };
+      },
+    ],
+  }),
+  {
+    name: 'workspace',
+    paramsSchema: {
+      projectId: s.number({ min: 1 }),
+    },
+    querySchema: {
+      view: s.string('overview'),
+      page: s.number({ default: 1, min: 1 }),
+      filters: s.array(),
+      draft: s.optional(s.boolean()),
     },
   },
-});
+);
 
 const settingsRoute = route('/settings', SettingsPage, {
   name: 'settings',
@@ -55,15 +62,30 @@ const settingsRoute = route('/settings', SettingsPage, {
   },
 });
 
-const editorRoute = route('/editor/:draftId', EditorPage, {
-  name: 'editor',
-  paramsSchema: {
-    draftId: s.number({ min: 1 }),
+const editorRoute = route(
+  '/editor/:draftId',
+  frame(EditorPage, {
+    beforeLeave: [
+      () => {
+        const session = inject(DemoSessionService);
+
+        return !session.draftDirty()
+          || window.confirm(
+            'Leave the draft and discard unsaved changes?',
+          );
+      },
+    ],
+  }),
+  {
+    name: 'editor',
+    paramsSchema: {
+      draftId: s.number({ min: 1 }),
+    },
+    querySchema: {
+      mode: s.string('write'),
+    },
   },
-  querySchema: {
-    mode: s.string('write'),
-  },
-});
+);
 
 const reportsRoute = lazyRoute(
   '/reports',
@@ -75,14 +97,32 @@ const reportsRoute = lazyRoute(
   },
 );
 
-const adminRoute = route('/admin', AdminPage, {
-  name: 'admin',
-  resolve: {
-    audit: () =>
-      inject(DemoSessionService)
-        .createAdminAudit(),
+const adminRoute = route(
+  '/admin',
+  frame(AdminPage, {
+    beforeEnter: [
+      () => {
+        const session = inject(DemoSessionService);
+
+        return session.adminAccess()
+          || {
+            redirectTo: '/app/settings?section=access',
+            replace: true,
+          };
+      },
+    ],
+    prepare: [
+      () => ({
+        audit:
+          inject(DemoSessionService)
+            .createAdminAudit(),
+      }),
+    ],
+  }),
+  {
+    name: 'admin',
   },
-});
+);
 
 export const routes = [
   route('/', IntroPage),
@@ -117,33 +157,3 @@ export const routes = [
     }),
   ]),
 ] as const satisfies StreamixRoutes;
-
-export const transitions = defineTransitions([
-  transition({
-    from: editorRoute,
-    beforeLeave: [
-      () => {
-        const session = inject(DemoSessionService);
-
-        return !session.draftDirty()
-          || window.confirm(
-            'Leave the draft and discard unsaved changes?',
-          );
-      },
-    ],
-  }),
-  transition({
-    to: adminRoute,
-    beforeEnter: [
-      () => {
-        const session = inject(DemoSessionService);
-
-        return session.adminAccess()
-          || {
-            redirectTo: '/app/settings?section=access',
-            replace: true,
-          };
-      },
-    ],
-  }),
-]);

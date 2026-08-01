@@ -1,10 +1,14 @@
+import { installTestCompat } from './test-compat';
+
 import { Component, Input } from '@angular/core';
 
 import {
   adaptRouteComponent,
   bindRouteInputs,
   type StreamixRouteProviders,
-} from 'waypoint';
+} from '@epikodelabs/waypoint';
+
+installTestCompat();
 
 @Component({
   template: '',

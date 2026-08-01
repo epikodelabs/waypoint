@@ -1,5 +1,9 @@
+import { installTestCompat } from './test-compat';
+
 // Avoid a hard dependency on Node ambient types in browser-focused specs.
 const processLike = (globalThis as { process?: { versions?: { node?: unknown } } }).process;
+
+installTestCompat();
 
 const isNode =
   processLike != null &&
@@ -42,4 +46,10 @@ export function iit(name: string, fn: jasmine.ImplementationCallback) {
 
 // Export environment flags too
 export { isBrowser, isNode };
+
+describe('test environment helpers', () => {
+  it('loads helper wrappers', () => {
+    expect(true).toBeTrue();
+  });
+});
 

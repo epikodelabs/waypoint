@@ -50,7 +50,9 @@ import {
 } from './transitions';
 
 import type {
+  FramePrepareFn,
   MaybePromise,
+  StreamixFrame,
   StreamixLayout,
   StreamixLayoutOptions,
   StreamixRenderableRoute,
@@ -93,6 +95,7 @@ import {
   type NavigationContext,
   type NavigationOptions,
   type NavigationTransitionDefinition,
+  type PrepareRouteDataFn,
   type PreloadingStrategy,
   type Route,
   type RouteRenderContext,
@@ -347,38 +350,6 @@ function adaptCanDeactivate(
   );
 }
 
-function adaptLoaders(
-  route: StreamixRoute,
-  injector:
-    EnvironmentInjector,
-): Route['resolve'] {
-  const {
-    resolve,
-  } = route;
-
-  if (!resolve) {
-    return undefined;
-  }
-
-  return Object.fromEntries(
-    Object.entries(resolve)
-      .map(
-        ([key, loader]) => [
-          key,
-          (
-            context:
-              NavigationContext,
-          ) =>
-            execute(
-              injector,
-              loader,
-              context,
-            ),
-        ],
-      ),
-  );
-}
-
 function adaptTransitionDecision(
   value: TransitionDecision,
 ): boolean | string | { redirectTo: string; replace?: boolean } | void {
@@ -486,6 +457,180 @@ function adaptTransitions(
   }));
 }
 
+function adaptFrameBeforeEnter(
+  handler: CanActivateFn,
+  injector: EnvironmentInjector,
+): NavigationTransitionFn {
+  return transition =>
+    execute(
+      injector,
+      handler,
+      {
+        ...transition.to,
+        signal: transition.signal,
+      },
+    );
+}
+
+function adaptFrameBeforeLeave(
+  handler: CanDeactivateFn,
+  injector: EnvironmentInjector,
+): NavigationTransitionFn {
+  return transition => {
+    if (!transition.from) {
+      return true;
+    }
+
+    return execute(
+      injector,
+      handler,
+      {
+        ...transition.from,
+        nextUrl: transition.to.url,
+        signal: transition.signal,
+      },
+    );
+  };
+}
+
+function adaptFramePrepare(
+  handler: FramePrepareFn,
+  injector: EnvironmentInjector,
+): PrepareRouteDataFn {
+  return route =>
+    execute(
+      injector,
+      handler,
+      route,
+    );
+}
+
+function adaptFrameAfterEnter(
+  handler: (
+    route: ActivatedRoute,
+  ) => MaybePromise<void>,
+  injector: EnvironmentInjector,
+): NavigationTransitionFn {
+  return transition =>
+    execute(
+      injector,
+      handler,
+      transition.to,
+    );
+}
+
+function collectEnterFrames(
+  layouts: readonly StreamixLayout[],
+  route: StreamixRenderableRoute,
+): readonly StreamixFrame[] {
+  return Object.freeze([
+    ...layouts
+      .map(layout => layout.frame)
+      .filter((frame): frame is StreamixFrame => !!frame),
+    ...(route.frame ? [route.frame] : []),
+  ]);
+}
+
+function collectLeaveFrames(
+  layouts: readonly StreamixLayout[],
+  route: StreamixRenderableRoute,
+): readonly StreamixFrame[] {
+  const routeFrames = route.frame
+    ? [route.frame]
+    : [];
+  const layoutFrames =
+    layouts
+      .map(layout => layout.frame)
+      .filter((frame): frame is StreamixFrame => !!frame)
+      .reverse();
+
+  return Object.freeze([
+    ...routeFrames,
+    ...layoutFrames,
+  ]);
+}
+
+function adaptFramePreparers(
+  frames: readonly StreamixFrame[],
+  injector: EnvironmentInjector,
+): readonly PrepareRouteDataFn[] | undefined {
+  const handlers =
+    frames.flatMap(frame =>
+      frame.prepare?.map(handler =>
+        adaptFramePrepare(handler, injector),
+      ) ?? [],
+    );
+
+  return handlers.length > 0
+    ? Object.freeze(handlers)
+    : undefined;
+}
+
+function adaptFrameTransitions(
+  groups: readonly CompiledRouteGroup[],
+  injector: EnvironmentInjector,
+): readonly NavigationTransitionDefinition[] {
+  const transitions: NavigationTransitionDefinition[] = [];
+
+  for (const group of groups) {
+    const primaryRoute =
+      group.primary.route;
+
+    if (primaryRoute.redirectTo) {
+      continue;
+    }
+
+    const renderableRoute =
+      primaryRoute as StreamixRenderableRoute;
+    const enterFrames =
+      collectEnterFrames(
+        group.layouts,
+        renderableRoute,
+      );
+    const leaveFrames =
+      collectLeaveFrames(
+        group.layouts,
+        renderableRoute,
+      );
+
+    for (const current of enterFrames) {
+      if (
+        !current.beforeEnter?.length &&
+        !current.afterEnter?.length
+      ) {
+        continue;
+      }
+
+      transitions.push({
+        to: route =>
+          route?.config.sourceRoute === primaryRoute,
+        beforeEnter: current.beforeEnter?.map(handler =>
+          adaptFrameBeforeEnter(handler, injector),
+        ),
+        afterEnter: current.afterEnter?.map(handler =>
+          adaptFrameAfterEnter(handler, injector),
+        ),
+      });
+    }
+
+    for (const current of leaveFrames) {
+      if (!current.beforeLeave?.length) {
+        continue;
+      }
+
+      transitions.push({
+        from: route =>
+          route?.config.sourceRoute === primaryRoute,
+        beforeLeave: current.beforeLeave.map(handler =>
+          adaptFrameBeforeLeave(handler, injector),
+        ),
+      });
+    }
+  }
+
+  return transitions;
+}
+
 function adaptParamsParser(
   route: StreamixRoute,
   injector: EnvironmentInjector,
@@ -543,6 +688,7 @@ function adaptRoute(
   path: string,
   redirectTo: string | undefined,
   layouts: readonly StreamixLayout[],
+  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
   appRef: ApplicationRef,
   injector: EnvironmentInjector,
 ): Route {
@@ -550,6 +696,10 @@ function adaptRoute(
     routeToken: STREAMIX_ROUTE,
     contextToken: STREAMIX_ROUTE_CONTEXT,
   } as const;
+  const renderableRoute =
+    redirectTo
+      ? null
+      : route as StreamixRenderableRoute;
 
   return {
     name: route.name,
@@ -568,7 +718,7 @@ function adaptRoute(
 
       const views = await resolveViews(
         layouts,
-        route as StreamixRenderableRoute,
+        renderableRoute!,
       );
 
       return {
@@ -588,7 +738,15 @@ function adaptRoute(
               ),
         canActivate: adaptCanActivate(route.canActivate, injector),
         canDeactivate: adaptCanDeactivate(route.canDeactivate, injector),
-        resolve: adaptLoaders(route, injector),
+        prepare: [
+          ...(sharedPreparers ?? []),
+          ...(adaptFramePreparers(
+            renderableRoute?.frame
+              ? [renderableRoute.frame]
+              : [],
+            injector,
+          ) ?? []),
+        ],
         parseParams: adaptParamsParser(route, injector),
         parseQuery: adaptQueryParser(route, injector),
       };
@@ -606,11 +764,20 @@ function adaptRoutes(
   // validateRouteGroups(groups); // This is now done inside createRouteRegistry
 
   return groups.map((group: CompiledRouteGroup) => {
+      const sharedPreparers =
+        adaptFramePreparers(
+          group.layouts
+            .map(layout => layout.frame)
+            .filter((frame): frame is StreamixFrame => !!frame),
+          injector,
+        );
+
       const primary = adaptRoute(
         group.primary.route,
         group.path,
         group.primary.redirectTo,
         group.layouts,
+        sharedPreparers,
         appRef,
         injector,
       );
@@ -621,6 +788,7 @@ function adaptRoutes(
           group.path,
           compiled.redirectTo,
           group.layouts,
+          sharedPreparers,
           appRef,
           injector,
         ),
@@ -824,10 +992,16 @@ export class StreamixRouter<
             .preloading,
 
         transitions:
-          adaptTransitions(
-            this.configuration.transitions,
-            this.injector,
-          ),
+          [
+            ...adaptFrameTransitions(
+              this.registry.groups,
+              this.injector,
+            ),
+            ...(adaptTransitions(
+              this.configuration.transitions,
+              this.injector,
+            ) ?? []),
+          ],
 
         viewTransitions:
           this.configuration

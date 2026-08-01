@@ -74,9 +74,13 @@ export type CanDeactivateFn = (
   route: DeactivationContext,
 ) => MaybePromise<GuardResult>;
 
-export type Resolve<T = unknown> =
-  | ((route: NavigationContext) => MaybePromise<T>)
-  | { resolve(route: NavigationContext): MaybePromise<T> };
+export type PrepareRouteDataResult =
+  | void
+  | RouteData;
+
+export type PrepareRouteDataFn = (
+  route: NavigationContext,
+) => MaybePromise<PrepareRouteDataResult>;
 
 export type RouteComponent = (
   route: ActivatedRoute,
@@ -98,7 +102,7 @@ export interface LoadedRoute {
   readonly component?: RouteComponent;
   readonly canActivate?: CanActivateFn[];
   readonly canDeactivate?: CanDeactivateFn[];
-  readonly resolve?: Record<string, Resolve>;
+  readonly prepare?: readonly PrepareRouteDataFn[];
   readonly parseParams?: ParseRouteParams;
   readonly parseQuery?: ParseRouteQuery;
 }
@@ -117,7 +121,7 @@ export interface Route {
   viewTransition?: boolean;
   canActivate?: CanActivateFn[];
   canDeactivate?: CanDeactivateFn[];
-  resolve?: Record<string, Resolve>;
+  prepare?: readonly PrepareRouteDataFn[];
 }
 
 export interface NavigationTransition {
@@ -372,8 +376,46 @@ function executeDeactivationGuard(
   return guard(route);
 }
 
-function executeResolver(resolver: Resolve, route: NavigationContext): MaybePromise<unknown> {
-  return typeof resolver === 'function' ? resolver(route) : resolver.resolve(route);
+function executePrepareRouteData(
+  prepare: PrepareRouteDataFn,
+  route: NavigationContext,
+): MaybePromise<PrepareRouteDataResult> {
+  return prepare(route);
+}
+
+function normalizePreparedRouteData(
+  value: PrepareRouteDataResult,
+): RouteData {
+  if (value === undefined) {
+    return EMPTY_DATA;
+  }
+
+  if (
+    typeof value !== 'object'
+    || value === null
+    || Array.isArray(value)
+  ) {
+    throw new Error(
+      'Route prepare handlers must return an object or void.',
+    );
+  }
+
+  return Object.freeze({ ...value });
+}
+
+function mergeRouteData(
+  entries: readonly RouteData[],
+): RouteData {
+  if (entries.length === 0) {
+    return EMPTY_DATA;
+  }
+
+  return Object.freeze(
+    Object.assign(
+      {},
+      ...entries,
+    ),
+  );
 }
 
 function executeTransition(
@@ -498,7 +540,7 @@ function loadRoute(
         component: loaded.component,
         canActivate: loaded.canActivate,
         canDeactivate: loaded.canDeactivate,
-        resolve: loaded.resolve,
+        prepare: loaded.prepare ?? route.prepare,
         parseParams: loaded.parseParams,
         parseQuery: loaded.parseQuery,
       }))
@@ -1358,25 +1400,59 @@ export function createRouter(config: RouterConfig): Router {
     }
 
     setPhase(request, 'resolving');
+    const preparedRouteData =
+      new WeakMap<
+        PrepareRouteDataFn,
+        Promise<RouteData>
+      >();
 
     const activatedRoutes = await Promise.all(
       baseRoutes.map(async (baseRoute, index): Promise<ActiveRoute> => {
-        const entries = await Promise.all(
-          Object.entries(loadedRoutes[index].resolve ?? {}).map(
-            async ([key, resolver]) => [
-              key,
-              await executeResolver(resolver, { ...baseRoute, signal }),
-            ] as const,
+        const context: NavigationContext = {
+          ...baseRoute,
+          signal,
+        };
+
+        const preparedData = mergeRouteData(
+          await Promise.all(
+            (loadedRoutes[index].prepare ?? []).map(
+              prepare => {
+                let pending =
+                  preparedRouteData.get(
+                    prepare,
+                  );
+
+                if (!pending) {
+                  pending = Promise.resolve(
+                    executePrepareRouteData(
+                      prepare,
+                      context,
+                    ),
+                  ).then(result =>
+                    normalizePreparedRouteData(
+                      result,
+                    ),
+                  );
+
+                  preparedRouteData.set(
+                    prepare,
+                    pending,
+                  );
+                }
+
+                return pending;
+              },
+            ),
           ),
         );
         throwIfAborted(signal);
 
         return {
           ...baseRoute,
-          data: Object.freeze({
-            ...baseRoute.data,
-            ...Object.fromEntries(entries),
-          }),
+          data: mergeRouteData([
+            baseRoute.data,
+            preparedData,
+          ]),
         };
       }),
     );

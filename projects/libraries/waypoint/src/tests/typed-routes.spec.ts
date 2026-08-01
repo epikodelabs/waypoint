@@ -1,3 +1,5 @@
+import { installTestCompat } from './test-compat';
+
 import {
   defineTransitions,
   layout,
@@ -6,7 +8,9 @@ import {
   transition,
   type StreamixRoutes,
   type StreamixRouter,
-} from 'waypoint';
+} from '@epikodelabs/waypoint';
+
+installTestCompat();
 
 class DashboardLayout {}
 class DashboardPage {}
@@ -63,7 +67,7 @@ const transitions = defineTransitions([
       },
     ],
   }),
-]) as const;
+]);
 
 void transitions;
 

@@ -165,7 +165,7 @@ const sidebarStyles = `
       <p class="lede">
         This app is meant for real browser checks, not framework smoke tests.
         Use it to validate how Switchboard handles redirects, typed params,
-        query defaults, lazy routes, guards, and grouped named outlets.
+        query defaults, lazy routes, frame hooks, and grouped named outlets.
       </p>
 
       <div class="hero-actions">
@@ -210,10 +210,10 @@ const sidebarStyles = `
           </p>
         </article>
         <article class="scenario-card">
-          <strong>Guards and lazy routes</strong>
+          <strong>Frames and lazy routes</strong>
           <p>
-            The admin page redirects until access is enabled, and the reports
-            page is loaded lazily.
+            The admin and editor pages use frame lifecycle hooks, and the
+            reports page is loaded lazily.
           </p>
         </article>
       </div>
@@ -376,9 +376,9 @@ export class IntroPage {
           </label>
           <p>
             @if (session.adminAccess()) {
-              The <code>beforeEnter</code> transition will allow the admin route.
+              The <code>beforeEnter</code> frame hook will allow the admin route.
             } @else {
-              The <code>beforeEnter</code> transition redirects to access settings.
+              The <code>beforeEnter</code> frame hook redirects to access settings.
             }
           </p>
         </div>
@@ -394,7 +394,7 @@ export class IntroPage {
           </label>
           <p>
             When enabled, leaving the editor route triggers a native
-            confirmation dialog through <code>beforeLeave</code>.
+            confirmation dialog through the <code>beforeLeave</code> frame hook.
           </p>
         </div>
 
@@ -536,7 +536,7 @@ export class DemoShellComponent {
     },
     {
       label: 'Editor',
-      description: 'beforeLeave confirmation path with a dirty-state toggle',
+      description: 'beforeLeave frame hook with a dirty-state toggle',
       target: {
         name: 'editor',
         params: { draftId: 7 },
@@ -584,7 +584,7 @@ export class DemoShellComponent {
           <h1>Workspace {{ projectId() }}</h1>
         </div>
         <span class="status-pill">
-          Resolver load #{{ snapshot()?.loadOrder ?? 0 }}
+          Prepare load #{{ snapshot()?.loadOrder ?? 0 }}
         </span>
       </header>
 
@@ -616,7 +616,7 @@ export class DemoShellComponent {
         </article>
 
         <article class="panel">
-          <h3>Resolver payload</h3>
+          <h3>Prepared payload</h3>
           <p>
             Suggested filters:
             <strong>{{ snapshot()?.suggestedFilters?.join(', ') || 'none' }}</strong>
@@ -626,7 +626,7 @@ export class DemoShellComponent {
             <strong>{{ snapshot()?.canOpenAdmin ? 'yes' : 'no' }}</strong>
           </p>
           <p>
-            Use the shell controls to change future resolver output without
+            Use the shell controls to change future prepare output without
             rebuilding the app.
           </p>
         </article>
@@ -848,7 +848,7 @@ export class SettingsSidebarComponent {}
     <section class="page">
       <header class="page-header">
         <div>
-          <p class="eyebrow">beforeLeave transition</p>
+          <p class="eyebrow">beforeLeave frame hook</p>
           <h1>Draft {{ draftId() }}</h1>
         </div>
         <span class="status-pill">{{ mode() }} mode</span>
@@ -942,7 +942,7 @@ export class EditorSidebarComponent {}
     <section class="page">
       <header class="page-header">
         <div>
-          <p class="eyebrow">beforeEnter transition + resolve</p>
+          <p class="eyebrow">beforeEnter + prepare frame hooks</p>
           <h1>Admin console</h1>
         </div>
         <span class="status-pill">guard passed</span>
@@ -957,7 +957,7 @@ export class EditorSidebarComponent {}
           </p>
         </article>
         <article class="panel">
-          <h3>Resolver audit</h3>
+          <h3>Prepared audit</h3>
           <p>reviewedBy: <strong>{{ audit()?.reviewedBy }}</strong></p>
           <p>workspaceLoads: <strong>{{ audit()?.workspaceLoads ?? 0 }}</strong></p>
         </article>
