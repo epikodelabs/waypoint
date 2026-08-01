@@ -9,8 +9,6 @@ import type {
   StreamixLayoutOptions,
   StreamixRedirectRoute,
   StreamixRenderableRoute,
-  StreamixRouteLoader,
-  StreamixRouteMount,
   StreamixRouteOptions,
   StreamixRoutes,
   StreamixView,
@@ -339,17 +337,6 @@ export function layout<
   };
 
   return layout;
-}
-
-export function mountRoutes<
-  const TEntries extends StreamixRoutes,
->(
-  loadRoutes: StreamixRouteLoader<TEntries>,
-): StreamixRouteMount<TEntries> {
-  return {
-    kind: 'mount',
-    loadRoutes,
-  };
 }
 
 export function lazyLayout<
