@@ -1,9 +1,5 @@
-import { installTestCompat } from './test-compat';
-
 import { createRouter, type Route, type Router, type RouterConfig } from '@epikodelabs/waypoint';
 import { idescribe } from './env.spec';
-
-installTestCompat();
 
 function unwrapTestComponent<T>(value: T | { default: T }): T {
   return value != null && typeof value === 'object' && 'default' in value

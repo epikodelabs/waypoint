@@ -1,12 +1,8 @@
-import { installTestCompat } from './test-compat';
-
 import { ensureAngularTestEnvironment } from './angular-testbed.init';
 
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { RouterOutlet } from '@epikodelabs/waypoint';
-
-installTestCompat();
 
 ensureAngularTestEnvironment();
 

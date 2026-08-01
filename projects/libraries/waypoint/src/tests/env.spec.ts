@@ -1,9 +1,5 @@
-import { installTestCompat } from './test-compat';
-
 // Avoid a hard dependency on Node ambient types in browser-focused specs.
 const processLike = (globalThis as { process?: { versions?: { node?: unknown } } }).process;
-
-installTestCompat();
 
 const isNode =
   processLike != null &&

@@ -38,10 +38,16 @@ This will compile your project and store the build artifacts in the `dist/` dire
 
 ## Running unit tests
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+This repo runs the `waypoint` library specs with the Testify Jasmine harness. Use:
 
 ```bash
-ng test app1
+npm test
+```
+
+For interactive browser mode:
+
+```bash
+npm run test:watch
 ```
 
 ## Running end-to-end tests

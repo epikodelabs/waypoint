@@ -1,5 +1,3 @@
-import { installTestCompat } from './test-compat';
-
 import {
   defineTransitions,
   layout,
@@ -9,8 +7,6 @@ import {
   type StreamixRoutes,
   type StreamixRouter,
 } from '@epikodelabs/waypoint';
-
-installTestCompat();
 
 class DashboardLayout {}
 class DashboardPage {}

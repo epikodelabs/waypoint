@@ -1,5 +1,3 @@
-import { installTestCompat } from './test-compat';
-
 import { ensureAngularTestEnvironment } from './angular-testbed.init';
 
 import { Component } from '@angular/core';
@@ -14,8 +12,6 @@ import {
   StreamixRouter,
   type StreamixRoutes,
 } from '@epikodelabs/waypoint';
-
-installTestCompat();
 
 ensureAngularTestEnvironment();
 

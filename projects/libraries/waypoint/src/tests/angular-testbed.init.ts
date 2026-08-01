@@ -1,5 +1,3 @@
-import { installTestCompat } from './test-compat';
-
 import {
   TestBed,
   getTestBed,
@@ -9,8 +7,6 @@ import {
   BrowserTestingModule,
   platformBrowserTesting,
 } from '@angular/platform-browser/testing';
-
-installTestCompat();
 
 export function ensureAngularTestEnvironment(): void {
   const testBed = getTestBed() as {
