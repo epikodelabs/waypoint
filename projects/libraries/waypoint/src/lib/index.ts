@@ -7,7 +7,6 @@ export { RouterLink, StreamixRouterLink } from './router-link';
 export * from './route-types';
 export * from './router-events';
 export * from './router-url';
-export * from './transitions';
 export * from './typed-routes';
 export * from './vanilla-router';
 export {

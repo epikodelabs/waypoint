@@ -13,6 +13,9 @@ export type Lazy<T> = () => MaybePromise<T | { readonly default: T }>;
 
 export type StreamixRouteProvider = Provider | EnvironmentProviders;
 export type StreamixRouteProviders = readonly StreamixRouteProvider[];
+export type StreamixRouteLoader<
+  TEntries extends StreamixRoutes = StreamixRoutes,
+> = () => MaybePromise<TEntries>;
 
 export type RouteRedirect = {
   readonly redirectTo: string | URL;
@@ -165,9 +168,20 @@ export type StreamixLayout<
     readonly frame?: StreamixFrame;
   };
 
+export interface StreamixRouteMount<
+  TEntries extends StreamixRoutes = StreamixRoutes,
+> {
+  readonly kind: 'mount';
+  readonly loadRoutes: StreamixRouteLoader<TEntries>;
+}
+
 // Any-instantiated route/layout primitives to avoid undefined-widening issues
 export type AnyStreamixRoute = StreamixRoute<any, any, any, any>;
 export type AnyStreamixLayout = StreamixLayout<any, any>;
+export type AnyStreamixRouteMount = StreamixRouteMount<any>;
 
-export type StreamixRouteEntry = AnyStreamixRoute | AnyStreamixLayout;
+export type StreamixRouteEntry =
+  | AnyStreamixRoute
+  | AnyStreamixLayout
+  | AnyStreamixRouteMount;
 export type StreamixRoutes = readonly StreamixRouteEntry[];

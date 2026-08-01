@@ -1,9 +1,7 @@
 import {
-  defineTransitions,
   layout,
   route,
   s,
-  transition,
   type StreamixRoutes,
   type StreamixRouter,
 } from '@epikodelabs/waypoint';
@@ -34,38 +32,10 @@ const settingsRoute = route('/settings', SettingsPage, {
 
 const routes = [
   layout('/app', DashboardLayout, [
-    dashboardRoute,
     settingsRoute,
+    dashboardRoute,
   ]),
 ] as const satisfies StreamixRoutes;
-
-const transitions = defineTransitions([
-  transition({
-    to: dashboardRoute,
-    prepare: [
-      ({ to }) => {
-        const projectId: number = to.params.projectId;
-        const tab: string = to.query.tab;
-        void projectId;
-        void tab;
-      },
-    ],
-  }),
-  transition({
-    from: dashboardRoute,
-    to: settingsRoute,
-    beforeLeave: [
-      ({ from, to }) => {
-        const projectId: number = from.params.projectId;
-        const section: string = to.query.section;
-        void projectId;
-        void section;
-      },
-    ],
-  }),
-]);
-
-void transitions;
 
 function assertNamedNavigation(router: StreamixRouter<typeof routes>): void {
   void router.navigateTo.dashboard({
@@ -101,9 +71,5 @@ function assertNamedNavigation(router: StreamixRouter<typeof routes>): void {
 describe('typed routes typings', () => {
   it('discovers named leaf routes nested inside layouts', () => {
     expect(typeof assertNamedNavigation).toBe('function');
-  });
-
-  it('infers transition route snapshots from route values', () => {
-    expect(transitions.length).toBe(2);
   });
 });
