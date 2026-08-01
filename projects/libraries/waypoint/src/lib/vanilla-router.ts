@@ -848,12 +848,6 @@ export function createRouter(config: RouterConfig): Router {
   function shouldUseViewTransition(
     context: ViewTransitionContext,
   ): boolean {
-    if (
-      (context.routeConfig?.outlets?.length ?? 0) > 0
-    ) {
-      return false;
-    }
-
     const routeOverride = context.routeConfig?.viewTransition;
     if (routeOverride !== undefined) return routeOverride;
 

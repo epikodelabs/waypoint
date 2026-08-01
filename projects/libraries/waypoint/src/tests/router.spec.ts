@@ -2343,7 +2343,7 @@ idescribe('Router', () => {
             expect((router.state.error as Error).message).toBe('Commit failed');
         });
 
-        it('should skip native view transitions for grouped named outlet commits', async () => {
+        it('should run native view transitions for grouped named outlet commits', async () => {
             const transitionDocument = document as Document & {
                 startViewTransition?: (callback: () => void | PromiseLike<void>) => {
                     finished: Promise<void>;
@@ -2370,7 +2370,7 @@ idescribe('Router', () => {
                 });
 
                 expect(await router.navigate('/project/42')).toBeTrue();
-                expect(startViewTransition).not.toHaveBeenCalled();
+                expect(startViewTransition).toHaveBeenCalled();
             }
             finally {
                 transitionDocument.startViewTransition = original;
