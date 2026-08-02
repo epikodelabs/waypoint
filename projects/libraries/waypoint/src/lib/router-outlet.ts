@@ -43,7 +43,7 @@ export class RouterOutlet implements OnInit {
   }
 
   private shouldConnect(name: string): boolean {
-    return name !== '' || this.element.closest('streamix-view') === null;
+    return name !== '' || this.element.closest('route-host') === null;
   }
 }
 

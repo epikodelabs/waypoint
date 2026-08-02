@@ -26,9 +26,7 @@ import type {
 import {
   CompiledRoute,
   CompiledRouteGroup,
-  compileRoutes,
   createRouteRegistry,
-  groupRoutes,
   type RouteRegistryRecord,
 } from './route-compiler';
 
@@ -654,49 +652,68 @@ function adaptRoute(
 }
 
 function adaptRoutes(
-  entries: NavigationTree,
+  groups: readonly CompiledRouteGroup[],
   appRef: ApplicationRef,
   injector: EnvironmentInjector,
 ): Route[] {
-  const compiled = compileRoutes(entries);
-  const groups = groupRoutes(compiled);
-  // validateRouteGroups(groups); // This is now done inside createRouteRegistry
-
   return groups.map((group: CompiledRouteGroup) => {
-      const sharedPreparers =
-        adaptFramePreparers(
-          group.layouts
-            .map(layout => layout.frame)
-            .filter((frame): frame is FrameView => !!frame),
-          injector,
-        );
+    const sharedPreparers =
+      adaptFramePreparers(
+        group.layouts
+          .map(layout => layout.frame)
+          .filter((frame): frame is FrameView => !!frame),
+        injector,
+      );
 
-      const primary = adaptRoute(
-        group.primary.route,
+    const primary = adaptRoute(
+      group.primary.route,
+      group.path,
+      group.primary.redirectTo,
+      group.layouts,
+      sharedPreparers,
+      appRef,
+      injector,
+    );
+
+    const outlets = group.outlets.map((compiled: CompiledRoute) =>
+      adaptRoute(
+        compiled.route,
         group.path,
-        group.primary.redirectTo,
+        compiled.redirectTo,
         group.layouts,
         sharedPreparers,
         appRef,
         injector,
-      );
-  
-      const outlets = group.outlets.map((compiled: CompiledRoute) =>
-        adaptRoute(
-          compiled.route,
-          group.path,
-          compiled.redirectTo,
-          group.layouts,
-          sharedPreparers,
-          appRef,
-          injector,
-        ),
-      );
-  
-      return outlets.length > 0
-        ? { ...primary, outlets: Object.freeze(outlets) }
-        : primary;
-    });
+      ),
+    );
+
+    return outlets.length > 0
+      ? { ...primary, outlets: Object.freeze(outlets) }
+      : primary;
+  });
+}
+
+function replaceChildNodes(
+  target: Node & {
+    replaceChildren?: (...nodes: Node[]) => void;
+    firstChild: ChildNode | null;
+    removeChild(node: ChildNode): void;
+    appendChild<T extends Node>(node: T): T;
+  },
+  ...nodes: Node[]
+): void {
+  if (typeof target.replaceChildren === 'function') {
+    target.replaceChildren(...nodes);
+    return;
+  }
+
+  while (target.firstChild) {
+    target.removeChild(target.firstChild);
+  }
+
+  for (const node of nodes) {
+    target.appendChild(node);
+  }
 }
 
 function interpolateNamedPath(
@@ -877,11 +894,11 @@ export class Router<
     const engine =
       createRouter({
         routes:
-          adaptRoutes(
-            this.configuration.routes,
-            this.appRef,
-            this.injector,
-          ),
+        adaptRoutes(
+          this.registry.groups,
+          this.appRef,
+          this.injector,
+        ),
 
         baseHref:
           this.baseHref,
@@ -933,9 +950,7 @@ export class Router<
             );
           }
 
-          target.replaceChildren(
-            node,
-          );
+          replaceChildNodes(target, node);
         },
 
       commit: (outlets) => {
@@ -954,7 +969,7 @@ export class Router<
             throw new Error(`Router outlet "${outlet.name}" is not connected.`);
           }
 
-          target.replaceChildren(outlet.node);
+          replaceChildNodes(target, outlet.node);
           dispatchOutletLifecycleEvent(
             target,
             OUTLET_ACTIVATE_EVENT,
@@ -983,11 +998,9 @@ export class Router<
             );
 
           heading.textContent =
-            '404 вЂ” Page Not Found';
+            '404 — Page Not Found';
 
-          target.replaceChildren(
-            heading,
-          );
+          replaceChildNodes(target, heading);
 
           void this.resolveRoutesForUrl(
             url,
@@ -1016,9 +1029,7 @@ export class Router<
           heading.textContent =
             'Page failed to load';
 
-          target.replaceChildren(
-            heading,
-          );
+          replaceChildNodes(target, heading);
         },
 
         onStateChange:
@@ -1495,7 +1506,7 @@ export class Router<
     return createRouter({
       routes:
         adaptRoutes(
-          this.configuration.routes,
+          this.registry.groups,
           this.appRef,
           this.injector,
         ),
@@ -1550,9 +1561,7 @@ export class Router<
           );
         }
 
-        target.replaceChildren(
-          node,
-        );
+        replaceChildNodes(target, node);
       },
 
       commit: (outlets) => {
@@ -1569,7 +1578,7 @@ export class Router<
             throw new Error(`Router outlet "${outlet.name}" is not connected.`);
           }
 
-          target.replaceChildren(outlet.node);
+          replaceChildNodes(target, outlet.node);
           dispatchOutletLifecycleEvent(
             target,
             OUTLET_ACTIVATE_EVENT,
@@ -1598,11 +1607,9 @@ export class Router<
           );
 
         heading.textContent =
-          '404 РІР‚вЂќ Page Not Found';
+          '404 — Page Not Found';
 
-        target.replaceChildren(
-          heading,
-        );
+        replaceChildNodes(target, heading);
 
         void this.resolveRoutesForUrl(
           url,
@@ -1631,9 +1638,7 @@ export class Router<
         heading.textContent =
           'Page failed to load';
 
-        target.replaceChildren(
-          heading,
-        );
+        replaceChildNodes(target, heading);
       },
 
       onStateChange:
@@ -1822,12 +1827,13 @@ export {
   type RouteOptions
 };
 
-  export {
-    layout,
-    lazyLayout, lazyRoute,
-    redirectRoute, route
-  } from './route-builders';
-  
+export {
+  layout,
+  lazyLayout,
+  lazyRoute,
+  redirectRoute,
+  route,
+} from './route-builders';
 
 
 
