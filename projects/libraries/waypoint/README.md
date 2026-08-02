@@ -1,77 +1,87 @@
-﻿# @epikodelabs/waypoint
+﻿# Waypoint
 
-`@epikodelabs/waypoint` is a typed Angular routing library for flat route definitions, layout composition, and frame-based lifecycle hooks.
+Waypoint is a typed Angular navigation library built around a simple idea:
 
-It is designed to keep route identity, URL shape, rendering, and lifecycle together.
+**the client shouldn't know about navigation it isn't allowed to use.**
 
-## Core ideas
+Most Angular applications ship the entire route graph to every browser. Authentication and authorization decide whether a user may *enter* a route, but every route already exists in the client. Open DevTools, inspect bundles, or browse lazy imports and you can often discover areas of an application you were never supposed to know existed.
 
-### Path
+Waypoint takes a different approach.
 
-`path` is the URL contract. It is used for matching and link generation.
+Routes are authored once, compiled into navigation artifacts, and can be delivered by the server on demand. Every user receives only the navigation they're allowed to discover. Unauthorized destinations aren't merely blocked—they simply aren't part of the client's navigation model.
 
-### Name
+The result is an architecture that scales naturally to applications with large route graphs, tenant-specific functionality, enterprise permissions, and feature licensing, while keeping the developer experience familiar to anyone who has used Angular Router.
 
-`name` is the app-level identity for a primary route. It exists so application code can address a route symbolically instead of coupling everything to literal URLs.
+The best part? You don't have to give up everything you already like about routing. Waypoint still speaks fluent URLs—paths, redirects, layouts, lazy loading, typed params, typed query strings, and named navigation—it simply treats the server as the authority for what navigation exists.
 
-Typical uses:
+## Why you'll like it
 
-- `router.navigate({ name: 'settings' })`
-- `router.navigateTo.settings(...)`
-- `router.hrefTo.settings(...)`
-- `[routerLink]="{ name: 'settings' }"`
+- **Server-driven navigation.** Clients receive only the routes they're authorized to discover instead of downloading the application's complete navigation graph.
+- **Typed from end to end.** Params and query strings are declared once using a compact schema builder (`s.string`, `s.number`, `s.boolean`, `s.array`, `s.date`) and their types flow through navigation helpers, lifecycle hooks, and generated links.
+- **One destination. One definition.** URL, rendering, lifecycle, schemas, and application identity live together instead of being scattered across route configs, guards, resolvers, and components.
+- **Function-based lifecycle.** `prepare`, `beforeEnter`, `beforeLeave`, and `afterEnter` are just functions. Inject services, load data, redirect, or cancel navigation without framework ceremony.
+- **Shell composition.** `layout(...)` composes application chrome around groups of routes without turning layouts into navigation state.
+- **Standalone-first.** Designed for modern Angular applications instead of carrying years of routing history.
 
-### Frame
+Waypoint intentionally stays close to the routing model Angular developers already know. The difference isn't the API—it's the architecture behind it.
 
-A `frame` wraps a component together with route lifecycle hooks:
+## Installation
 
-- `beforeEnter`
-- `beforeLeave`
-- `prepare`
-- `afterEnter`
+```bash
+npm install @epikodelabs/waypoint
+```
 
-This replaces the need to scatter route behavior across Angular guard and resolver classes.
+Waypoint is built for modern standalone Angular applications and depends only on `@angular/core` and `@angular/common`.
 
-## Route model
+## Quick start
 
-Primary routes define navigation behavior. Secondary outlet entries exist only to render additional content for the same matched primary route.
-
-That means:
-
-- primary routes may have `name`
-- secondary outlet routes should stay subordinate to the primary route
-- layouts compose UI shells, not navigation state machines
-
-## Example
+Here's a realistic route definition. Don't worry about every option just yet—the concepts underneath it are deliberately small.
 
 ```ts
 import { inject } from '@angular/core';
-import { frame, layout, route, s, type NavigationTree } from '@epikodelabs/waypoint';
+import {
+  frame,
+  layout,
+  route,
+  s,
+  type NavigationTree,
+} from '@epikodelabs/waypoint';
 
 const projectRoute = route(
   '/projects/:projectId',
   frame(ProjectPage, {
     beforeEnter: [
-      () => inject(SessionService).authenticated()
-        ? true
-        : { redirectTo: '/auth/login', replace: true },
+      () =>
+        inject(SessionService).authenticated()
+          ? true
+          : {
+              redirectTo: '/auth/login',
+              replace: true,
+            },
     ],
+
     prepare: [
       context => ({
         project: inject(ProjectStore).load(
-          Number(context.params['projectId'] ?? 0),
+          context.params.projectId,
         ),
       }),
     ],
+
     afterEnter: [
-      route => inject(AnalyticsService).trackProjectVisit(route.path),
+      route =>
+        inject(AnalyticsService)
+          .trackProjectVisit(route.path),
     ],
   }),
+
   {
     name: 'project',
+
     paramsSchema: {
       projectId: s.number({ min: 1 }),
     },
+
     querySchema: {
       tab: s.string('overview'),
     },
@@ -85,65 +95,141 @@ export const routes = [
 ] as const satisfies NavigationTree;
 ```
 
-If you use a named outlet, its companion route intentionally shares the same path as the primary route:
+Read it out loud and it almost explains itself:
+
+*"there's a project page at `/projects/:projectId`, it's known as `project`, users must be authenticated before entering it, the project loads before rendering, and visits are tracked after navigation completes."*
+
+That's the entire philosophy behind Waypoint: one destination, one definition.
+
+## Core ideas
+
+Waypoint is built around four small concepts.
+
+Once these click, everything else is detail.
+
+### `route(path, frame, options)`
+
+A route describes a public destination.
+
+It owns:
+
+- the public URL
+- typed params
+- typed query strings
+- application identity (`name`)
+- redirects
+- navigation behavior
+
+### `frame(component, options)`
+
+A frame binds a component to its lifecycle.
+
+This is where navigation behavior lives:
+
+- `prepare`
+- `beforeEnter`
+- `beforeLeave`
+- `afterEnter`
+
+Each hook is simply a function.
+
+Inject services, fetch data, redirect, or cancel navigation without implementing framework-specific interfaces.
+
+### `layout(path, component, entries)`
+
+Layouts compose application shells.
+
+They provide navigation bars, side panels, and shared chrome around groups of routes without becoming part of the route identity themselves.
+
+### Typed navigation
+
+Because routes declare their schemas once, Waypoint generates fully typed navigation helpers.
 
 ```ts
-route('/projects/:projectId', ProjectSidebarComponent, {
-  outlet: 'sidebar',
-})
+router.navigateTo.project({
+  params: {
+    projectId: 42,
+  },
+});
 ```
 
-That route is not a second independently matched page. It is extra content rendered alongside the primary route for the same URL.
+Required params, optional query values, and generated hrefs all stay synchronized with the route definition.
 
-## Why this shape
+## Server-driven navigation
 
-Waypoint tries to keep the model simple:
+Waypoint's defining feature is that routes can be compiled into server-side navigation artifacts.
 
-- URL matching by `path`
-- app-level addressing by `name`
-- lifecycle by `frame`
-- shell composition by `layout`
+Instead of treating routing as a static client configuration, Waypoint allows the server to determine which navigation branches should be delivered for the current user.
 
-That gives you one route definition instead of separate route config, resolver classes, guard classes, and ad hoc data-loading conventions.
+Conceptually:
 
-## Limitations vs Angular Router
+```
+TypeScript routes
 
-Waypoint is intentionally narrower than Angular Router. The current tradeoffs are:
+        ↓
 
-- standalone-first components and directives
-- no `NgModule` router integration such as `RouterModule.forRoot()` or `RouterModule.forChild()`
-- no `loadChildren` / lazy `NgModule` boundaries; lazy loading is component- or layout-based
-- no class-based guards or resolver classes; the model is function-based hooks and `inject()`
-- no `CanLoad`; route lifecycle is expressed through `beforeEnter`, `beforeLeave`, `prepare`, and `afterEnter`
-- no matrix-parameter model
-- no Angular `Route` object compatibility layer; Waypoint uses its own route definitions
-- no full Angular route tree semantics; layouts are composition primitives, not nested router-state nodes
+Navigation compiler
 
-There are also explicit restrictions around secondary outlets:
+        ↓
 
-- secondary outlet entries cannot define their own `name`
-- secondary outlet entries cannot define `paramsSchema` or `querySchema`
-- secondary outlet entries cannot redirect
-- secondary outlet entries must share the exact path of their primary route
-- primary routes own group-level preload and view-transition behavior
+Server navigation artifacts
 
-So the library is a better fit when you want a smaller, typed routing surface with explicit lifecycle hooks, and a worse fit when you need broad Angular Router feature parity.
+        ↓
 
-## Testing
+Identity & authorization
 
-This workspace uses the Testify Jasmine harness for library specs:
+        ↓
 
-```bash
-npm test
+Authorized route graph
+
+        ↓
+
+Browser
 ```
 
-## Demo app
+This architecture makes it practical to build applications where navigation changes according to:
 
-See `projects/apps/app1/src/app/app.routes.ts` for the current reference setup using:
+- permissions
+- tenant
+- subscription
+- feature flags
+- deployment
+- environment
 
-- primary routes with typed params and query schemas
-- frame-based `prepare` and guards
-- lazy routes
-- a shell layout
-- a coordinated `sidebar` outlet
+without shipping every possible destination to every client.
 
+Waypoint does **not** replace authorization.
+
+Servers must still authorize every request.
+
+Waypoint simply reduces unnecessary disclosure of application structure by ensuring browsers only receive navigation they're expected to use.
+
+## What the example application demonstrates
+
+`projects/apps/app1` provides a complete reference application showing:
+
+- typed params and query schemas
+- layouts
+- frame lifecycle
+- lazy loading
+- named outlets
+- generated navigation helpers
+
+`projects/apps/app2` demonstrates the server-driven navigation model, where the browser receives its route graph from the server instead of embedding the complete application navigation at build time.
+
+## A note on scope
+
+Waypoint intentionally focuses on navigation.
+
+It supports familiar routing concepts such as URLs, redirects, layouts, lazy loading, typed parameters, and browser history while remaining considerably smaller than Angular Router's full feature surface.
+
+Reach for Waypoint when you want:
+
+- typed navigation
+- modern standalone Angular APIs
+- function-based lifecycle
+- server-driven route delivery
+- privacy-safer navigation architecture
+- one destination definition instead of scattered routing infrastructure
+
+We're excited about making navigation both simpler and more scalable, and we'd love for you to build with Waypoint.
