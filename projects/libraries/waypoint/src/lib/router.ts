@@ -1,6 +1,4 @@
-﻿import {
-  APP_BASE_HREF,
-} from '@angular/common';
+﻿import { APP_BASE_HREF } from '@angular/common';
 
 import {
   ApplicationRef,
@@ -13,15 +11,9 @@ import {
   type Type,
 } from '@angular/core';
 
-import {
-  runWithInjector,
-  unwrapDefault,
-} from './adapter-utils';
+import { runWithInjector, unwrapDefault } from './adapter-utils';
 
-import type {
-  NamedNavigationTarget,
-  NavigationTarget,
-} from './navigation-targets';
+import type { NamedNavigationTarget, NavigationTarget } from './navigation-targets';
 
 import {
   CompiledRoute,
@@ -45,25 +37,14 @@ import type {
   RenderableRoute,
   RouteDefinition,
   RouteOptions,
-  NavigationTree
+  NavigationTree,
 } from './navigation-definitions';
 
-import type {
-  TypedHref,
-  TypedNavigate,
-} from './typed-navigation';
+import type { TypedHref, TypedNavigate } from './typed-navigation';
 
-import {
-  OUTLET_ACTIVATE_EVENT,
-  dispatchOutletLifecycleEvent,
-} from './router-events';
+import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-events';
 
-import {
-  isPathInsideBase,
-  resolveRouterUrl,
-  routerHref,
-  stripBaseHref,
-} from './router-url';
+import { isPathInsideBase, resolveRouterUrl, routerHref, stripBaseHref } from './router-url';
 
 import {
   parseParamsRecord,
@@ -99,23 +80,12 @@ export interface RouterOptions {
   readonly baseHref?: string;
   readonly enableTracing?: boolean;
   readonly maxRedirects?: number;
-  readonly onSameUrlNavigation?:
-    'ignore';
-  readonly scrollRestoration?:
-    ScrollRestorationMode;
-  readonly preloading?:
-    PreloadingStrategy;
-  readonly viewTransitions?:
-    ViewTransitionsOption;
-  readonly namedRoutes?:
-    readonly NamedRouteDefinition[];
-  readonly resolveRoutes?: (
-    url: URL,
-  ) => Promise<
-    NavigationTree |
-    null |
-    undefined
-  >;
+  readonly onSameUrlNavigation?: 'ignore';
+  readonly scrollRestoration?: ScrollRestorationMode;
+  readonly preloading?: PreloadingStrategy;
+  readonly viewTransitions?: ViewTransitionsOption;
+  readonly namedRoutes?: readonly NamedRouteDefinition[];
+  readonly resolveRoutes?: (url: URL) => Promise<NavigationTree | null | undefined>;
 }
 
 export interface NamedRouteDefinition {
@@ -125,103 +95,63 @@ export interface NamedRouteDefinition {
   readonly querySchema?: QuerySchemaRecord;
 }
 
-export const ROUTE =
-  new InjectionToken<ActivatedRoute>(
-    'ROUTE',
-  );
+export const ROUTE = new InjectionToken<ActivatedRoute>('ROUTE');
 
-export const ROUTE_CONTEXT =
-  new InjectionToken<RouteRenderContext>(
-    'ROUTE_CONTEXT',
-  );
+export const ROUTE_CONTEXT = new InjectionToken<RouteRenderContext>('ROUTE_CONTEXT');
 
 interface RouterConfiguration<
-  TRoutes extends NavigationTree =
-    NavigationTree,
+  TRoutes extends NavigationTree = NavigationTree,
 > extends RouterOptions {
   routes: TRoutes;
 }
 
-const ROUTER_CONFIGURATION =
-  new InjectionToken<
-    RouterConfiguration
-  >(
-    'ROUTER_CONFIGURATION',
-  );
+const ROUTER_CONFIGURATION = new InjectionToken<RouterConfiguration>('ROUTER_CONFIGURATION');
 
-const EMPTY_ROUTER_STATE:
-  RouterState = Object.freeze({
-    current: null,
-    pending: false,
-    phase: null,
-    error: null,
-    path: '',
-    params: Object.freeze({}),
-    query: Object.freeze({}),
-    data: Object.freeze({}),
-    historyState: null,
-    routeConfig: null,
-  });
+const EMPTY_ROUTER_STATE: RouterState = Object.freeze({
+  current: null,
+  pending: false,
+  phase: null,
+  error: null,
+  path: '',
+  params: Object.freeze({}),
+  query: Object.freeze({}),
+  data: Object.freeze({}),
+  historyState: null,
+  routeConfig: null,
+});
 
-const lazyComponents =
-  new WeakMap<
-    object,
-    Promise<Type<unknown>>
-  >();
+const lazyComponents = new WeakMap<object, Promise<Type<unknown>>>();
 
-function loadComponent(
-  owner: LayoutDefinition | RenderableRoute,
-): Promise<Type<unknown>> {
+function loadComponent(owner: LayoutDefinition | RenderableRoute): Promise<Type<unknown>> {
   if (owner.component) {
-    return Promise.resolve(
-      owner.component,
-    );
+    return Promise.resolve(owner.component);
   }
 
   if (!owner.loadComponent) {
-    return Promise.reject(
-      new Error(
-        'A route view must define component or loadComponent.',
-      ),
-    );
+    return Promise.reject(new Error('A route view must define component or loadComponent.'));
   }
 
-  let pending =
-    lazyComponents.get(owner);
+  let pending = lazyComponents.get(owner);
 
   if (!pending) {
-    pending =
-      Promise.resolve(
-        owner.loadComponent(),
+    pending = Promise.resolve(owner.loadComponent())
+      .then((value) =>
+        unwrapDefault<Type<unknown>>(value as Type<unknown> | { readonly default: Type<unknown> }),
       )
-        .then(value =>
-          unwrapDefault<Type<unknown>>(
-            value as
-              | Type<unknown>
-              | { readonly default: Type<unknown> },
-          ),
-        )
-        .then(component => {
-          if (!component) {
-            throw new Error(
-              'Lazy component loader returned no component.',
-            );
-          }
+      .then((component) => {
+        if (!component) {
+          throw new Error('Lazy component loader returned no component.');
+        }
 
-          return component;
-        })
-        .catch(error => {
-          lazyComponents.delete(
-            owner,
-          );
+        return component;
+      })
+      .catch((error) => {
+        lazyComponents.delete(owner);
 
-          throw error;
-        });
+        throw error;
+      });
 
-    lazyComponents.set(
-      owner,
-      pending,
-    );
+    lazyComponents.set(owner, pending);
   }
 
   return pending;
@@ -242,151 +172,89 @@ function snapshotRouterState(state: RouterState): RouterState {
   });
 }
 
-function execute<
-  TContext,
-  TResult,
->(
-  injector:
-    EnvironmentInjector,
-  handler: (
-    context: TContext,
-  ) => MaybePromise<TResult>,
+function execute<TContext, TResult>(
+  injector: EnvironmentInjector,
+  handler: (context: TContext) => MaybePromise<TResult>,
   context: TContext,
 ): Promise<TResult> {
-  return runWithInjector(
-    injector,
-    handler,
-    context,
-  );
+  return runWithInjector(injector, handler, context);
 }
 
 function adaptCanActivate(
-  handlers:
-    readonly CanActivateFn[] |
-    undefined,
-  injector:
-    EnvironmentInjector,
+  handlers: readonly CanActivateFn[] | undefined,
+  injector: EnvironmentInjector,
 ): Route['canActivate'] {
-  return handlers?.map(
-    handler =>
-      async context => {
-        const value =
-          await execute(
-            injector,
-            handler,
-            context,
-          );
+  return handlers?.map((handler) => async (context) => {
+    const value = await execute(injector, handler, context);
 
-        if (value instanceof URL) {
-          return value.href;
-        }
+    if (value instanceof URL) {
+      return value.href;
+    }
 
-        if (
-          value &&
-          typeof value ===
-            'object' &&
-          'redirectTo' in value
-        ) {
-          const rawRedirect =
-            value.redirectTo as any;
-          const redirectTo =
-            rawRedirect instanceof URL
-              ? rawRedirect.href
-              : String(rawRedirect);
+    if (value && typeof value === 'object' && 'redirectTo' in value) {
+      const rawRedirect = value.redirectTo as any;
+      const redirectTo = rawRedirect instanceof URL ? rawRedirect.href : String(rawRedirect);
 
-          return {
-            ...value,
-            redirectTo,
-          };
-        }
+      return {
+        ...value,
+        redirectTo,
+      };
+    }
 
-        return value as
-          | boolean
-          | string;
-      },
-  );
+    return value as boolean | string;
+  });
 }
 
 function adaptCanDeactivate(
-  handlers:
-    readonly CanDeactivateFn[] |
-    undefined,
-  injector:
-    EnvironmentInjector,
+  handlers: readonly CanDeactivateFn[] | undefined,
+  injector: EnvironmentInjector,
 ): Route['canDeactivate'] {
-  return handlers?.map(
-    handler =>
-      async context => {
-        const value =
-          await execute(
-            injector,
-            handler,
-            context,
-          );
+  return handlers?.map((handler) => async (context) => {
+    const value = await execute(injector, handler, context);
 
-        if (value instanceof URL) {
-          return value.href;
-        }
+    if (value instanceof URL) {
+      return value.href;
+    }
 
-        if (
-          value &&
-          typeof value ===
-            'object' &&
-          'redirectTo' in value
-        ) {
-          const rawRedirect =
-            value.redirectTo as any;
-          const redirectTo =
-            rawRedirect instanceof URL
-              ? rawRedirect.href
-              : String(rawRedirect);
+    if (value && typeof value === 'object' && 'redirectTo' in value) {
+      const rawRedirect = value.redirectTo as any;
+      const redirectTo = rawRedirect instanceof URL ? rawRedirect.href : String(rawRedirect);
 
-          return {
-            ...value,
-            redirectTo,
-          };
-        }
+      return {
+        ...value,
+        redirectTo,
+      };
+    }
 
-        return value as
-          | boolean
-          | string;
-      },
-  );
+    return value as boolean | string;
+  });
 }
 
 function adaptFrameBeforeEnter(
   handler: CanActivateFn,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
-  return transition =>
-    execute(
-      injector,
-      handler,
-      {
-        ...transition.to,
-        signal: transition.signal,
-      },
-    );
+  return (transition) =>
+    execute(injector, handler, {
+      ...transition.to,
+      signal: transition.signal,
+    });
 }
 
 function adaptFrameBeforeLeave(
   handler: CanDeactivateFn,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
-  return transition => {
+  return (transition) => {
     if (!transition.from) {
       return true;
     }
 
-    return execute(
-      injector,
-      handler,
-      {
-        ...transition.from,
-        nextUrl: transition.to.url,
-        signal: transition.signal,
-      },
-    );
+    return execute(injector, handler, {
+      ...transition.from,
+      nextUrl: transition.to.url,
+      signal: transition.signal,
+    });
   };
 }
 
@@ -394,26 +262,14 @@ function adaptFramePrepare(
   handler: FramePrepareFn,
   injector: EnvironmentInjector,
 ): PrepareRouteDataFn {
-  return route =>
-    execute(
-      injector,
-      handler,
-      route,
-    );
+  return (route) => execute(injector, handler, route);
 }
 
 function adaptFrameAfterEnter(
-  handler: (
-    route: ActivatedRoute,
-  ) => MaybePromise<void>,
+  handler: (route: ActivatedRoute) => MaybePromise<void>,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
-  return transition =>
-    execute(
-      injector,
-      handler,
-      transition.to,
-    );
+  return (transition) => execute(injector, handler, transition.to);
 }
 
 function collectEnterFrames(
@@ -421,9 +277,7 @@ function collectEnterFrames(
   route: RenderableRoute,
 ): readonly FrameView[] {
   return Object.freeze([
-    ...layouts
-      .map(layout => layout.frame)
-      .filter((frame): frame is FrameView => !!frame),
+    ...layouts.map((layout) => layout.frame).filter((frame): frame is FrameView => !!frame),
     ...(route.frame ? [route.frame] : []),
   ]);
 }
@@ -432,35 +286,24 @@ function collectLeaveFrames(
   layouts: readonly LayoutDefinition[],
   route: RenderableRoute,
 ): readonly FrameView[] {
-  const routeFrames = route.frame
-    ? [route.frame]
-    : [];
-  const layoutFrames =
-    layouts
-      .map(layout => layout.frame)
-      .filter((frame): frame is FrameView => !!frame)
-      .reverse();
+  const routeFrames = route.frame ? [route.frame] : [];
+  const layoutFrames = layouts
+    .map((layout) => layout.frame)
+    .filter((frame): frame is FrameView => !!frame)
+    .reverse();
 
-  return Object.freeze([
-    ...routeFrames,
-    ...layoutFrames,
-  ]);
+  return Object.freeze([...routeFrames, ...layoutFrames]);
 }
 
 function adaptFramePreparers(
   frames: readonly FrameView[],
   injector: EnvironmentInjector,
 ): readonly PrepareRouteDataFn[] | undefined {
-  const handlers =
-    frames.flatMap(frame =>
-      frame.prepare?.map(handler =>
-        adaptFramePrepare(handler, injector),
-      ) ?? [],
-    );
+  const handlers = frames.flatMap(
+    (frame) => frame.prepare?.map((handler) => adaptFramePrepare(handler, injector)) ?? [],
+  );
 
-  return handlers.length > 0
-    ? Object.freeze(handlers)
-    : undefined;
+  return handlers.length > 0 ? Object.freeze(handlers) : undefined;
 }
 
 function adaptFrameTransitions(
@@ -470,43 +313,27 @@ function adaptFrameTransitions(
   const transitions: NavigationTransitionDefinition[] = [];
 
   for (const group of groups) {
-    const primaryRoute =
-      group.primary.route;
+    const primaryRoute = group.primary.route;
 
     if (primaryRoute.redirectTo) {
       continue;
     }
 
-    const renderableRoute =
-      primaryRoute as RenderableRoute;
-    const enterFrames =
-      collectEnterFrames(
-        group.layouts,
-        renderableRoute,
-      );
-    const leaveFrames =
-      collectLeaveFrames(
-        group.layouts,
-        renderableRoute,
-      );
+    const renderableRoute = primaryRoute as RenderableRoute;
+    const enterFrames = collectEnterFrames(group.layouts, renderableRoute);
+    const leaveFrames = collectLeaveFrames(group.layouts, renderableRoute);
 
     for (const current of enterFrames) {
-      if (
-        !current.beforeEnter?.length &&
-        !current.afterEnter?.length
-      ) {
+      if (!current.beforeEnter?.length && !current.afterEnter?.length) {
         continue;
       }
 
       transitions.push({
-        to: route =>
-          route?.config.sourceRoute === primaryRoute,
-        beforeEnter: current.beforeEnter?.map(handler =>
+        to: (route) => route?.config.sourceRoute === primaryRoute,
+        beforeEnter: current.beforeEnter?.map((handler) =>
           adaptFrameBeforeEnter(handler, injector),
         ),
-        afterEnter: current.afterEnter?.map(handler =>
-          adaptFrameAfterEnter(handler, injector),
-        ),
+        afterEnter: current.afterEnter?.map((handler) => adaptFrameAfterEnter(handler, injector)),
       });
     }
 
@@ -516,11 +343,8 @@ function adaptFrameTransitions(
       }
 
       transitions.push({
-        from: route =>
-          route?.config.sourceRoute === primaryRoute,
-        beforeLeave: current.beforeLeave.map(handler =>
-          adaptFrameBeforeLeave(handler, injector),
-        ),
+        from: (route) => route?.config.sourceRoute === primaryRoute,
+        beforeLeave: current.beforeLeave.map((handler) => adaptFrameBeforeLeave(handler, injector)),
       });
     }
   }
@@ -536,10 +360,7 @@ function adaptParamsParser(
   if (!schema) return undefined;
 
   return (params, _url, _signal) =>
-    runInInjectionContext(
-      injector,
-      () => Promise.resolve(parseParamsRecord(schema, params)),
-    );
+    runInInjectionContext(injector, () => Promise.resolve(parseParamsRecord(schema, params)));
 }
 
 function adaptQueryParser(
@@ -550,10 +371,7 @@ function adaptQueryParser(
   if (!schema) return undefined;
 
   return (url, _signal) =>
-    runInInjectionContext(
-      injector,
-      () => Promise.resolve(parseQueryRecord(schema, url)),
-    );
+    runInInjectionContext(injector, () => Promise.resolve(parseQueryRecord(schema, url)));
 }
 
 async function resolveViews(
@@ -563,7 +381,7 @@ async function resolveViews(
   const resolvedLayouts = await Promise.all(
     layouts.map(async (layout, index) => ({
       component: await loadComponent(layout),
-      providers: (layout.providers ?? []).flat().filter(p => p),
+      providers: (layout.providers ?? []).flat().filter((p) => p),
       label: `LayoutDefinition(${layout.path || index})`,
     })),
   );
@@ -574,7 +392,7 @@ async function resolveViews(
     ...resolvedLayouts,
     {
       component: page,
-      providers: (route.providers ?? []).flat().filter(p => p),
+      providers: (route.providers ?? []).flat().filter((p) => p),
       label: `RouteDefinition(${route.path})`,
     },
   ]);
@@ -593,10 +411,7 @@ function adaptRoute(
     routeToken: ROUTE,
     contextToken: ROUTE_CONTEXT,
   } as const;
-  const renderableRoute =
-    redirectTo
-      ? null
-      : route as RenderableRoute;
+  const renderableRoute = redirectTo ? null : (route as RenderableRoute);
 
   return {
     name: route.name,
@@ -613,34 +428,18 @@ function adaptRoute(
         return {};
       }
 
-      const views = await resolveViews(
-        layouts,
-        renderableRoute!,
-      );
+      const views = await resolveViews(layouts, renderableRoute!);
 
       return {
-        component:
-          route.outlet
-            ? composeAngularLeafRouteView(
-                appRef,
-                injector,
-                tokens,
-                views,
-              )
-            : composeAngularRouteView(
-                appRef,
-                injector,
-                tokens,
-                views,
-              ),
+        component: route.outlet
+          ? composeAngularLeafRouteView(appRef, injector, tokens, views)
+          : composeAngularRouteView(appRef, injector, tokens, views),
         canActivate: adaptCanActivate(route.canActivate, injector),
         canDeactivate: adaptCanDeactivate(route.canDeactivate, injector),
         prepare: [
           ...(sharedPreparers ?? []),
           ...(adaptFramePreparers(
-            renderableRoute?.frame
-              ? [renderableRoute.frame]
-              : [],
+            renderableRoute?.frame ? [renderableRoute.frame] : [],
             injector,
           ) ?? []),
         ],
@@ -657,13 +456,10 @@ function adaptRoutes(
   injector: EnvironmentInjector,
 ): Route[] {
   return groups.map((group: CompiledRouteGroup) => {
-    const sharedPreparers =
-      adaptFramePreparers(
-        group.layouts
-          .map(layout => layout.frame)
-          .filter((frame): frame is FrameView => !!frame),
-        injector,
-      );
+    const sharedPreparers = adaptFramePreparers(
+      group.layouts.map((layout) => layout.frame).filter((frame): frame is FrameView => !!frame),
+      injector,
+    );
 
     const primary = adaptRoute(
       group.primary.route,
@@ -687,9 +483,7 @@ function adaptRoutes(
       ),
     );
 
-    return outlets.length > 0
-      ? { ...primary, outlets: Object.freeze(outlets) }
-      : primary;
+    return outlets.length > 0 ? { ...primary, outlets: Object.freeze(outlets) } : primary;
   });
 }
 
@@ -718,65 +512,29 @@ function replaceChildNodes(
 
 function interpolateNamedPath(
   template: string,
-  params:
-    Readonly<
-      Record<
-        string,
-        unknown
-      >
-    >,
-  schema:
-    RouteDefinition[
-      'paramsSchema'
-    ],
+  params: Readonly<Record<string, unknown>>,
+  schema: RouteDefinition['paramsSchema'],
 ): string | null {
-  const serialized =
-    schema
-      ? serializeParams(
-          schema,
-          params as unknown as InferParamType<ParamSchemaRecord>,
-        )
-      : Object.fromEntries(
-          Object.entries(params)
-            .filter(
-              ([, value]) =>
-                value !==
-                  undefined &&
-                value !== null,
-            )
-            .map(
-              ([key, value]) => [
-                key,
-                String(value),
-              ],
-            ),
-        );
+  const serialized = schema
+    ? serializeParams(schema, params as unknown as InferParamType<ParamSchemaRecord>)
+    : Object.fromEntries(
+        Object.entries(params)
+          .filter(([, value]) => value !== undefined && value !== null)
+          .map(([key, value]) => [key, String(value)]),
+      );
 
-  const missing =
-    new Set<string>();
+  const missing = new Set<string>();
 
-  const path =
-    template.replace(
-      /:([A-Za-z_][A-Za-z0-9_]*)/g,
-      (
-        _match,
-        key: string,
-      ) => {
-        const value =
-          serialized[key];
+  const path = template.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, (_match, key: string) => {
+    const value = serialized[key];
 
-        if (
-          value === undefined
-        ) {
-          missing.add(key);
-          return `:${key}`;
-        }
+    if (value === undefined) {
+      missing.add(key);
+      return `:${key}`;
+    }
 
-        return encodeURIComponent(
-          value,
-        );
-      },
-    );
+    return encodeURIComponent(value);
+  });
 
   if (missing.size > 0) {
     return null;
@@ -785,23 +543,14 @@ function interpolateNamedPath(
   return path;
 }
 
-export class Router<
-  TRoutes extends NavigationTree =
-    any,
-> {
+export class Router<TRoutes extends NavigationTree = any> {
   private readonly appRef: ApplicationRef;
   private readonly injector: EnvironmentInjector;
   private readonly destroyRef: DestroyRef;
   private readonly appBaseHref: string;
   private registry: ReturnType<typeof createRouteRegistry>;
-  private readonly namedRouteCatalog = new Map<
-    string,
-    NamedRouteDefinition
-  >();
-  private readonly resolvingRouteKeys = new Map<
-    string,
-    Promise<boolean>
-  >();
+  private readonly namedRouteCatalog = new Map<string, NamedRouteDefinition>();
+  private readonly resolvingRouteKeys = new Map<string, Promise<boolean>>();
   private readonly unresolvedRouteKeys = new Set<string>();
   private engine: VanillaRouter | null = null;
   private currentState: RouterState = EMPTY_ROUTER_STATE;
@@ -811,36 +560,24 @@ export class Router<
   public readonly navigateTo: TypedNavigate<TRoutes>;
   public readonly hrefTo: TypedHref<TRoutes>;
 
-  constructor(
-    private configuration: RouterConfiguration<TRoutes>,
-  ) {
+  constructor(private configuration: RouterConfiguration<TRoutes>) {
     this.appRef = inject(ApplicationRef);
     this.injector = inject(EnvironmentInjector);
     this.destroyRef = inject(DestroyRef);
     this.appBaseHref =
-    inject(
-      APP_BASE_HREF,
-      {
+      inject(APP_BASE_HREF, {
         optional: true,
-      },
-    ) ?? '/';
+      }) ?? '/';
 
     this.registry = createRouteRegistry(this.configuration.routes);
     for (const route of this.configuration.namedRoutes ?? []) {
-      this.namedRouteCatalog.set(
-        route.name,
-        route,
-      );
+      this.namedRouteCatalog.set(route.name, route);
     }
-    this.navigateTo =
-      this.createNavigateProxy();
+    this.navigateTo = this.createNavigateProxy();
 
-    this.hrefTo =
-      this.createHrefProxy();
+    this.hrefTo = this.createHrefProxy();
 
-    this.destroyRef.onDestroy(
-      () => this.dispose(),
-    );
+    this.destroyRef.onDestroy(() => this.dispose());
   }
 
   get active(): boolean {
@@ -851,107 +588,61 @@ export class Router<
     return this.currentState;
   }
 
-  get url(): string {
-    const current =
-      this.currentState.current;
+  get displayUrl(): string {
+    if (typeof window === 'undefined') {
+      const current = this.currentState.current;
 
-    return current
-      ? current.url.pathname +
-          current.url.search +
-          current.url.hash
-      : '';
+      return current ? current.url.pathname + current.url.search + current.url.hash : '';
+    }
+
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
   }
 
-  connect(
-    name: string,
-    outlet: HTMLElement,
-  ): void {
-    const outletName =
-      name.trim();
+  connect(name: string, outlet: HTMLElement): void {
+    const outletName = name.trim();
 
-    const registered =
-      this.outlets.get(
-        outletName,
-      ) ?? [];
+    const registered = this.outlets.get(outletName) ?? [];
 
     if (registered.includes(outlet)) {
       return;
     }
 
-    registered.push(
-      outlet,
-    );
+    registered.push(outlet);
 
-    this.outlets.set(
-      outletName,
-      registered,
-    );
+    this.outlets.set(outletName, registered);
 
     if (this.engine) {
       return;
     }
 
-    const engine =
-      createRouter({
-        routes:
-        adaptRoutes(
-          this.registry.groups,
-          this.appRef,
-          this.injector,
-        ),
+    const engine = createRouter({
+      routes: adaptRoutes(this.registry.groups, this.appRef, this.injector),
 
-        baseHref:
-          this.baseHref,
+      baseHref: this.baseHref,
 
-        enableTracing:
-          this.configuration
-            .enableTracing,
+      enableTracing: this.configuration.enableTracing,
 
-        maxRedirects:
-          this.configuration
-            .maxRedirects,
+      maxRedirects: this.configuration.maxRedirects,
 
-        onSameUrlNavigation:
-          this.configuration
-            .onSameUrlNavigation,
+      onSameUrlNavigation: this.configuration.onSameUrlNavigation,
 
-        scrollRestoration:
-          this.configuration
-            .scrollRestoration,
+      scrollRestoration: this.configuration.scrollRestoration,
 
-        preloading:
-          this.configuration
-            .preloading,
+      preloading: this.configuration.preloading,
 
-        transitions:
-          [
-            ...adaptFrameTransitions(
-              this.registry.groups,
-              this.injector,
-            ),
-          ],
+      transitions: [...adaptFrameTransitions(this.registry.groups, this.injector)],
 
-        viewTransitions:
-          this.configuration
-            .viewTransitions,
+      viewTransitions: this.configuration.viewTransitions,
 
-        render: (
-          targetName,
-          node,
-        ) => {
-          const target =
-            this.getOutlet(
-              targetName,
-            );
+      render: (targetName, node) => {
+        const target = this.getOutlet(targetName);
 
-          if (!target) {
-            throw new Error(
-              `Router outlet "${targetName}" is not connected.`,
-            );
-          }
+        if (!target) {
+          throw new Error(`Router outlet "${targetName}" is not connected.`);
+        }
 
-          replaceChildNodes(target, node);
-        },
+        replaceChildNodes(target, node);
+      },
 
       commit: (outlets) => {
         // First phase: validate all outlets exist before any DOM mutation.
@@ -970,370 +661,208 @@ export class Router<
           }
 
           replaceChildNodes(target, outlet.node);
-          dispatchOutletLifecycleEvent(
-            target,
-            OUTLET_ACTIVATE_EVENT,
-            outlet.component,
-          );
+          dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, outlet.component);
         }
       },
 
-        renderNotFound: (
-          targetName,
-          url,
-          _router,
-        ) => {
-          const target =
-            this.getOutlet(
-              targetName,
-            );
+      renderNotFound: (targetName, url, _router) => {
+        const target = this.getOutlet(targetName);
 
-          if (!target) {
-            return;
-          }
+        if (!target) {
+          return;
+        }
 
-          const heading =
-            document.createElement(
-              'h1',
-            );
+        const heading = document.createElement('h1');
 
-          heading.textContent =
-            '404 — Page Not Found';
+        heading.textContent = '404 — Page Not Found';
 
-          replaceChildNodes(target, heading);
+        replaceChildNodes(target, heading);
 
-          void this.resolveRoutesForUrl(
-            url,
-          );
-        },
+        void this.resolveRoutesForUrl(url);
+      },
 
-        renderError: (
-          targetName,
-          _error,
-          _router,
-        ) => {
-          const target =
-            this.getOutlet(
-              targetName,
-            );
+      renderError: (targetName, _error, _router) => {
+        const target = this.getOutlet(targetName);
 
-          if (!target) {
-            return;
-          }
+        if (!target) {
+          return;
+        }
 
-          const heading =
-            document.createElement(
-              'h1',
-            );
+        const heading = document.createElement('h1');
 
-          heading.textContent =
-            'Page failed to load';
+        heading.textContent = 'Page failed to load';
 
-          replaceChildNodes(target, heading);
-        },
+        replaceChildNodes(target, heading);
+      },
 
-        onStateChange:
-          state => {
-            this.currentState =
-              snapshotRouterState(
-                state,
-              );
-            this.requestTick();
-          },
+      onStateChange: (state) => {
+        this.currentState = snapshotRouterState(state);
+        this.requestTick();
+      },
 
-        onOutletActivate:
-          (
-            target,
-            component,
-          ) => {
-            dispatchOutletLifecycleEvent(
-              target,
-              OUTLET_ACTIVATE_EVENT,
-              component,
-            );
-          },
-      });
+      onOutletActivate: (target, component) => {
+        dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, component);
+      },
+    });
 
     try {
       engine.start();
     } catch (error) {
-      this.outlets.delete(
-        outletName,
-      );
+      this.outlets.delete(outletName);
       engine.dispose();
       throw error;
     }
 
     this.engine = engine;
 
-    this.currentState =
-      snapshotRouterState(
-        engine.state,
-      );
+    this.currentState = snapshotRouterState(engine.state);
     this.requestTick();
   }
 
-  disconnect(
-    name: string,
-    outlet: HTMLElement,
-  ): void {
-    const outletName =
-      name.trim();
+  disconnect(name: string, outlet: HTMLElement): void {
+    const outletName = name.trim();
 
-    const registered =
-      this.outlets.get(
-        outletName,
-      );
+    const registered = this.outlets.get(outletName);
 
     if (!registered) {
       return;
     }
 
-    const index =
-      registered.lastIndexOf(
-        outlet,
-      );
+    const index = registered.lastIndexOf(outlet);
 
     if (index < 0) {
       return;
     }
 
-    registered.splice(
-      index,
-      1,
-    );
+    registered.splice(index, 1);
 
     if (registered.length === 0) {
-      this.outlets.delete(
-        outletName,
-      );
+      this.outlets.delete(outletName);
     }
 
-    if (
-      this.outlets.size === 0
-    ) {
+    if (this.outlets.size === 0) {
       this.dispose();
     }
   }
 
-  navigate(
-    target: NavigationTarget,
-    options?:
-      NavigationOptions,
-  ): Promise<boolean> {
-    return this.navigateResolved(
-      target,
-      options,
-    );
+  navigate(target: NavigationTarget, options?: NavigationOptions): Promise<boolean> {
+    return this.navigateResolved(target, options);
   }
 
-  href(
-    target:
-      NavigationTarget |
-      null |
-      undefined,
-  ): string | null {
-    if (
-      target === null ||
-      target === undefined
-    ) {
+  href(target: NavigationTarget | null | undefined): string | null {
+    if (target === null || target === undefined) {
       return null;
     }
 
-    if (
-      typeof target ===
-      'string' ||
-      target instanceof URL
-    ) {
-      return this.resolveHref(
-        target,
-      );
+    if (typeof target === 'string' || target instanceof URL) {
+      return this.resolveHref(target);
     }
 
     if ('path' in target) {
-      return this.resolveHref(
-        target.path,
-      );
+      return this.resolveHref(target.path);
     }
 
     if ('name' in target) {
-      return this
-        .generateNamedHref(
-          target,
-        );
+      return this.generateNamedHref(target);
     }
 
     return null;
   }
 
-  updateHistoryState(
-    state: unknown,
-  ): void {
-    this.requireEngine()
-      .updateHistoryState(
-        state,
-      );
+  updateHistoryState(state: unknown): void {
+    this.requireEngine().updateHistoryState(state);
   }
 
   preload(): Promise<void> {
-    return this
-      .requireEngine()
-      .preload();
+    return this.requireEngine().preload();
   }
 
   dispose(): void {
-    const engine =
-      this.engine;
+    const engine = this.engine;
 
     this.engine = null;
     this.outlets.clear();
 
     engine?.dispose();
 
-    this.currentState =
-      EMPTY_ROUTER_STATE;
+    this.currentState = EMPTY_ROUTER_STATE;
     this.requestTick();
   }
 
-  private get baseHref():
-    string {
-    return (
-      this.configuration
-        .baseHref ??
-      this.appBaseHref
-    );
+  private get baseHref(): string {
+    return this.configuration.baseHref ?? this.appBaseHref;
   }
 
-  private requireEngine():
-    VanillaRouter {
+  private requireEngine(): VanillaRouter {
     if (!this.engine) {
-      throw new Error(
-        'Router has no active outlet.',
-      );
+      throw new Error('Router has no active outlet.');
     }
 
     return this.engine;
   }
 
-  private resolveHref(
-    target: string | URL,
-  ): string {
-    return routerHref(
-      resolveRouterUrl(
-        target,
-        this.baseHref,
-        window.location,
-        'href',
-      ),
-    );
+  private resolveHref(target: string | URL): string {
+    return routerHref(resolveRouterUrl(target, this.baseHref, window.location, 'href'));
   }
 
-  private generateNamedHref(
-    target:
-      NamedNavigationTarget,
-  ): string | null {
-    const record =
-      this.readNamedRouteRecord(
-        target.name,
-      );
+  private generateNamedHref(target: NamedNavigationTarget): string | null {
+    const record = this.readNamedRouteRecord(target.name);
 
     if (!record) {
       return null;
     }
 
-    const path =
-      interpolateNamedPath(
-        record.fullPath,
-        target.params ?? {},
-        record.route
-          .paramsSchema,
-      );
+    const path = interpolateNamedPath(
+      record.fullPath,
+      target.params ?? {},
+      record.route.paramsSchema,
+    );
 
     if (!path) {
       return null;
     }
 
     const query =
-      record.route.querySchema &&
-      target.query
-        ? serializeQuery(
-            record.route
-              .querySchema,
-            target.query,
-          )
+      record.route.querySchema && target.query
+        ? serializeQuery(record.route.querySchema, target.query)
         : '';
 
-    return this.resolveHref(
-      `${path}${query}`,
-    );
+    return this.resolveHref(`${path}${query}`);
   }
 
   private async navigateResolved(
     target: NavigationTarget,
-    options?:
-      NavigationOptions,
+    options?: NavigationOptions,
   ): Promise<boolean> {
-    const href =
-      this.href(target);
+    const href = this.href(target);
 
     if (href === null) {
       return false;
     }
 
-    const url =
-      resolveRouterUrl(
-        href,
-        this.baseHref,
-        window.location,
-        'navigate',
-      );
+    const url = resolveRouterUrl(href, this.baseHref, window.location, 'navigate');
 
-    if (
-      url.origin ===
-        window.location.origin &&
-      isPathInsideBase(
-        url.pathname,
-        this.baseHref,
-      )
-    ) {
-      await this.resolveRoutesForUrl(
-        url,
-      );
+    if (url.origin === window.location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
+      await this.resolveRoutesForUrl(url);
     }
 
-    return this
-      .requireEngine()
-      .navigate(
-        href,
-        options,
-      );
+    return this.requireEngine().navigate(href, options);
   }
 
-  private readNamedRouteRecord(
-    name: string,
-  ):
+  private readNamedRouteRecord(name: string):
     | RouteRegistryRecord
     | {
-        readonly route: Pick<
-          RouteDefinition,
-          'paramsSchema' | 'querySchema'
-        >;
+        readonly route: Pick<RouteDefinition, 'paramsSchema' | 'querySchema'>;
         readonly fullPath: string;
       }
     | undefined {
-    const existing =
-      this.registry.namedRoutes.get(
-        name,
-      );
+    const existing = this.registry.namedRoutes.get(name);
 
     if (existing) {
       return existing;
     }
 
-    const deferred =
-      this.namedRouteCatalog.get(
-        name,
-      );
+    const deferred = this.namedRouteCatalog.get(name);
 
     if (!deferred) {
       return undefined;
@@ -1342,223 +871,119 @@ export class Router<
     return {
       fullPath: deferred.path,
       route: {
-        paramsSchema:
-          deferred.paramsSchema,
-        querySchema:
-          deferred.querySchema,
+        paramsSchema: deferred.paramsSchema,
+        querySchema: deferred.querySchema,
       },
     };
   }
 
-  private matchesRegisteredRoute(
-    url: URL,
-  ): boolean {
-    const path =
-      stripBaseHref(
-        url.pathname,
-        this.baseHref,
-      );
+  private matchesRegisteredRoute(url: URL): boolean {
+    const path = stripBaseHref(url.pathname, this.baseHref);
 
-    return this.registry.groups.some(
-      group =>
-        matchesCompiledPath(
-          group.path,
-          path,
-        ),
-    );
+    return this.registry.groups.some((group) => matchesCompiledPath(group.path, path));
   }
 
-  private async resolveRoutesForUrl(
-    url: URL,
-  ): Promise<boolean> {
-    if (
-      !this.configuration
-        .resolveRoutes
-    ) {
+  private async resolveRoutesForUrl(url: URL): Promise<boolean> {
+    if (!this.configuration.resolveRoutes) {
       return false;
     }
 
-    if (
-      this.matchesRegisteredRoute(
-        url,
-      )
-    ) {
+    if (this.matchesRegisteredRoute(url)) {
       return false;
     }
 
-    const key =
-      stripBaseHref(
-        url.pathname,
-        this.baseHref,
-      );
+    const key = stripBaseHref(url.pathname, this.baseHref);
 
-    if (
-      this.unresolvedRouteKeys.has(
-        key,
-      )
-    ) {
+    if (this.unresolvedRouteKeys.has(key)) {
       return false;
     }
 
-    const pending =
-      this.resolvingRouteKeys.get(
-        key,
-      );
+    const pending = this.resolvingRouteKeys.get(key);
 
     if (pending) {
       return pending;
     }
 
-    const resolution =
-      Promise.resolve(
-        this.configuration
-          .resolveRoutes(url),
-      )
-        .then(routes => {
-          if (
-            !routes ||
-            routes.length === 0
-          ) {
-            this.unresolvedRouteKeys.add(
-              key,
-            );
-            return false;
-          }
+    const resolution = Promise.resolve(this.configuration.resolveRoutes(url))
+      .then((routes) => {
+        if (!routes || routes.length === 0) {
+          this.unresolvedRouteKeys.add(key);
+          return false;
+        }
 
-          this.unresolvedRouteKeys.delete(
-            key,
-          );
-          this.mergeRoutes(
-            routes,
-          );
-          this.restartEngine();
-          return true;
-        })
-        .catch(error => {
-          this.unresolvedRouteKeys.add(
-            key,
-          );
-          throw error;
-        })
-        .finally(() => {
-          this.resolvingRouteKeys.delete(
-            key,
-          );
-        });
+        this.unresolvedRouteKeys.delete(key);
+        this.mergeRoutes(routes);
+        this.restartEngine();
+        return true;
+      })
+      .catch((error) => {
+        this.unresolvedRouteKeys.add(key);
+        throw error;
+      })
+      .finally(() => {
+        this.resolvingRouteKeys.delete(key);
+      });
 
-    this.resolvingRouteKeys.set(
-      key,
-      resolution,
-    );
+    this.resolvingRouteKeys.set(key, resolution);
 
     return resolution;
   }
 
-  private mergeRoutes(
-    routes: NavigationTree,
-  ): void {
-    const merged =
-      Object.freeze([
-        ...this.configuration.routes,
-        ...routes,
-      ]) as TRoutes;
+  private mergeRoutes(routes: NavigationTree): void {
+    const merged = Object.freeze([...this.configuration.routes, ...routes]) as TRoutes;
 
     this.configuration = {
       ...this.configuration,
       routes: merged,
     };
-    this.registry =
-      createRouteRegistry(
-        this.configuration.routes,
-      );
+    this.registry = createRouteRegistry(this.configuration.routes);
   }
 
-  private restartEngine():
-    void {
+  private restartEngine(): void {
     if (!this.engine) {
       return;
     }
 
-    const previous =
-      this.engine;
+    const previous = this.engine;
 
     previous.dispose();
     this.engine = null;
-    this.currentState =
-      EMPTY_ROUTER_STATE;
+    this.currentState = EMPTY_ROUTER_STATE;
     this.requestTick();
 
-    const nextEngine =
-      this.createEngine();
+    const nextEngine = this.createEngine();
 
     nextEngine.start();
-    this.engine =
-      nextEngine;
-    this.currentState =
-      snapshotRouterState(
-        nextEngine.state,
-      );
+    this.engine = nextEngine;
+    this.currentState = snapshotRouterState(nextEngine.state);
     this.requestTick();
   }
 
-  private createEngine():
-    VanillaRouter {
+  private createEngine(): VanillaRouter {
     return createRouter({
-      routes:
-        adaptRoutes(
-          this.registry.groups,
-          this.appRef,
-          this.injector,
-        ),
+      routes: adaptRoutes(this.registry.groups, this.appRef, this.injector),
 
-      baseHref:
-        this.baseHref,
+      baseHref: this.baseHref,
 
-      enableTracing:
-        this.configuration
-          .enableTracing,
+      enableTracing: this.configuration.enableTracing,
 
-      maxRedirects:
-        this.configuration
-          .maxRedirects,
+      maxRedirects: this.configuration.maxRedirects,
 
-      onSameUrlNavigation:
-        this.configuration
-          .onSameUrlNavigation,
+      onSameUrlNavigation: this.configuration.onSameUrlNavigation,
 
-      scrollRestoration:
-        this.configuration
-          .scrollRestoration,
+      scrollRestoration: this.configuration.scrollRestoration,
 
-      preloading:
-        this.configuration
-          .preloading,
+      preloading: this.configuration.preloading,
 
-      transitions:
-        [
-          ...adaptFrameTransitions(
-            this.registry.groups,
-            this.injector,
-          ),
-        ],
+      transitions: [...adaptFrameTransitions(this.registry.groups, this.injector)],
 
-      viewTransitions:
-        this.configuration
-          .viewTransitions,
+      viewTransitions: this.configuration.viewTransitions,
 
-      render: (
-        targetName,
-        node,
-      ) => {
-        const target =
-          this.getOutlet(
-            targetName,
-          );
+      render: (targetName, node) => {
+        const target = this.getOutlet(targetName);
 
         if (!target) {
-          throw new Error(
-            `Router outlet "${targetName}" is not connected.`,
-          );
+          throw new Error(`Router outlet "${targetName}" is not connected.`);
         }
 
         replaceChildNodes(target, node);
@@ -1579,168 +1004,87 @@ export class Router<
           }
 
           replaceChildNodes(target, outlet.node);
-          dispatchOutletLifecycleEvent(
-            target,
-            OUTLET_ACTIVATE_EVENT,
-            outlet.component,
-          );
+          dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, outlet.component);
         }
       },
 
-      renderNotFound: (
-        targetName,
-        url,
-        _router,
-      ) => {
-        const target =
-          this.getOutlet(
-            targetName,
-          );
+      renderNotFound: (targetName, url, _router) => {
+        const target = this.getOutlet(targetName);
 
         if (!target) {
           return;
         }
 
-        const heading =
-          document.createElement(
-            'h1',
-          );
+        const heading = document.createElement('h1');
 
-        heading.textContent =
-          '404 — Page Not Found';
+        heading.textContent = '404 — Page Not Found';
 
         replaceChildNodes(target, heading);
 
-        void this.resolveRoutesForUrl(
-          url,
-        );
+        void this.resolveRoutesForUrl(url);
       },
 
-      renderError: (
-        targetName,
-        _error,
-        _router,
-      ) => {
-        const target =
-          this.getOutlet(
-            targetName,
-          );
+      renderError: (targetName, _error, _router) => {
+        const target = this.getOutlet(targetName);
 
         if (!target) {
           return;
         }
 
-        const heading =
-          document.createElement(
-            'h1',
-          );
+        const heading = document.createElement('h1');
 
-        heading.textContent =
-          'Page failed to load';
+        heading.textContent = 'Page failed to load';
 
         replaceChildNodes(target, heading);
       },
 
-      onStateChange:
-        state => {
-          this.currentState =
-            snapshotRouterState(
-              state,
-            );
-          this.requestTick();
-        },
+      onStateChange: (state) => {
+        this.currentState = snapshotRouterState(state);
+        this.requestTick();
+      },
 
-      onOutletActivate:
-        (
-          target,
-          component,
-        ) => {
-          dispatchOutletLifecycleEvent(
-            target,
-            OUTLET_ACTIVATE_EVENT,
-            component,
-          );
-        },
+      onOutletActivate: (target, component) => {
+        dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, component);
+      },
     });
   }
 
-  private createNavigateProxy():
-    TypedNavigate<TRoutes> {
-    return new Proxy(
-      Object.create(null),
-      {
-        get: (
-          _target,
-          property,
-        ) => {
-          if (
-            typeof property !==
-              'string' ||
-            property === 'then'
-          ) {
-            return undefined;
-          }
+  private createNavigateProxy(): TypedNavigate<TRoutes> {
+    return new Proxy(Object.create(null), {
+      get: (_target, property) => {
+        if (typeof property !== 'string' || property === 'then') {
+          return undefined;
+        }
 
-          return (
-            options:
-              Record<
-                string,
-                unknown
-              > = {},
-          ) =>
-            this.navigate({
-              name: property,
-              ...options,
-            } as NamedNavigationTarget);
-        },
+        return (options: Record<string, unknown> = {}) =>
+          this.navigate({
+            name: property,
+            ...options,
+          } as NamedNavigationTarget);
       },
-    ) as TypedNavigate<TRoutes>;
+    }) as TypedNavigate<TRoutes>;
   }
 
-  private createHrefProxy():
-    TypedHref<TRoutes> {
-    return new Proxy(
-      Object.create(null),
-      {
-        get: (
-          _target,
-          property,
-        ) => {
-          if (
-            typeof property !==
-              'string' ||
-            property === 'then'
-          ) {
-            return undefined;
-          }
+  private createHrefProxy(): TypedHref<TRoutes> {
+    return new Proxy(Object.create(null), {
+      get: (_target, property) => {
+        if (typeof property !== 'string' || property === 'then') {
+          return undefined;
+        }
 
-          return (
-            options:
-              Record<
-                string,
-                unknown
-              > = {},
-          ) =>
-            this.href({
-              name: property,
-              ...options,
-            } as NamedNavigationTarget);
-        },
+        return (options: Record<string, unknown> = {}) =>
+          this.href({
+            name: property,
+            ...options,
+          } as NamedNavigationTarget);
       },
-    ) as TypedHref<TRoutes>;
+    }) as TypedHref<TRoutes>;
   }
 
-  private getOutlet(
-    name: string,
-  ): HTMLElement | null {
-    const registered =
-      this.outlets.get(
-        name.trim(),
-      );
+  private getOutlet(name: string): HTMLElement | null {
+    const registered = this.outlets.get(name.trim());
 
-    return registered?.[
-      registered.length - 1
-    ] ?? null;
+    return registered?.[registered.length - 1] ?? null;
   }
 
   private requestTick(): void {
@@ -1762,24 +1106,16 @@ export class Router<
   }
 }
 
-function matchesCompiledPath(
-  pattern: string,
-  pathname: string,
-): boolean {
+function matchesCompiledPath(pattern: string, pathname: string): boolean {
   const regex = new RegExp(
     `^${pattern
       .split('/')
-      .map(segment => {
+      .map((segment) => {
         if (!segment) {
           return '';
         }
 
-        return segment.startsWith(':')
-          ? '[^/]+'
-          : segment.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&',
-            );
+        return segment.startsWith(':') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       })
       .join('/')}$`,
   );
@@ -1787,15 +1123,10 @@ function matchesCompiledPath(
   return regex.test(pathname);
 }
 
-
-export function provideRouter<
-  const TRoutes extends
-    NavigationTree,
->(
+export function provideRouter<const TRoutes extends NavigationTree>(
   routes: TRoutes,
-  options:
-    RouterOptions = {},
-): Provider[] {  
+  options: RouterOptions = {},
+): Provider[] {
   const config: RouterConfiguration<TRoutes> = {
     ...options,
     routes,
@@ -1808,32 +1139,13 @@ export function provideRouter<
     },
     {
       provide: Router,
-      useFactory: (
-        configuration:
-          RouterConfiguration<TRoutes>,
-      ) =>
-        new Router<TRoutes>(
-          configuration,
-        ),
-      deps: [
-        ROUTER_CONFIGURATION,
-      ],
+      useFactory: (configuration: RouterConfiguration<TRoutes>) =>
+        new Router<TRoutes>(configuration),
+      deps: [ROUTER_CONFIGURATION],
     },
   ];
 }
 
-export {
-  type LayoutOptions,
-  type RouteOptions
-};
+export { type LayoutOptions, type RouteOptions };
 
-export {
-  layout,
-  lazyLayout,
-  lazyRoute,
-  redirectRoute,
-  route,
-} from './route-builders';
-
-
-
+export { layout, lazyLayout, lazyRoute, redirectRoute, route } from './route-builders';
