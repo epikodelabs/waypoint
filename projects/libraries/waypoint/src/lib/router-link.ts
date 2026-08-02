@@ -1,4 +1,4 @@
-import {
+﻿import {
   DestroyRef,
   Directive,
   ElementRef,
@@ -16,9 +16,9 @@ import {
 import type {
   NavigationTarget,
   PathNavigationTarget,
-} from './navigation-types';
+} from './navigation-targets';
 
-import { StreamixRouter } from './streamix-router';
+import { Router } from './router';
 
 type RouterLinkCommands =
   readonly unknown[];
@@ -94,8 +94,8 @@ function appendQueryParams(
   selector: 'a[routerLink],area[routerLink]',
   standalone: true,
 })
-export class StreamixRouterLink implements OnChanges {
-  private readonly router = inject(StreamixRouter);
+export class RouterLink implements OnChanges {
+  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly element = inject(
     ElementRef<HTMLAnchorElement | HTMLAreaElement>,
@@ -302,4 +302,5 @@ export class StreamixRouterLink implements OnChanges {
   }
 }
 
-export { StreamixRouterLink as RouterLink };
+
+

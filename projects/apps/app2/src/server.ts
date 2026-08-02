@@ -4,7 +4,11 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express from 'express';
+import express, {
+  type NextFunction,
+  type Request as ExpressRequest,
+  type Response as ExpressResponse,
+} from 'express';
 import { join } from 'node:path';
 import {
   authorizationRoutes,
@@ -28,27 +32,6 @@ const angularApp = new AngularNodeAppEngine({
 });
 
 app.use(readPrincipal);
-
-interface RequestLike {
-  readonly query: Record<string, unknown>;
-  readonly principal?: Principal;
-}
-
-interface ResponseLike {
-  readonly headersSent?: boolean;
-  json(body: unknown): void;
-  status(code: number): ResponseLike;
-  set(headers: Record<string, string>): ResponseLike;
-  sendFile(
-    path: string,
-    callback?: (error?: unknown) => void,
-  ): void;
-  end(): void;
-}
-
-interface NextFunction {
-  (): void;
-}
 
 interface MatchedPageRoute {
   readonly kind: 'route' | 'redirect';
@@ -191,7 +174,7 @@ function readRequestedPath(
 /**
  * Example API endpoint for server-side requests during development.
  */
-app.get('/api/ping', (_req: RequestLike, res: ResponseLike) => {
+app.get('/api/ping', (_req: ExpressRequest, res: ExpressResponse) => {
   res.json({
     ok: true,
     runtime: 'express',
@@ -201,7 +184,7 @@ app.get('/api/ping', (_req: RequestLike, res: ResponseLike) => {
 
 app.get(
   '/api/routes/module',
-  (request: RequestLike, response: ResponseLike) => {
+  (request: ExpressRequest, response: ExpressResponse) => {
     const requested =
       readRequestedPath(
         request.query['path'],
@@ -307,7 +290,7 @@ app.get(
 
 app.use(
   '/protected-routes',
-  (_request: RequestLike, response: ResponseLike) => {
+  (_request: ExpressRequest, response: ExpressResponse) => {
     response.status(404).end();
   },
 );
@@ -323,7 +306,7 @@ app.use(
   }),
 );
 
-app.use('/api', (_request: RequestLike, response: ResponseLike) => {
+app.use('/api', (_request: ExpressRequest, response: ExpressResponse) => {
   response.status(404).json({
     error: 'API route not found.',
   });
@@ -332,10 +315,10 @@ app.use('/api', (_request: RequestLike, response: ResponseLike) => {
 /**
  * Handle all other requests by rendering the Angular application.
  */
-app.use((req: RequestLike, res: ResponseLike, next: NextFunction) => {
+app.use((req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
   angularApp
     .handle(req)
-    .then((response: Response | null) => (
+    .then((response: globalThis.Response | null) => (
       response
         ? writeResponseToNodeResponse(response, res)
         : next()

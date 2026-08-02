@@ -1,10 +1,10 @@
-import { Component } from '@angular/core';
-import { StreamixRouterLink } from '@epikodelabs/waypoint';
+﻿import { Component } from '@angular/core';
+import { RouterLink } from '@epikodelabs/waypoint';
 
 @Component({
   standalone: true,
   selector: 'app-reports-page',
-  imports: [StreamixRouterLink],
+  imports: [RouterLink],
   template: `
     <section class="page">
       <header class="page-header">
@@ -126,3 +126,4 @@ import { StreamixRouterLink } from '@epikodelabs/waypoint';
   `,
 })
 export class ReportsPage {}
+

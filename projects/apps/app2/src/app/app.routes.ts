@@ -1,10 +1,10 @@
-import {
+﻿import {
   s,
-  type StreamixNamedRouteDefinition,
-  type StreamixRoutes,
+  type NamedRouteDefinition,
+  type NavigationTree,
 } from '@epikodelabs/waypoint';
 
-export const routes = [] as const satisfies StreamixRoutes;
+export const routes = [] as const satisfies NavigationTree;
 
 export const namedRoutes = [
   {
@@ -45,4 +45,5 @@ export const namedRoutes = [
     name: 'admin',
     path: '/app/admin',
   },
-] as const satisfies readonly StreamixNamedRouteDefinition[];
+] as const satisfies readonly NamedRouteDefinition[];
+

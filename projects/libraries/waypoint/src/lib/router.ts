@@ -1,4 +1,4 @@
-import {
+﻿import {
   APP_BASE_HREF,
 } from '@angular/common';
 
@@ -21,7 +21,7 @@ import {
 import type {
   NamedNavigationTarget,
   NavigationTarget,
-} from './navigation-types';
+} from './navigation-targets';
 
 import {
   CompiledRoute,
@@ -41,19 +41,19 @@ import {
 import type {
   FramePrepareFn,
   MaybePromise,
-  StreamixFrame,
-  StreamixLayout,
-  StreamixLayoutOptions,
-  StreamixRenderableRoute,
-  StreamixRoute,
-  StreamixRouteOptions,
-  StreamixRoutes
-} from './route-types';
+  FrameView,
+  LayoutDefinition,
+  LayoutOptions,
+  RenderableRoute,
+  RouteDefinition,
+  RouteOptions,
+  NavigationTree
+} from './navigation-definitions';
 
 import type {
   TypedHref,
   TypedNavigate,
-} from './typed-routes';
+} from './typed-navigation';
 
 import {
   OUTLET_ACTIVATE_EVENT,
@@ -91,13 +91,13 @@ import {
   type PreloadingStrategy,
   type Route,
   type RouteRenderContext,
-  type Router,
+  type Router as VanillaRouter,
   type RouterState,
   type ScrollRestorationMode,
   type ViewTransitionsOption,
 } from './vanilla-router';
 
-export interface StreamixRouterOptions {
+export interface RouterOptions {
   readonly baseHref?: string;
   readonly enableTracing?: boolean;
   readonly maxRedirects?: number;
@@ -110,37 +110,37 @@ export interface StreamixRouterOptions {
   readonly viewTransitions?:
     ViewTransitionsOption;
   readonly namedRoutes?:
-    readonly StreamixNamedRouteDefinition[];
+    readonly NamedRouteDefinition[];
   readonly resolveRoutes?: (
     url: URL,
   ) => Promise<
-    StreamixRoutes |
+    NavigationTree |
     null |
     undefined
   >;
 }
 
-export interface StreamixNamedRouteDefinition {
+export interface NamedRouteDefinition {
   readonly name: string;
   readonly path: string;
   readonly paramsSchema?: ParamSchemaRecord;
   readonly querySchema?: QuerySchemaRecord;
 }
 
-export const STREAMIX_ROUTE =
+export const ROUTE =
   new InjectionToken<ActivatedRoute>(
-    'STREAMIX_ROUTE',
+    'ROUTE',
   );
 
-export const STREAMIX_ROUTE_CONTEXT =
+export const ROUTE_CONTEXT =
   new InjectionToken<RouteRenderContext>(
-    'STREAMIX_ROUTE_CONTEXT',
+    'ROUTE_CONTEXT',
   );
 
 interface RouterConfiguration<
-  TRoutes extends StreamixRoutes =
-    StreamixRoutes,
-> extends StreamixRouterOptions {
+  TRoutes extends NavigationTree =
+    NavigationTree,
+> extends RouterOptions {
   routes: TRoutes;
 }
 
@@ -148,7 +148,7 @@ const ROUTER_CONFIGURATION =
   new InjectionToken<
     RouterConfiguration
   >(
-    'STREAMIX_ROUTER_CONFIGURATION',
+    'ROUTER_CONFIGURATION',
   );
 
 const EMPTY_ROUTER_STATE:
@@ -172,7 +172,7 @@ const lazyComponents =
   >();
 
 function loadComponent(
-  owner: StreamixLayout | StreamixRenderableRoute,
+  owner: LayoutDefinition | RenderableRoute,
 ): Promise<Type<unknown>> {
   if (owner.component) {
     return Promise.resolve(
@@ -419,28 +419,28 @@ function adaptFrameAfterEnter(
 }
 
 function collectEnterFrames(
-  layouts: readonly StreamixLayout[],
-  route: StreamixRenderableRoute,
-): readonly StreamixFrame[] {
+  layouts: readonly LayoutDefinition[],
+  route: RenderableRoute,
+): readonly FrameView[] {
   return Object.freeze([
     ...layouts
       .map(layout => layout.frame)
-      .filter((frame): frame is StreamixFrame => !!frame),
+      .filter((frame): frame is FrameView => !!frame),
     ...(route.frame ? [route.frame] : []),
   ]);
 }
 
 function collectLeaveFrames(
-  layouts: readonly StreamixLayout[],
-  route: StreamixRenderableRoute,
-): readonly StreamixFrame[] {
+  layouts: readonly LayoutDefinition[],
+  route: RenderableRoute,
+): readonly FrameView[] {
   const routeFrames = route.frame
     ? [route.frame]
     : [];
   const layoutFrames =
     layouts
       .map(layout => layout.frame)
-      .filter((frame): frame is StreamixFrame => !!frame)
+      .filter((frame): frame is FrameView => !!frame)
       .reverse();
 
   return Object.freeze([
@@ -450,7 +450,7 @@ function collectLeaveFrames(
 }
 
 function adaptFramePreparers(
-  frames: readonly StreamixFrame[],
+  frames: readonly FrameView[],
   injector: EnvironmentInjector,
 ): readonly PrepareRouteDataFn[] | undefined {
   const handlers =
@@ -480,7 +480,7 @@ function adaptFrameTransitions(
     }
 
     const renderableRoute =
-      primaryRoute as StreamixRenderableRoute;
+      primaryRoute as RenderableRoute;
     const enterFrames =
       collectEnterFrames(
         group.layouts,
@@ -531,7 +531,7 @@ function adaptFrameTransitions(
 }
 
 function adaptParamsParser(
-  route: StreamixRoute,
+  route: RouteDefinition,
   injector: EnvironmentInjector,
 ): LoadedRoute['parseParams'] {
   const schema = route.paramsSchema;
@@ -545,7 +545,7 @@ function adaptParamsParser(
 }
 
 function adaptQueryParser(
-  route: StreamixRoute,
+  route: RouteDefinition,
   injector: EnvironmentInjector,
 ): LoadedRoute['parseQuery'] {
   const schema = route.querySchema;
@@ -559,14 +559,14 @@ function adaptQueryParser(
 }
 
 async function resolveViews(
-  layouts: readonly StreamixLayout[],
-  route: StreamixRenderableRoute,
+  layouts: readonly LayoutDefinition[],
+  route: RenderableRoute,
 ): Promise<readonly ResolvedRouteView[]> {
   const resolvedLayouts = await Promise.all(
     layouts.map(async (layout, index) => ({
       component: await loadComponent(layout),
       providers: (layout.providers ?? []).flat().filter(p => p),
-      label: `StreamixLayout(${layout.path || index})`,
+      label: `LayoutDefinition(${layout.path || index})`,
     })),
   );
 
@@ -577,28 +577,28 @@ async function resolveViews(
     {
       component: page,
       providers: (route.providers ?? []).flat().filter(p => p),
-      label: `StreamixRoute(${route.path})`,
+      label: `RouteDefinition(${route.path})`,
     },
   ]);
 }
 
 function adaptRoute(
-  route: StreamixRoute,
+  route: RouteDefinition,
   path: string,
   redirectTo: string | undefined,
-  layouts: readonly StreamixLayout[],
+  layouts: readonly LayoutDefinition[],
   sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
   appRef: ApplicationRef,
   injector: EnvironmentInjector,
 ): Route {
   const tokens = {
-    routeToken: STREAMIX_ROUTE,
-    contextToken: STREAMIX_ROUTE_CONTEXT,
+    routeToken: ROUTE,
+    contextToken: ROUTE_CONTEXT,
   } as const;
   const renderableRoute =
     redirectTo
       ? null
-      : route as StreamixRenderableRoute;
+      : route as RenderableRoute;
 
   return {
     name: route.name,
@@ -654,7 +654,7 @@ function adaptRoute(
 }
 
 function adaptRoutes(
-  entries: StreamixRoutes,
+  entries: NavigationTree,
   appRef: ApplicationRef,
   injector: EnvironmentInjector,
 ): Route[] {
@@ -667,7 +667,7 @@ function adaptRoutes(
         adaptFramePreparers(
           group.layouts
             .map(layout => layout.frame)
-            .filter((frame): frame is StreamixFrame => !!frame),
+            .filter((frame): frame is FrameView => !!frame),
           injector,
         );
 
@@ -709,7 +709,7 @@ function interpolateNamedPath(
       >
     >,
   schema:
-    StreamixRoute[
+    RouteDefinition[
       'paramsSchema'
     ],
 ): string | null {
@@ -768,8 +768,8 @@ function interpolateNamedPath(
   return path;
 }
 
-export class StreamixRouter<
-  TRoutes extends StreamixRoutes =
+export class Router<
+  TRoutes extends NavigationTree =
     any,
 > {
   private readonly appRef: ApplicationRef;
@@ -779,14 +779,14 @@ export class StreamixRouter<
   private registry: ReturnType<typeof createRouteRegistry>;
   private readonly namedRouteCatalog = new Map<
     string,
-    StreamixNamedRouteDefinition
+    NamedRouteDefinition
   >();
   private readonly resolvingRouteKeys = new Map<
     string,
     Promise<boolean>
   >();
   private readonly unresolvedRouteKeys = new Set<string>();
-  private engine: Router | null = null;
+  private engine: VanillaRouter | null = null;
   private currentState: RouterState = EMPTY_ROUTER_STATE;
   private readonly outlets = new Map<string, HTMLElement[]>();
 
@@ -928,7 +928,7 @@ export class StreamixRouter<
 
           if (!target) {
             throw new Error(
-              `StreamixRouter outlet "${targetName}" is not connected.`,
+              `Router outlet "${targetName}" is not connected.`,
             );
           }
 
@@ -982,7 +982,7 @@ export class StreamixRouter<
             );
 
           heading.textContent =
-            '404 — Page Not Found';
+            '404 вЂ” Page Not Found';
 
           target.replaceChildren(
             heading,
@@ -1190,10 +1190,10 @@ export class StreamixRouter<
   }
 
   private requireEngine():
-    Router {
+    VanillaRouter {
     if (!this.engine) {
       throw new Error(
-        'StreamixRouter has no active outlet.',
+        'Router has no active outlet.',
       );
     }
 
@@ -1300,7 +1300,7 @@ export class StreamixRouter<
     | RouteRegistryRecord
     | {
         readonly route: Pick<
-          StreamixRoute,
+          RouteDefinition,
           'paramsSchema' | 'querySchema'
         >;
         readonly fullPath: string;
@@ -1440,7 +1440,7 @@ export class StreamixRouter<
   }
 
   private mergeRoutes(
-    routes: StreamixRoutes,
+    routes: NavigationTree,
   ): void {
     const merged =
       Object.freeze([
@@ -1485,7 +1485,7 @@ export class StreamixRouter<
   }
 
   private createEngine():
-    Router {
+    VanillaRouter {
     return createRouter({
       routes:
         adaptRoutes(
@@ -1540,7 +1540,7 @@ export class StreamixRouter<
 
         if (!target) {
           throw new Error(
-            `StreamixRouter outlet "${targetName}" is not connected.`,
+            `Router outlet "${targetName}" is not connected.`,
           );
         }
 
@@ -1592,7 +1592,7 @@ export class StreamixRouter<
           );
 
         heading.textContent =
-          '404 вЂ” Page Not Found';
+          '404 РІР‚вЂќ Page Not Found';
 
         target.replaceChildren(
           heading,
@@ -1758,13 +1758,13 @@ function matchesCompiledPath(
 }
 
 
-export function provideStreamixRouter<
+export function provideRouter<
   const TRoutes extends
-    StreamixRoutes,
+    NavigationTree,
 >(
   routes: TRoutes,
   options:
-    StreamixRouterOptions = {},
+    RouterOptions = {},
 ): Provider[] {  
   const config: RouterConfiguration<TRoutes> = {
     ...options,
@@ -1777,12 +1777,12 @@ export function provideStreamixRouter<
       useValue: config,
     },
     {
-      provide: StreamixRouter,
+      provide: Router,
       useFactory: (
         configuration:
           RouterConfiguration<TRoutes>,
       ) =>
-        new StreamixRouter<TRoutes>(
+        new Router<TRoutes>(
           configuration,
         ),
       deps: [
@@ -1793,8 +1793,8 @@ export function provideStreamixRouter<
 }
 
 export {
-  type StreamixLayoutOptions,
-  type StreamixRouteOptions
+  type LayoutOptions,
+  type RouteOptions
 };
 
   export {
@@ -1803,3 +1803,6 @@ export {
     redirectRoute, route
   } from './route-builders';
   
+
+
+

@@ -1,5 +1,5 @@
-import type {
-  StreamixRoutes,
+﻿import type {
+  NavigationTree,
 } from '@epikodelabs/waypoint';
 
 interface RouteModule {
@@ -16,13 +16,13 @@ const importRouteModule =
 
 function isRouteArray(
   value: unknown,
-): value is StreamixRoutes {
+): value is NavigationTree {
   return Array.isArray(value);
 }
 
 export async function loadProtectedRouteBranch(
   url: URL,
-): Promise<StreamixRoutes | null> {
+): Promise<NavigationTree | null> {
   const requestPath =
     `${url.pathname}${url.search}${url.hash}`;
   const response =
@@ -78,8 +78,9 @@ export async function loadProtectedRouteBranch(
 
     return Object.freeze(
       [...branch],
-    ) as StreamixRoutes;
+    ) as NavigationTree;
   } finally {
     URL.revokeObjectURL(blobUrl);
   }
 }
+

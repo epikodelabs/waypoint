@@ -1,4 +1,4 @@
-import { ensureAngularTestEnvironment } from './angular-testbed.init';
+﻿import { ensureAngularTestEnvironment } from './angular-testbed.init';
 
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -6,12 +6,12 @@ import {
   layout,
   lazyLayout,
   lazyRoute,
-  provideStreamixRouter,
+  provideRouter,
   RouterOutlet,
   route,
-  type StreamixRouterOptions,
-  StreamixRouter,
-  type StreamixRoutes,
+  type RouterOptions,
+  Router,
+  type NavigationTree,
 } from '@epikodelabs/waypoint';
 
 ensureAngularTestEnvironment();
@@ -57,13 +57,13 @@ class ChildComponent {}
 })
 class SettingsComponent {}
 
-describe('StreamixRouter: flat routes and layouts', () => {
+describe('Router: flat routes and layouts', () => {
   let outlet: HTMLElement;
-  let router: StreamixRouter;
+  let router: Router;
 
   function bootstrap(
-    routes: StreamixRoutes,
-    options: StreamixRouterOptions = {},
+    routes: NavigationTree,
+    options: RouterOptions = {},
   ): void {
     TestBed.configureTestingModule({
       imports: [
@@ -75,7 +75,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
         SettingsComponent,
       ],
       providers: [
-        ...provideStreamixRouter(
+        ...provideRouter(
           routes,
           options,
         ),
@@ -83,7 +83,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
     });
 
     outlet = document.createElement('div');
-    router = TestBed.inject(StreamixRouter);
+    router = TestBed.inject(Router);
     router.connect('', outlet);
   }
 
@@ -109,7 +109,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
   });
 
   it('renders a leaf route without a layout', async () => {
-    const routes = [route('/', HomeComponent)] as const satisfies StreamixRoutes;
+    const routes = [route('/', HomeComponent)] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/');
@@ -122,7 +122,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
       layout('/admin', ParentComponent, [
         route('', HomeComponent),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/admin');
@@ -137,7 +137,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
       layout('/admin', ParentComponent, [
         route('/child', ChildComponent),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/admin/child');
@@ -152,7 +152,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
       layout('/admin', ParentComponent, [
         route('/settings', SettingsComponent),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/admin/settings');
@@ -166,7 +166,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
       layout('/admin', ParentComponent, [
         lazyRoute('/lazy-child', async () => ChildComponent),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/admin/lazy-child');
@@ -181,7 +181,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
       lazyLayout('/admin', async () => ParentComponent, [
         route('/child', ChildComponent),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/admin/child');
@@ -196,7 +196,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
       lazyLayout('/admin', async () => ParentComponent, [
         lazyRoute('/lazy-child', async () => ChildComponent),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/admin/lazy-child');
@@ -213,7 +213,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
           route('/child', ChildComponent),
         ]),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/app/admin/child');
@@ -230,7 +230,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
         route('/child', ChildComponent),
         route('/settings', SettingsComponent),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
 
@@ -250,7 +250,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
         route('', HomeComponent),
         route('', SettingsComponent, { outlet: 'sidebar' }),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     const sidebarOutlet = document.createElement('div');
     sidebarOutlet.id = 'sidebar-outlet';
@@ -272,7 +272,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
         route('/child', ChildComponent),
         route('/child', SettingsComponent, { outlet: 'sidebar' }),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
     await navigate('/app/child');
@@ -291,7 +291,7 @@ describe('StreamixRouter: flat routes and layouts', () => {
         route('/settings', SettingsComponent),
         route('/settings', HomeComponent, { outlet: 'sidebar' }),
       ]),
-    ] as const satisfies StreamixRoutes;
+    ] as const satisfies NavigationTree;
 
     bootstrap(routes);
 
@@ -322,14 +322,14 @@ describe('StreamixRouter: flat routes and layouts', () => {
                   name: 'settings',
                 }),
               ]),
-            ] as const satisfies StreamixRoutes;
+            ] as const satisfies NavigationTree;
           },
         );
 
     bootstrap(
       [
         route('/', HomeComponent),
-      ] as const satisfies StreamixRoutes,
+      ] as const satisfies NavigationTree,
       {
         namedRoutes: [
           {
@@ -358,3 +358,4 @@ describe('StreamixRouter: flat routes and layouts', () => {
     expect(router.state.path).toBe('/app/settings');
   });
 });
+

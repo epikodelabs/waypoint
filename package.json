@@ -6,6 +6,8 @@
     "start": "ng build waypoint --watch --configuration development",
     "build": "ng build waypoint",
     "watch": "ng build waypoint --watch --configuration development",
+    "compiler:build": "tsc -p projects/tools/compiler/tsconfig.json",
+    "compiler:check": "tsc -p projects/tools/compiler/tsconfig.json --noEmit",
     "test": "testify --headless --browser chrome",
     "test:watch": "testify",
     "test:node": "testify --browser node",

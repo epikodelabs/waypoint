@@ -1,9 +1,9 @@
-import {
+﻿import {
   layout,
   route,
   s,
-  type StreamixRoutes,
-  type StreamixRouter,
+  type NavigationTree,
+  type Router,
 } from '@epikodelabs/waypoint';
 
 class DashboardLayout {}
@@ -35,9 +35,9 @@ const routes = [
     settingsRoute,
     dashboardRoute,
   ]),
-] as const satisfies StreamixRoutes;
+] as const satisfies NavigationTree;
 
-function assertNamedNavigation(router: StreamixRouter<typeof routes>): void {
+function assertNamedNavigation(router: Router<typeof routes>): void {
   void router.navigateTo.dashboard({
     params: { projectId: 123 },
   });
@@ -73,3 +73,4 @@ describe('typed routes typings', () => {
     expect(typeof assertNamedNavigation).toBe('function');
   });
 });
+

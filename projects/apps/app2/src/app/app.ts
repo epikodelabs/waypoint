@@ -1,11 +1,11 @@
-import {
+﻿import {
   Component,
   effect,
   inject,
 } from '@angular/core';
 import {
   RouterOutlet,
-  StreamixRouterLink,
+  RouterLink,
 } from '@epikodelabs/waypoint';
 import { DemoSessionService } from '../../../app1/src/app/demo-session.service';
 import { registerProtectedRouteRuntime } from './protected-route-runtime';
@@ -15,7 +15,7 @@ import { registerProtectedRouteRuntime } from './protected-route-runtime';
   standalone: true,
   imports: [
     RouterOutlet,
-    StreamixRouterLink,
+    RouterLink,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -39,3 +39,4 @@ export class App {
     });
   }
 }
+

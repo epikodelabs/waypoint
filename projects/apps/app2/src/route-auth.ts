@@ -1,4 +1,10 @@
 import type {
+  NextFunction,
+  Request,
+  RequestHandler,
+  Response,
+} from 'express';
+import type {
   Principal,
   RoutePolicy,
 } from './route-authorization.js';
@@ -9,17 +15,6 @@ declare global {
       principal?: Principal;
     }
   }
-}
-
-interface RequestLike {
-  header(name: string): string | undefined;
-  principal?: Principal;
-}
-
-interface ResponseLike {}
-
-interface NextFunction {
-  (): void;
 }
 
 const demoPrincipals: Readonly<Record<string, Principal>> = {
@@ -45,9 +40,9 @@ const demoPrincipals: Readonly<Record<string, Principal>> = {
   },
 };
 
-export const readPrincipal = (
-  request: RequestLike,
-  _response: ResponseLike,
+export const readPrincipal: RequestHandler = (
+  request: Request,
+  _response: Response,
   next: NextFunction,
 ) => {
   const token =

@@ -1,4 +1,4 @@
-import {
+﻿import {
   ApplicationConfig,
   ApplicationModule,
   importProvidersFrom,
@@ -10,7 +10,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import {
-  provideStreamixRouter,
+  provideRouter,
 } from '@epikodelabs/waypoint';
 import {
   loadProtectedRouteBranch,
@@ -27,10 +27,11 @@ export const appConfig: ApplicationConfig = {
       BrowserModule,
     ),
     provideBrowserGlobalErrorListeners(),
-    ...provideStreamixRouter(routes, {
+    ...provideRouter(routes, {
       viewTransitions: true,
       namedRoutes,
       resolveRoutes: loadProtectedRouteBranch,
     }),
   ],
 };
+
