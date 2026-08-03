@@ -12,9 +12,7 @@ export type QuerySchema =
   | NonOptionalSchema
   | OptionalSchema<NonOptionalSchema>;
 
-export type ParamSchema =
-  | ScalarSchema
-  | OptionalSchema<ScalarSchema>;
+export type ParamSchema = ScalarSchema;
 
 export type QuerySchemaRecord = Readonly<Record<string, QuerySchema>>;
 export type ParamSchemaRecord = Readonly<Record<string, ParamSchema>>;
@@ -117,13 +115,7 @@ export type InferQueryInputType<T extends Record<string, QuerySchema>> = {
 };
 
 export type InferParamType<T extends Record<string, ParamSchema>> = {
-  [K in keyof T as T[K] extends OptionalSchema<ScalarSchema>
-    ? never
-    : K]: SchemaValue<T[K]>;
-} & {
-  [K in keyof T as T[K] extends OptionalSchema<ScalarSchema>
-    ? K
-    : never]?: SchemaValue<T[K]>;
+  [K in keyof T]: SchemaValue<T[K]>;
 };
 
 function parseValue(
@@ -216,8 +208,6 @@ function getParamDefault(spec: ParamSchema): unknown {
       return spec.default
         ? new Date(spec.default.getTime())
         : new Date();
-    case 'optional':
-      return undefined;
     default:
       return undefined;
   }
@@ -275,10 +265,6 @@ export function parseParams<T extends Record<string, ParamSchema>>(
   for (const [key, spec] of Object.entries(schema)) {
     const raw = params[key];
 
-    if (spec._type === 'optional' && raw === undefined) {
-      continue;
-    }
-
     const parsed = parseValue(spec, raw);
     result[key] = parsed !== undefined ? parsed : getParamDefault(spec);
   }
@@ -294,10 +280,6 @@ export function parseParamsRecord(
 
   for (const [key, spec] of Object.entries(schema)) {
     const raw = params[key];
-
-    if (spec._type === 'optional' && raw === undefined) {
-      continue;
-    }
 
     const parsed = parseValue(spec, raw);
     result[key] = parsed !== undefined ? parsed : getParamDefault(spec);
