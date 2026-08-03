@@ -27,7 +27,9 @@ export type RouteQuery =
 export type RouteData =
   Readonly<Record<string, unknown>>;
 
-export interface ActivatedRoute {
+export interface ActivatedRoute<
+  TData extends RouteData = RouteData,
+> {
   readonly url: URL;
   readonly path: string;
   /**
@@ -42,16 +44,20 @@ export interface ActivatedRoute {
    */
   readonly query: RouteQuery;
 
-  readonly data: RouteData;
+  readonly data: TData;
   readonly historyState: unknown;
   readonly config: Route;
 }
 
-export interface NavigationContext extends ActivatedRoute {
+export interface NavigationContext<
+  TData extends RouteData = RouteData,
+> extends ActivatedRoute<TData> {
   readonly signal: AbortSignal;
 }
 
-export interface DeactivationContext extends ActivatedRoute {
+export interface DeactivationContext<
+  TData extends RouteData = RouteData,
+> extends ActivatedRoute<TData> {
   readonly nextUrl: URL;
   readonly signal: AbortSignal;
 }
