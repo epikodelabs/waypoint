@@ -1,8 +1,9 @@
-﻿import { ensureAngularTestEnvironment } from './angular-testbed.init';
+import { ensureAngularTestEnvironment } from './angular-testbed.init';
 
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  frame,
   layout,
   lazyLayout,
   lazyRoute,
@@ -330,4 +331,67 @@ describe('Router: flat routes and layouts', () => {
     expect(router.state.path).toBe('/app/settings');
     expect(router.displayUrl).toBe('/app/settings');
   });
+
+  it('uses frame hooks as the route lifecycle API', async () => {
+    const events: string[] = [];
+
+    const routes = [
+      route(
+        '/home',
+        frame(HomeComponent, {
+          beforeEnter: [() => {
+            events.push('beforeEnter');
+            return true;
+          }],
+          prepare: [() => {
+            events.push('prepare');
+            return { prepared: true };
+          }],
+          afterEnter: [() => {
+            events.push('afterEnter');
+          }],
+          beforeLeave: [() => {
+            events.push('beforeLeave');
+            return true;
+          }],
+        }),
+      ),
+      route('/settings', SettingsComponent),
+    ] as const satisfies NavigationTree;
+
+    bootstrap(routes);
+
+    await navigate('/home');
+    expect(events).toEqual([
+      'beforeEnter',
+      'prepare',
+      'afterEnter',
+    ]);
+
+    await navigate('/settings');
+    expect(events).toEqual([
+      'beforeEnter',
+      'prepare',
+      'afterEnter',
+      'beforeLeave',
+    ]);
+  });
+
+  it('blocks navigation when a frame beforeEnter hook returns false', async () => {
+    const routes = [
+      route(
+        '/protected',
+        frame(HomeComponent, {
+          beforeEnter: [() => false],
+        }),
+      ),
+    ] as const satisfies NavigationTree;
+
+    bootstrap(routes);
+    await navigate('/protected');
+
+    expect(getOutletContent()).not.toContain('<h1>Home</h1>');
+    expect(router.state.path).toBe('');
+  });
+
 });

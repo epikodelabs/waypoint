@@ -1,4 +1,4 @@
-﻿import type { Type } from '@angular/core';
+import type { Type } from '@angular/core';
 
 import type { ParamSchemaRecord, QuerySchemaRecord } from './query-schema';
 import type {
@@ -388,4 +388,3 @@ export function lazyLayout<
 
   return layout;
 }
-

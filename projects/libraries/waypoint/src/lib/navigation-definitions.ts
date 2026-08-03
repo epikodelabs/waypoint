@@ -1,4 +1,4 @@
-﻿import type { EnvironmentProviders, Provider, Type } from '@angular/core';
+import type { EnvironmentProviders, Provider, Type } from '@angular/core';
 import type { ParamSchemaRecord, QuerySchemaRecord } from './query-schema';
 import type {
   ActivatedRoute,
@@ -74,8 +74,6 @@ export interface RouteDefinitionBase<
   readonly querySchema?: TQuerySchema;
   readonly data?: Readonly<Record<string, unknown>>;
   readonly providers?: NavigationProviders;
-  readonly canActivate?: readonly RouterCanActivateFn[];
-  readonly canDeactivate?: readonly RouterCanDeactivateFn[];
 }
 
 export type RouteOptions<
@@ -171,4 +169,3 @@ export type AnyLayoutDefinition = LayoutDefinition<any, any>;
 
 export type NavigationEntry = AnyRouteDefinition | AnyLayoutDefinition;
 export type NavigationTree = readonly NavigationEntry[];
-
