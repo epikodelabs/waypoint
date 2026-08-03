@@ -1,4 +1,8 @@
-﻿import {
+import {
+  DOCUMENT,
+} from '@angular/common';
+
+import {
   DestroyRef,
   Directive,
   ElementRef,
@@ -8,6 +12,10 @@
   OnChanges,
   inject,
 } from '@angular/core';
+
+import {
+  getRouterLocation,
+} from './router-url';
 
 import {
   watchRouterLocation,
@@ -96,6 +104,7 @@ function appendQueryParams(
 })
 export class RouterLink implements OnChanges {
   private readonly router = inject(Router);
+  private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   private readonly element = inject(
     ElementRef<HTMLAnchorElement | HTMLAreaElement>,
@@ -199,7 +208,7 @@ export class RouterLink implements OnChanges {
     const url =
       new URL(
         href,
-        window.location.origin,
+        getRouterLocation(this.document).origin,
       );
 
     if (this.queryParams) {
@@ -281,7 +290,7 @@ export class RouterLink implements OnChanges {
     const url =
       new URL(
         href,
-        window.location.href,
+        getRouterLocation(this.document).href,
       );
 
     appendQueryParams(
@@ -301,6 +310,3 @@ export class RouterLink implements OnChanges {
     };
   }
 }
-
-
-

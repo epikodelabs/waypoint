@@ -1,4 +1,4 @@
-import { APP_BASE_HREF } from '@angular/common';
+import { APP_BASE_HREF, DOCUMENT } from '@angular/common';
 
 import {
   ApplicationRef,
@@ -44,7 +44,7 @@ import type { TypedHref, TypedNavigate } from './typed-navigation';
 
 import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-events';
 
-import { isPathInsideBase, resolveRouterUrl, routerHref, stripBaseHref } from './router-url';
+import { getRouterLocation, isPathInsideBase, resolveRouterUrl, routerHref, stripBaseHref } from './router-url';
 
 import {
   parseParamsRecord,
@@ -495,6 +495,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   private readonly appRef: ApplicationRef;
   private readonly injector: EnvironmentInjector;
   private readonly destroyRef: DestroyRef;
+  private readonly document: Document;
   private readonly appBaseHref: string;
   private registry: ReturnType<typeof createRouteRegistry>;
   private readonly namedRouteCatalog = new Map<string, NamedRouteDefinition>();
@@ -512,6 +513,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     this.appRef = inject(ApplicationRef);
     this.injector = inject(EnvironmentInjector);
     this.destroyRef = inject(DestroyRef);
+    this.document = inject(DOCUMENT);
     this.appBaseHref =
       inject(APP_BASE_HREF, {
         optional: true,
@@ -537,13 +539,9 @@ export class Router<TRoutes extends NavigationTree = any> {
   }
 
   get displayUrl(): string {
-    if (typeof window === 'undefined') {
-      const current = this.currentState.current;
+    const location = getRouterLocation(this.document);
 
-      return current ? current.url.pathname + current.url.search + current.url.hash : '';
-    }
-
-    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return `${location.pathname}${location.search}${location.hash}`;
   }
 
   connect(name: string, outlet: HTMLElement): void {
@@ -620,7 +618,7 @@ export class Router<TRoutes extends NavigationTree = any> {
           return;
         }
 
-        const heading = document.createElement('h1');
+        const heading = this.document.createElement('h1');
 
         heading.textContent = '404 — Page Not Found';
 
@@ -636,7 +634,7 @@ export class Router<TRoutes extends NavigationTree = any> {
           return;
         }
 
-        const heading = document.createElement('h1');
+        const heading = this.document.createElement('h1');
 
         heading.textContent = 'Page failed to load';
 
@@ -750,7 +748,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   }
 
   private resolveHref(target: string | URL): string {
-    return routerHref(resolveRouterUrl(target, this.baseHref, window.location, 'href'));
+    return routerHref(resolveRouterUrl(target, this.baseHref, getRouterLocation(this.document), 'href'));
   }
 
   private generateNamedHref(target: NamedNavigationTarget): string | null {
@@ -788,9 +786,10 @@ export class Router<TRoutes extends NavigationTree = any> {
       return false;
     }
 
-    const url = resolveRouterUrl(href, this.baseHref, window.location, 'navigate');
+    const location = getRouterLocation(this.document);
+    const url = resolveRouterUrl(href, this.baseHref, location, 'navigate');
 
-    if (url.origin === window.location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
+    if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
       await this.resolveRoutesForUrl(url);
     }
 
@@ -963,7 +962,7 @@ export class Router<TRoutes extends NavigationTree = any> {
           return;
         }
 
-        const heading = document.createElement('h1');
+        const heading = this.document.createElement('h1');
 
         heading.textContent = '404 — Page Not Found';
 
@@ -979,7 +978,7 @@ export class Router<TRoutes extends NavigationTree = any> {
           return;
         }
 
-        const heading = document.createElement('h1');
+        const heading = this.document.createElement('h1');
 
         heading.textContent = 'Page failed to load';
 
