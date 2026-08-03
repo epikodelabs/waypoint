@@ -5,19 +5,11 @@ import type {
 } from './navigation-definitions';
 
 
-const PARAMETER_SEGMENT = /^:([A-Za-z_][A-Za-z0-9_]*)$/;
-
-export function extractRouteParamNames(
-  path: string,
-): readonly string[] {
-  return Object.freeze(
-    path
-      .split('/')
-      .filter(Boolean)
-      .map(segment => PARAMETER_SEGMENT.exec(segment)?.[1])
-      .filter((name): name is string => name !== undefined),
-  );
-}
+import {
+  compileRoutePath,
+  extractRouteParamNames,
+  joinRoutePath,
+} from './route-path';
 
 function validateCompiledRouteParams(
   route: RouteDefinition,
@@ -80,29 +72,7 @@ export interface CompiledRouteGroup {
   readonly outlets: readonly CompiledRoute[];
 }
 
-export function joinRoutePath(
-  parent: string,
-  child: string,
-): string {
-  const parentSegments =
-    parent
-      .split('/')
-      .filter(Boolean);
-
-  const childSegments =
-    child
-      .split('/')
-      .filter(Boolean);
-
-  const joined = [
-    ...parentSegments,
-    ...childSegments,
-  ].join('/');
-
-  return joined
-    ? `/${joined}`
-    : '/';
-}
+export { joinRoutePath } from './route-path';
 
 export function compileRedirect(
   parentPath: string,
@@ -268,15 +238,6 @@ function validateRouteGroups(
   }
 }
 
-function normalizePattern(
-  path: string,
-): string {
-  return path.replace(
-    /:([A-Za-z_][A-Za-z0-9_]*)/g,
-    ':',
-  );
-}
-
 export interface RouteRegistryRecord {
   readonly route: RouteDefinition;
   readonly fullPath: string;
@@ -330,7 +291,7 @@ export function createRouteRegistry(
     literalPaths.set(path, route);
 
     const pattern =
-      normalizePattern(path);
+      compileRoutePath(path).patternKey;
 
     const previousPattern =
       patterns.get(pattern);

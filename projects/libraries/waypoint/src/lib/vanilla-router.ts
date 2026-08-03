@@ -1,6 +1,12 @@
 import { HistoryManager, ZERO_SCROLL, type HistoryEntry, type HistoryUpdate, type ScrollPosition } from './history';
 import { dispatchRouterLocationChange } from './router-events';
 import {
+  compileRoutePath,
+  matchRoutePath,
+  splitRoutePath,
+  type CompiledRoutePath,
+} from './route-path';
+import {
   isPathInsideBase,
   normalizeBaseHref,
   resolveRouterUrl,
@@ -240,11 +246,7 @@ interface RouteMatch {
   readonly params: RawRouteParams;
 }
 
-interface RoutePattern {
-  readonly path: string;
-  readonly segments: readonly string[];
-  readonly parameterNames: readonly (string | null)[];
-}
+type RoutePattern = CompiledRoutePath;
 
 export interface PreparedOutlet {
   readonly name: string;
@@ -324,19 +326,6 @@ const EMPTY_QUERY: RouteQuery =
 const EMPTY_DATA: RouteData =
   Object.freeze({});
 
-function splitPath(path: string): string[] {
-  return path
-    .split('/')
-    .filter(Boolean);
-}
-
-function decodeSegment(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
 
 function isRenderedRouteNode(value: unknown): value is RenderedRouteNode {
   return value !== null && typeof value === 'object' && 'node' in value;
@@ -1008,54 +997,18 @@ export function createRouter(config: RouterConfig): Router {
 
   function getRoutePattern(route: Route): RoutePattern {
     const cached = routePatterns.get(route);
-    if (cached && cached.path === route.path) {
+    if (cached && cached.source === route.path) {
       return cached;
     }
 
-    const segments = splitPath(route.path);
-    const pattern: RoutePattern = {
-      path: route.path,
-      segments,
-      parameterNames: segments.map(segment =>
-        segment.startsWith(':')
-          ? segment.slice(1)
-          : null,
-      ),
-    };
+    const pattern = compileRoutePath(route.path);
 
     routePatterns.set(route, pattern);
     return pattern;
   }
 
-  function matchPattern(
-    pattern: RoutePattern,
-    segments: readonly string[],
-    params: Record<string, string>,
-  ): boolean {
-    for (let index = 0; index < pattern.segments.length; index++) {
-      const expected = pattern.segments[index];
-      const actual = segments[index];
-
-      if (actual === undefined) {
-        return false;
-      }
-
-      const parameterName = pattern.parameterNames[index];
-      if (parameterName) {
-        params[parameterName] = decodeSegment(actual);
-        continue;
-      }
-
-      if (expected !== actual) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   function recognize(path: string): RouteMatch | null {
-    const segments = splitPath(path);
+    const segments = splitRoutePath(path);
     let fallback: Route | undefined;
 
     for (const route of config.routes) {
@@ -1065,15 +1018,11 @@ export function createRouter(config: RouterConfig): Router {
       }
 
       const pattern = getRoutePattern(route);
-      if (pattern.segments.length !== segments.length) {
-        continue;
-      }
-
-      const params: Record<string, string> = {};
-      if (matchPattern(pattern, segments, params)) {
+      const params = matchRoutePath(pattern, segments);
+      if (params) {
         return {
           route,
-          params: Object.freeze(params),
+          params,
         };
       }
     }
