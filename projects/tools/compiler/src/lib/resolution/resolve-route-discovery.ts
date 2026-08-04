@@ -1,5 +1,7 @@
 import ts from 'typescript';
-import type { RouteProgramContext } from './program.js';
+import type { RouteCompilerDiagnostic } from '../compiler/contracts.js';
+import type { RouteProgramContext } from '../discovery/program.js';
+import type { RouteDiscovery } from '../discovery/discover-route-sources.js';
 import type {
   ParsedRouteEntry,
   ParsedRouteEntryLayout,
@@ -7,11 +9,12 @@ import type {
   ParsedRouteEntryRoute,
   ParsedRouteGraph,
   ParsedRoutePolicy,
+  ParsedRouteSlot,
+  ParsedRoutesFor,
   ParsedSchema,
   ParsedSchemaRecord,
   SourceReference,
-  RouteCompilerDiagnostic,
-} from './types.js';
+} from '../ir/model.js';
 
 export interface AnalyzeRouteGraphResult {
   readonly graph: ParsedRouteGraph;
@@ -32,39 +35,36 @@ type ParsedRouteOptions = Pick<
   'name' | 'outlet' | 'policy' | 'paramsSchema' | 'querySchema'
 >;
 
-export function analyzeRouteGraph(
+export function resolveRouteDiscovery(
   programContext: RouteProgramContext,
+  discovery: RouteDiscovery,
 ): AnalyzeRouteGraphResult {
   const diagnostics: RouteCompilerDiagnostic[] = [];
   const context: AnalyzerContext = {
     programContext,
     diagnostics,
-    bindingCache:
-      new WeakMap(),
+    bindingCache: new WeakMap(),
   };
-  const routesDeclaration =
-    collectBindings(
-      context,
-      programContext.sourceFile,
-    ).get('routes');
+  const initializer = discovery.rootRoutes.initializer;
 
-  if (
-    !routesDeclaration?.initializer
-  ) {
+  if (!initializer) {
     throw new Error(
-      `Could not find a "routes" declaration in ${programContext.entry}.`,
+      `Route discovery for ${discovery.entry} has no root initializer.`,
     );
   }
 
   return {
     graph: {
-      entry:
-        programContext.entry,
+      entry: discovery.entry,
       routes: parseRouteArray(
         context,
-        routesDeclaration.initializer,
+        initializer,
         undefined,
         new Set<string>(),
+      ),
+      routeSets: discoverRoutesFor(
+        context,
+        discovery.exportedCandidates,
       ),
     },
     diagnostics,
@@ -247,6 +247,8 @@ function parseRouteEntry(
         branchSource,
         resolutionStack,
       );
+    case 'routeSlot':
+      return parseRouteSlot(current, source);
     case 'redirectRoute':
       return parseRedirectRoute(
         context,
@@ -260,6 +262,77 @@ function parseRouteEntry(
         `Unsupported route helper "${current.expression.getText()}".`,
       );
   }
+}
+
+function parseRouteSlot(
+  call: ts.CallExpression,
+  source: SourceReference,
+): ParsedRouteSlot {
+  return {
+    kind: 'slot',
+    id: readStringLiteral(call.arguments[0]),
+    source,
+  };
+}
+
+function discoverRoutesFor(
+  context: AnalyzerContext,
+  declarations: readonly ts.VariableDeclaration[],
+): readonly ParsedRoutesFor[] {
+  const output: ParsedRoutesFor[] = [];
+
+  for (const declaration of declarations) {
+    if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+      continue;
+    }
+
+    const sourceFile = declaration.getSourceFile();
+    const resolved = resolveExpression(
+      context,
+      declaration.initializer,
+      new Set<string>(),
+    );
+    if (!ts.isCallExpression(resolved)) {
+      continue;
+    }
+
+    let helper: string;
+    try {
+      helper = readRouteHelperKind(
+        context,
+        resolved.expression,
+        new Set<string>(),
+      );
+    } catch {
+      continue;
+    }
+
+    if (helper !== 'routesFor') {
+      continue;
+    }
+
+    const source: SourceReference = {
+      filePath: sourceFile.fileName,
+      exportName: declaration.name.text,
+      localName: declaration.name.text,
+      start: declaration.getStart(sourceFile),
+      length: declaration.getWidth(sourceFile),
+    };
+
+    output.push({
+      kind: 'routes-for',
+      slotId: readStringLiteral(resolved.arguments[0]),
+      entries: parseRouteArray(
+        context,
+        resolved.arguments[1],
+        source,
+        new Set<string>(),
+      ),
+      source,
+    });
+  }
+
+  return Object.freeze(output);
 }
 
 function parsePageRoute(
@@ -283,8 +356,6 @@ function parsePageRoute(
       resolutionStack,
     ),
     loadMode,
-    sourceText:
-      call.getText(),
     source,
     branchSource,
     ...parseRouteOptions(
@@ -322,8 +393,6 @@ function parseLayoutRoute(
       undefined,
       resolutionStack,
     ),
-    sourceText:
-      call.getText(),
     source,
     branchSource,
     ...parseRouteOptions(
@@ -352,8 +421,6 @@ function parseRedirectRoute(
       readStringLiteral(
         call.arguments[1],
       ),
-    sourceText:
-      call.getText(),
     source,
     branchSource,
     ...parseRouteOptions(

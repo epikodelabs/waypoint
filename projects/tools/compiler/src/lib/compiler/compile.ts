@@ -1,0 +1,78 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { normalizeCompilerOptions } from './config.js';
+import { bundleArtifacts } from '../emitters/bundle-artifacts.js';
+import { emitBrowserEntries } from '../emitters/emit-browser-entries.js';
+import { planRouteArtifacts } from '../planning/plan-artifacts.js';
+import { emitServerArtifacts } from '../emitters/emit-server-artifacts.js';
+import { buildRouteGraph } from '../ir/expand-navigation.js';
+import { parseRoutes } from '../resolution/parse-routes.js';
+import { evaluateStaticRouteData } from '../resolution/evaluate-static-route-data.js';
+import { validateRouteGraph } from '../validation/validate-navigation.js';
+import { diagnostic, hasErrors } from './diagnostics.js';
+import type { RouteCompilerDiagnostic, RouteCompilerOptions, RouteCompilerResult } from './contracts.js';
+
+export async function compileRoutes(options: RouteCompilerOptions): Promise<RouteCompilerResult> {
+  const planned = normalizeCompilerOptions(options);
+  const diagnostics: RouteCompilerDiagnostic[] = [];
+
+  if (!planned.dryRun) await ensureOutputDirectories(planned);
+
+  const parsed = await parseRoutes(planned);
+  diagnostics.push(...parsed.diagnostics);
+
+  const evaluated = await evaluateStaticRouteData(parsed.graph);
+  diagnostics.push(...evaluated.diagnostics);
+
+  const built = buildRouteGraph(parsed.graph);
+  diagnostics.push(...built.diagnostics);
+
+  const validated = validateRouteGraph(built.model);
+  diagnostics.push(...validated.diagnostics);
+
+  if (hasErrors(diagnostics)) {
+    diagnostics.unshift(diagnostic(
+      'WPT0002',
+      'error',
+      `Route compilation for ${path.basename(planned.entry)} stopped before emission because validation failed.`,
+    ));
+    return { planned, diagnostics, emitted: [], implemented: true };
+  }
+
+  const plannedArtifacts = planRouteArtifacts(planned, built.model);
+  diagnostics.push(...plannedArtifacts.diagnostics);
+
+  if (hasErrors(diagnostics)) {
+    return { planned, diagnostics, emitted: [], implemented: true };
+  }
+
+  const emittedServer = await emitServerArtifacts(planned, plannedArtifacts.plan);
+  diagnostics.push(...emittedServer.diagnostics);
+
+  const emittedBrowser = await emitBrowserEntries(planned, plannedArtifacts.plan);
+  diagnostics.push(...emittedBrowser.diagnostics);
+
+  const bundled = await bundleArtifacts(planned);
+  diagnostics.push(...bundled.diagnostics);
+
+  diagnostics.unshift(diagnostic(
+    'WPT0001',
+    'info',
+    `${planned.dryRun ? 'Planned' : 'Compiled'} routes from ${path.basename(planned.entry)}.`,
+  ));
+
+  return {
+    planned,
+    diagnostics,
+    emitted: [...emittedServer.emitted, ...emittedBrowser.emitted],
+    implemented: true,
+  };
+}
+
+async function ensureOutputDirectories(planned: RouteCompilerResult['planned']): Promise<void> {
+  await Promise.all([
+    fs.mkdir(path.dirname(planned.serverOutput), { recursive: true }),
+    fs.mkdir(planned.entriesOutput, { recursive: true }),
+    fs.mkdir(path.dirname(planned.manifestOutput), { recursive: true }),
+  ]);
+}

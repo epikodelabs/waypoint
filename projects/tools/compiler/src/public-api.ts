@@ -1,2 +1,2 @@
-/** Public API surface of the navigation library. */
-export * from './lib';
+/** Public API surface of the navigation compiler. */
+export * from './lib/index.js';

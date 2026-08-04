@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { compileRoutes } from '../compile.js';
+import { compileRoutes } from '../lib/compiler/compile.js';
 
 test('discovers routeSlot and exported routesFor declarations end to end', async () => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'waypoint-compiler-'));

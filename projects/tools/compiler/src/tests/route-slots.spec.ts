@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildRouteGraph } from '../graph-builder.js';
-import { validateRouteGraph } from '../validate-route-graph.js';
-import type { ParsedRouteGraph } from '../types.js';
+import { buildRouteGraph } from '../lib/ir/expand-navigation.js';
+import { validateRouteGraph } from '../lib/validation/validate-navigation.js';
+import type { ParsedRouteGraph } from '../lib/index.js';
 
 const source = { filePath: '/app/routes.ts', exportName: 'routes' } as const;
 

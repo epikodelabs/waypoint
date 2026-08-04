@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildRouteGraph } from '../graph-builder.js';
-import type { ParsedRouteGraph } from '../types.js';
+import { buildRouteGraph } from '../lib/ir/expand-navigation.js';
+import type { ParsedRouteGraph } from '../lib/index.js';
 
 const graph: ParsedRouteGraph = {
   entry: '/app/routes.ts',
