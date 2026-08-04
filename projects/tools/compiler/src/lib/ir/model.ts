@@ -99,6 +99,10 @@ export interface ExpandedRouteSlot {
   readonly parentPath: string;
   readonly layoutDepth: number;
   readonly source: SourceReference;
+  /** Slot whose owned route set declared this slot. */
+  readonly parentSlotId?: string;
+  /** Route set whose entries declared this slot. */
+  readonly declaredByRouteSetId?: string;
 }
 
 export interface ExpandedRouteSet {
@@ -106,6 +110,8 @@ export interface ExpandedRouteSet {
   readonly slotId: string;
   readonly source: SourceReference;
   readonly branchIds: readonly string[];
+  /** Owning route set that declared the target slot, when nested. */
+  readonly parentRouteSetId?: string;
 }
 
 export interface ExpandedRouteBranch {

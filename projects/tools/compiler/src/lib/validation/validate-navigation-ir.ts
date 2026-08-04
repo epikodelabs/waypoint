@@ -5,6 +5,7 @@ import {
   NAVIGATION_IR_VERSION,
   NO_IR_REF,
   NavigationIrEntryKind,
+  readIrString,
   type NavigationIr,
   type NavigationIrEntryRecord,
 } from '../ir/navigation-ir.js';
@@ -119,7 +120,79 @@ export function validateNavigationIr(
     routeSetIdentities.add(identity);
   }
 
+
+  validateOwnershipHierarchy(ir, diagnostics);
+
   return { diagnostics };
+}
+
+function validateOwnershipHierarchy(
+  ir: NavigationIr,
+  diagnostics: RouteCompilerDiagnostic[],
+): void {
+  const declaredBy = new Map<string, number>();
+
+  collectSlots(ir.rootFirstEntry, ir.rootEntryCount, -1);
+  for (let routeSetIndex = 0; routeSetIndex < ir.routeSets.length; routeSetIndex++) {
+    const routeSet = ir.routeSets[routeSetIndex]!;
+    collectSlots(routeSet.firstEntry, routeSet.entryCount, routeSetIndex);
+  }
+
+  const parentRouteSet = new Int32Array(ir.routeSets.length);
+  parentRouteSet.fill(-1);
+  for (let index = 0; index < ir.routeSets.length; index++) {
+    const routeSet = ir.routeSets[index]!;
+    const slotId = readIrString(ir, routeSet.slotId);
+    if (!slotId) continue;
+    const parent = declaredBy.get(slotId);
+    if (parent !== undefined && parent >= 0) parentRouteSet[index] = parent;
+  }
+
+  const states = new Uint8Array(ir.routeSets.length);
+  const stack: number[] = [];
+  for (let index = 0; index < ir.routeSets.length; index++) visit(index);
+
+  function collectSlots(first: number, count: number, owner: number): void {
+    const end = Math.min(first + count, ir.entryRefs.length);
+    for (let offset = first; offset < end; offset++) {
+      const entryRef = ir.entryRefs[offset];
+      if (entryRef === undefined) continue;
+      const entry = ir.entries[entryRef];
+      if (!entry) continue;
+      if (entry.kind === NavigationIrEntryKind.Slot) {
+        const id = readIrString(ir, entry.id);
+        if (id && !declaredBy.has(id)) declaredBy.set(id, owner);
+      } else if (entry.kind === NavigationIrEntryKind.Layout) {
+        collectSlots(entry.firstChild, entry.childCount, owner);
+      }
+    }
+  }
+
+  function visit(index: number): void {
+    if (states[index] === 2) return;
+    if (states[index] === 1) {
+      const cycleStart = stack.indexOf(index);
+      const cycle = [...stack.slice(cycleStart), index]
+        .map(routeSetIndex => {
+          const routeSet = ir.routeSets[routeSetIndex]!;
+          return readIrString(ir, routeSet.slotId) ?? `routeSet#${routeSetIndex}`;
+        });
+      diagnostics.push(diagnostic(
+        Code.ownershipCycle,
+        'error',
+        `Route ownership cycle detected: ${cycle.map(id => `"${id}"`).join(' → ')}.`,
+        decodeIrSource(ir, ir.routeSets[index]!.source),
+      ));
+      return;
+    }
+
+    states[index] = 1;
+    stack.push(index);
+    const parent = parentRouteSet[index];
+    if (parent >= 0) visit(parent);
+    stack.pop();
+    states[index] = 2;
+  }
 }
 
 function validateEntry(

@@ -43,6 +43,8 @@ Legacy `Parsed*`, `Compiled*`, and `RouteGraph` names are intentionally absent.
 ## Current capabilities
 
 - `routeSlot()` and exported `routesFor()` discovery;
+- hierarchical route ownership with nested slots inside route sets;
+- ownership-cycle validation and parent provenance;
 - semantic source provenance;
 - inherited path, layout, policy, and ownership expansion;
 - strict path, parameter, schema, name, outlet, and ownership validation;

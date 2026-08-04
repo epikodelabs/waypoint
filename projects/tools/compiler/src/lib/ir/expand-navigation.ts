@@ -24,7 +24,6 @@ import {
   type IrEntryRef,
   type IrSourceRef,
   type NavigationIr,
-  type NavigationIrEntryRecord,
   type NavigationIrLayoutRecord,
   type NavigationIrRedirectRecord,
   type NavigationIrRouteRecord,
@@ -69,62 +68,48 @@ interface PendingGroup {
   readonly outlets: NavigationIrRouteRecord[];
 }
 
+const enum RouteSetVisitState {
+  Unvisited = 0,
+  Visiting = 1,
+  Visited = 2,
+}
+
 export function expandNavigation(ir: NavigationIr): ExpandNavigationResult {
   const diagnostics: RouteCompilerDiagnostic[] = [];
   const slots = new Map<string, SlotRecord>();
   const routeSets: ExpandedRouteSet[] = [];
   const groups = new Map<string, PendingGroup>();
+  const ownerIndexBySlot = new Map<string, number>();
+  const routeSetIds = new Array<string>(ir.routeSets.length);
+  const routeSetIndexById = new Map<string, number>();
+  const routeSetBranchIds = new Array<string[]>(ir.routeSets.length);
+  const routeSetStates = new Uint8Array(ir.routeSets.length);
   let layoutContextId = 0;
-
-  const rootContext: RouteContext = { path: '/' };
-  visitEntryRange(ir.rootFirstEntry, ir.rootEntryCount, rootContext, undefined, undefined);
-
-  const routeSetBranchIds = new Map<string, string[]>();
-  const routeSetIds = new Array<string | undefined>(ir.routeSets.length);
 
   for (let index = 0; index < ir.routeSets.length; index++) {
     const routeSet = ir.routeSets[index]!;
     const slotId = requireIrString(ir, routeSet.slotId, 'route-set slot id');
-    const slot = slots.get(slotId);
-    const routeSetId = createRouteSetId(ir, routeSet);
-    routeSetIds[index] = routeSetId;
-
-    if (!slot) {
-      diagnostics.push(diagnostic(
-        'WPT2002',
-        'error',
-        `routesFor() export "${sourceFromIr(ir, routeSet.source)?.exportName ?? routeSetId}" targets unknown route slot "${slotId}".`,
-        sourceFromIr(ir, routeSet.source),
-      ));
-      continue;
-    }
-
-    if (routeSetBranchIds.has(routeSetId)) {
-      diagnostics.push(diagnostic(
-        'WPT2003',
-        'error',
-        `Duplicate routesFor() identity "${routeSetId}".`,
-        sourceFromIr(ir, routeSet.source),
-      ));
-      continue;
-    }
-
-    routeSetBranchIds.set(routeSetId, []);
-    visitEntryRange(
-      routeSet.firstEntry,
-      routeSet.entryCount,
-      slot.context,
-      slotId,
-      routeSetId,
-    );
+    ownerIndexBySlot.set(slotId, index);
+    routeSetIds[index] = createRouteSetId(ir, routeSet);
+    routeSetIndexById.set(routeSetIds[index]!, index);
+    routeSetBranchIds[index] = [];
   }
+
+  const rootContext: RouteContext = { path: '/' };
+  visitEntryRange(
+    ir.rootFirstEntry,
+    ir.rootEntryCount,
+    rootContext,
+    undefined,
+    undefined,
+  );
 
   const branches: ExpandedRouteBranch[] = [];
   for (const pending of groups.values()) {
     if (!pending.primary) {
       const first = pending.outlets[0];
       diagnostics.push(diagnostic(
-        'WPT2101',
+        'NAV1402',
         'error',
         `Named outlet route for "${pending.path}" has no primary route in the same layout context.`,
         first ? sourceFromIr(ir, first.source) : undefined,
@@ -135,18 +120,23 @@ export function expandNavigation(ir: NavigationIr): ExpandNavigationResult {
 
     const branch = createBranch(ir, pending);
     branches.push(branch);
-    if (branch.routeSetId) routeSetBranchIds.get(branch.routeSetId)?.push(branch.id);
+    if (branch.routeSetId) {
+      const routeSetIndex = routeSetIndexById.get(branch.routeSetId);
+      if (routeSetIndex !== undefined) routeSetBranchIds[routeSetIndex]!.push(branch.id);
+    }
   }
 
   for (let index = 0; index < ir.routeSets.length; index++) {
+    if (routeSetStates[index] !== RouteSetVisitState.Visited) continue;
     const routeSet = ir.routeSets[index]!;
-    const id = routeSetIds[index];
-    if (!id || !routeSetBranchIds.has(id)) continue;
+    const slotId = requireIrString(ir, routeSet.slotId, 'route-set slot id');
+    const targetSlot = slots.get(slotId);
     routeSets.push({
-      id,
-      slotId: requireIrString(ir, routeSet.slotId, 'route-set slot id'),
+      id: routeSetIds[index]!,
+      slotId,
       source: sourceFromIr(ir, routeSet.source)!,
-      branchIds: Object.freeze(routeSetBranchIds.get(id)!),
+      branchIds: Object.freeze(routeSetBranchIds[index]!),
+      parentRouteSetId: targetSlot?.expanded.declaredByRouteSetId,
     });
   }
 
@@ -164,21 +154,21 @@ export function expandNavigation(ir: NavigationIr): ExpandNavigationResult {
     first: number,
     count: number,
     context: RouteContext,
-    slotId: string | undefined,
+    parentSlotId: string | undefined,
     routeSetId: string | undefined,
   ): void {
     const end = first + count;
     for (let offset = first; offset < end; offset++) {
       const entryRef = ir.entryRefs[offset];
       if (entryRef === undefined) continue;
-      visitEntry(entryRef, context, slotId, routeSetId);
+      visitEntry(entryRef, context, parentSlotId, routeSetId);
     }
   }
 
   function visitEntry(
     entryRef: IrEntryRef,
     context: RouteContext,
-    slotId: string | undefined,
+    parentSlotId: string | undefined,
     routeSetId: string | undefined,
   ): void {
     const entry = ir.entries[entryRef];
@@ -205,7 +195,13 @@ export function expandNavigation(ir: NavigationIr): ExpandNavigationResult {
             depth: (context.policies?.depth ?? 0) + 1,
           }
         : context.policies;
-      visitEntryRange(entry.firstChild, entry.childCount, { path, layouts, policies }, slotId, routeSetId);
+      visitEntryRange(
+        entry.firstChild,
+        entry.childCount,
+        { path, layouts, policies },
+        parentSlotId,
+        routeSetId,
+      );
       return;
     }
 
@@ -213,41 +209,53 @@ export function expandNavigation(ir: NavigationIr): ExpandNavigationResult {
       const id = requireIrString(ir, entry.id, 'route slot id');
       if (slots.has(id)) {
         diagnostics.push(diagnostic(
-          'WPT2001',
+          'NAV1500',
           'error',
           `Duplicate route slot id "${id}".`,
           sourceFromIr(ir, entry.source),
         ));
         return;
       }
-      slots.set(id, {
+
+      const record: SlotRecord = {
         expanded: {
           id,
           parentPath: context.path,
           layoutDepth: context.layouts?.depth ?? 0,
           source: sourceFromIr(ir, entry.source)!,
+          parentSlotId,
+          declaredByRouteSetId: routeSetId,
         },
         context,
-      });
+      };
+      slots.set(id, record);
+
+      const ownerIndex = ownerIndexBySlot.get(id);
+      if (ownerIndex !== undefined) {
+        expandRouteSet(ownerIndex, record);
+      }
       return;
     }
 
     const fullPath = joinRoutePath(context.path, requireIrString(ir, entry.path, 'route path'));
-    const key = `${context.layouts?.id ?? 0}\u0000${fullPath}\u0000${slotId ?? ''}\u0000${routeSetId ?? ''}`;
+    const key = `${context.layouts?.id ?? 0}\u0000${fullPath}\u0000${parentSlotId ?? ''}\u0000${routeSetId ?? ''}`;
     let group = groups.get(key);
     if (!group) {
-      group = { path: fullPath, context, slotId, routeSetId, outlets: [] };
+      group = {
+        path: fullPath,
+        context,
+        slotId: parentSlotId,
+        routeSetId,
+        outlets: [],
+      };
       groups.set(key, group);
     }
 
-    if (
-      entry.kind === NavigationIrEntryKind.Route
-      && entry.outlet !== NO_IR_REF
-    ) {
+    if (entry.kind === NavigationIrEntryKind.Route && entry.outlet !== NO_IR_REF) {
       group.outlets.push(entry);
     } else if (group.primary) {
       diagnostics.push(diagnostic(
-        'WPT2102',
+        'NAV1301',
         'error',
         `Duplicate primary route for compiled path "${fullPath}".`,
         sourceFromIr(ir, entry.source),
@@ -260,8 +268,32 @@ export function expandNavigation(ir: NavigationIr): ExpandNavigationResult {
       group.primary = entry;
     }
   }
-}
 
+  function expandRouteSet(index: number, slot: SlotRecord): void {
+    const state = routeSetStates[index];
+    if (state === RouteSetVisitState.Visited) return;
+    if (state === RouteSetVisitState.Visiting) {
+      diagnostics.push(diagnostic(
+        'NAV1510',
+        'error',
+        `Route ownership cycle detected while expanding slot "${slot.expanded.id}".`,
+        slot.expanded.source,
+      ));
+      return;
+    }
+
+    routeSetStates[index] = RouteSetVisitState.Visiting;
+    const routeSet = ir.routeSets[index]!;
+    visitEntryRange(
+      routeSet.firstEntry,
+      routeSet.entryCount,
+      slot.context,
+      slot.expanded.id,
+      routeSetIds[index],
+    );
+    routeSetStates[index] = RouteSetVisitState.Visited;
+  }
+}
 function createBranch(
   ir: NavigationIr,
   group: PendingGroup,

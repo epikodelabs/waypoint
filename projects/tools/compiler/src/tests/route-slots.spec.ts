@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildNavigationIr } from '../lib/ir/build-navigation-ir.js';
 import { expandNavigation } from '../lib/ir/expand-navigation.js';
-import { validateExpandedNavigation } from '../lib/validation/validate-navigation.js';
+import { validateExpandedNavigation, validateNavigationIr } from '../lib/validation/validate-navigation.js';
 import type { SemanticNavigationProgram } from '../lib/index.js';
 
 const source = { filePath: '/app/routes.ts', exportName: 'routes' } as const;
@@ -52,8 +52,9 @@ test('reports routesFor declarations targeting unknown slots', () => {
       entries: [],
     }],
   };
-  const expanded = expandNavigation(buildNavigationIr(graph));
-  assert.equal(expanded.diagnostics[0]?.code, 'WPT2002');
+  const ir = buildNavigationIr(graph);
+  const validated = validateNavigationIr(ir);
+  assert.equal(validated.diagnostics[0]?.code, 'NAV1501');
 });
 
 test('validates duplicate inherited path parameter names', () => {

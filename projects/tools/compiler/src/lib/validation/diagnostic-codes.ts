@@ -22,6 +22,7 @@ export const NavigationDiagnosticCode = {
   multipleRouteSetOwners: 'NAV1502',
   duplicateRouteSetIdentity: 'NAV1503',
   missingRouteSetExport: 'NAV1504',
+  ownershipCycle: 'NAV1510',
 } as const;
 
 export type NavigationDiagnosticCode =

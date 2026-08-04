@@ -107,6 +107,7 @@ export function planRouteArtifacts(
       sourceExport: routeSet.source.exportName,
       artifactKey: routeSet.id,
       branchIds: routeSet.branchIds,
+      parentRouteSetId: routeSet.parentRouteSetId,
     })),
     routes: model.branches.map(branch => ({
       id: branch.id,

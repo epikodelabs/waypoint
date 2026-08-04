@@ -723,7 +723,10 @@ A valid Waypoint semantic program must satisfy the following invariants.
 ### Ownership
 
 - every `routesFor()` declaration targets an existing slot;
-- one slot has at most one owner in Semantic Model v1;
+- one slot has at most one `routesFor()` owner in Semantic Model v1;
+- `routesFor()` entries may contain layouts, redirects, routes, and nested route slots;
+- route ownership forms an acyclic hierarchy;
+- nested slots inherit the complete context in which they are declared;
 - empty slots are valid;
 - a route set cannot target itself recursively through route ownership;
 - owned routes preserve slot and source provenance.
@@ -907,7 +910,7 @@ Semantic Model v1 does not yet define:
 - wildcard syntax;
 - multiple owners per slot;
 - route-set ordering;
-- route-set dependencies;
+- explicit route-set dependency declarations beyond hierarchical ownership;
 - artifact signing;
 - incremental compiler caching;
 - module federation;

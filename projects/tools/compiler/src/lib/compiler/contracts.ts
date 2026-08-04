@@ -66,6 +66,7 @@ export interface RouteArtifactManifestDocument {
     readonly sourceExport?: string;
     readonly artifactKey: string;
     readonly branchIds: readonly string[];
+    readonly parentRouteSetId?: string;
   }[];
   readonly routes: readonly {
     readonly id: string;
