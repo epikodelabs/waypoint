@@ -30,6 +30,8 @@ import {
 
 import type {
   FramePrepareFn,
+  FrameAfterEnterFn,
+  FrameBeforeLeaveFn,
   MaybePromise,
   FrameView,
   LayoutDefinition,
@@ -70,6 +72,8 @@ import {
   type PrepareRouteDataFn,
   type PreloadingStrategy,
   type Route,
+  type RedirectRoute as RuntimeRedirectRoute,
+  type RenderableRoute as RuntimeRenderableRoute,
   type RouteRenderContext,
   type Router as VanillaRouter,
   type RouterState,
@@ -194,7 +198,7 @@ function adaptFrameBeforeEnter(
 }
 
 function adaptFrameBeforeLeave(
-  handler: CanDeactivateFn,
+  handler: FrameBeforeLeaveFn<any>,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
   return (transition) => {
@@ -218,7 +222,7 @@ function adaptFramePrepare(
 }
 
 function adaptFrameAfterEnter(
-  handler: (route: ActivatedRoute) => MaybePromise<void>,
+  handler: FrameAfterEnterFn<any>,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
   return (transition) => execute(injector, handler, transition.to);
@@ -227,9 +231,9 @@ function adaptFrameAfterEnter(
 function collectEnterFrames(
   layouts: readonly LayoutDefinition[],
   route: RenderableRoute,
-): readonly FrameView[] {
+): readonly FrameView<any>[] {
   return Object.freeze([
-    ...layouts.map((layout) => layout.frame).filter((frame): frame is FrameView => !!frame),
+    ...layouts.map((layout) => layout.frame).filter((frame): frame is FrameView<any> => !!frame),
     ...(route.frame ? [route.frame] : []),
   ]);
 }
@@ -237,18 +241,18 @@ function collectEnterFrames(
 function collectLeaveFrames(
   layouts: readonly LayoutDefinition[],
   route: RenderableRoute,
-): readonly FrameView[] {
+): readonly FrameView<any>[] {
   const routeFrames = route.frame ? [route.frame] : [];
   const layoutFrames = layouts
     .map((layout) => layout.frame)
-    .filter((frame): frame is FrameView => !!frame)
+    .filter((frame): frame is FrameView<any> => !!frame)
     .reverse();
 
   return Object.freeze([...routeFrames, ...layoutFrames]);
 }
 
 function adaptFramePreparers(
-  frames: readonly FrameView[],
+  frames: readonly FrameView<any>[],
   injector: EnvironmentInjector,
 ): readonly PrepareRouteDataFn[] | undefined {
   const handlers = frames.flatMap(
@@ -267,11 +271,11 @@ function adaptFrameTransitions(
   for (const group of groups) {
     const primaryRoute = group.primary.route;
 
-    if (primaryRoute.redirectTo) {
+    if (primaryRoute.kind === 'redirect') {
       continue;
     }
 
-    const renderableRoute = primaryRoute as RenderableRoute;
+    const renderableRoute = primaryRoute;
     const enterFrames = collectEnterFrames(group.layouts, renderableRoute);
     const leaveFrames = collectLeaveFrames(group.layouts, renderableRoute);
 
@@ -305,7 +309,7 @@ function adaptFrameTransitions(
 }
 
 function adaptParamsParser(
-  route: RouteDefinition,
+  route: RenderableRoute,
   injector: EnvironmentInjector,
 ): LoadedRoute['parseParams'] {
   const schema = route.paramsSchema;
@@ -316,7 +320,7 @@ function adaptParamsParser(
 }
 
 function adaptQueryParser(
-  route: RouteDefinition,
+  route: RenderableRoute,
   injector: EnvironmentInjector,
 ): LoadedRoute['parseQuery'] {
   const schema = route.querySchema;
@@ -359,28 +363,40 @@ function adaptRoute(
   appRef: ApplicationRef,
   injector: EnvironmentInjector,
 ): Route {
+  if (route.kind === 'redirect') {
+    if (!redirectTo) {
+      throw new Error(`Compiled redirect route "${path}" has no redirect target.`);
+    }
+
+    const runtimeRedirect: RuntimeRedirectRoute = {
+      kind: 'redirect',
+      name: route.name,
+      path,
+      sourceRoute: route,
+      redirectTo,
+      data: route.data ? { ...route.data } : undefined,
+    };
+
+    return runtimeRedirect;
+  }
+
   const tokens = {
     routeToken: ROUTE,
     contextToken: ROUTE_CONTEXT,
   } as const;
-  const renderableRoute = redirectTo ? null : (route as RenderableRoute);
 
-  return {
+  const runtimeRoute: RuntimeRenderableRoute = {
+    kind: 'route',
     name: route.name,
     path,
     outlet: route.outlet,
     sourceRoute: route,
-    redirectTo,
-    data: route.data,
+    data: route.data ? { ...route.data } : undefined,
     preload: route.preload,
     viewTransition: route.viewTransition,
 
     load: async () => {
-      if (redirectTo) {
-        return {};
-      }
-
-      const views = await resolveViews(layouts, renderableRoute!);
+      const views = await resolveViews(layouts, route);
 
       return {
         component: route.outlet
@@ -389,7 +405,7 @@ function adaptRoute(
         prepare: [
           ...(sharedPreparers ?? []),
           ...(adaptFramePreparers(
-            renderableRoute?.frame ? [renderableRoute.frame] : [],
+            route.frame ? [route.frame] : [],
             injector,
           ) ?? []),
         ],
@@ -398,6 +414,8 @@ function adaptRoute(
       };
     },
   };
+
+  return runtimeRoute;
 }
 
 function adaptRoutes(
@@ -405,9 +423,11 @@ function adaptRoutes(
   appRef: ApplicationRef,
   injector: EnvironmentInjector,
 ): Route[] {
-  return groups.map((group: CompiledRouteGroup) => {
+  return groups.map((group): Route => {
     const sharedPreparers = adaptFramePreparers(
-      group.layouts.map((layout) => layout.frame).filter((frame): frame is FrameView => !!frame),
+      group.layouts
+        .map(layout => layout.frame)
+        .filter((frame): frame is FrameView<any> => !!frame),
       injector,
     );
 
@@ -421,8 +441,18 @@ function adaptRoutes(
       injector,
     );
 
-    const outlets = group.outlets.map((compiled: CompiledRoute) =>
-      adaptRoute(
+    if (primary.kind === 'redirect' || typeof primary.redirectTo === 'string') {
+      if (group.outlets.length > 0) {
+        throw new Error(
+          `A redirect route cannot have named outlets. Path: "${group.path}"`,
+        );
+      }
+
+      return primary;
+    }
+
+    const outlets = group.outlets.map((compiled): RuntimeRenderableRoute => {
+      const outlet = adaptRoute(
         compiled.route,
         group.path,
         compiled.redirectTo,
@@ -430,10 +460,23 @@ function adaptRoutes(
         sharedPreparers,
         appRef,
         injector,
-      ),
-    );
+      );
 
-    return outlets.length > 0 ? { ...primary, outlets: Object.freeze(outlets) } : primary;
+      if (outlet.kind === 'redirect' || typeof outlet.redirectTo === 'string') {
+        throw new Error(
+          `Named outlet routes cannot be redirects. Path: "${group.path}"`,
+        );
+      }
+
+      return outlet;
+    });
+
+    return outlets.length === 0
+      ? primary
+      : {
+          ...primary,
+          outlets: Object.freeze(outlets),
+        };
   });
 }
 
@@ -463,7 +506,7 @@ function replaceChildNodes(
 function interpolateNamedPath(
   template: string,
   params: Readonly<Record<string, unknown>>,
-  schema: RouteDefinition['paramsSchema'],
+  schema: ParamSchemaRecord | undefined,
 ): string | null {
   const serialized = schema
     ? serializeParams(schema, params as unknown as InferParamType<ParamSchemaRecord>)
@@ -763,6 +806,10 @@ export class Router<TRoutes extends NavigationTree = any> {
       return null;
     }
 
+    if ('kind' in record.route && record.route.kind === 'redirect') {
+      return null;
+    }
+
     const path = interpolateNamedPath(
       record.fullPath,
       target.params ?? {},
@@ -804,7 +851,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   private readNamedRouteRecord(name: string):
     | RouteRegistryRecord
     | {
-        readonly route: Pick<RouteDefinition, 'paramsSchema' | 'querySchema'>;
+        readonly route: Pick<RenderableRoute, 'paramsSchema' | 'querySchema'>;
         readonly fullPath: string;
       }
     | undefined {

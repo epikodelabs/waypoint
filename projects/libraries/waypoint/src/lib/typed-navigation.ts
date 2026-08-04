@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   InferParamType,
   InferQueryInputType,
   InferQueryType,
@@ -54,7 +54,7 @@ export type InferRouteParams<TRoute> =
       ? InferParamType<TParamsSchema>
       : [ExtractPathParams<TPath>] extends [never]
         ? Record<string, never>
-        : Record<ExtractPathParams<TPath>, string | number>
+        : Readonly<Record<ExtractPathParams<TPath>, string>>
     : Record<string, unknown>;
 
 /**
@@ -135,3 +135,51 @@ export type TypedHref<TRoutes extends NavigationTree> = {
   ) => string | null;
 };
 
+type Simplify<T> = { readonly [K in keyof T]: T[K] };
+type MergeData<TLeft, TRight> = Simplify<TLeft & TRight>;
+
+type StaticRouteData<TEntry> =
+  TEntry extends { readonly data?: infer TData }
+    ? TData extends Readonly<Record<string, unknown>>
+      ? TData
+      : Readonly<Record<string, never>>
+    : Readonly<Record<string, never>>;
+
+type FrameData<TEntry> =
+  TEntry extends { readonly frame?: infer TFrame }
+    ? import('./navigation-definitions').InferFrameData<TFrame>
+    : Readonly<Record<string, never>>;
+
+type PreparedDataForName<
+  TEntries extends NavigationTree,
+  TName extends string,
+  TInherited = Readonly<Record<string, never>>,
+> =
+  TEntries[number] extends infer TEntry
+    ? TEntry extends {
+        readonly kind: 'layout';
+        readonly entries: infer TChildren extends NavigationTree;
+      }
+      ? PreparedDataForName<
+          TChildren,
+          TName,
+          MergeData<TInherited, MergeData<StaticRouteData<TEntry>, FrameData<TEntry>>>
+        >
+      : TEntry extends {
+          readonly kind: 'route';
+          readonly name?: infer TRouteName;
+        }
+        ? TRouteName extends TName
+          ? MergeData<TInherited, MergeData<StaticRouteData<TEntry>, FrameData<TEntry>>>
+          : never
+        : never
+    : never;
+
+/**
+ * Infers the complete activated data for a named route, including enclosing
+ * layout data and all frame prepare results. Unknown names resolve to never.
+ */
+export type InferNavigationPreparedData<
+  TEntries extends NavigationTree,
+  TName extends string,
+> = PreparedDataForName<TEntries, TName>;

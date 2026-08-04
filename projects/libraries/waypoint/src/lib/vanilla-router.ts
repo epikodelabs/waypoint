@@ -120,21 +120,43 @@ export interface LoadedRoute {
   readonly parseQuery?: ParseRouteQuery;
 }
 
-export interface Route {
-  name?: string;
-  path: string;
-  outlet?: string;
-  sourceRoute?: unknown;
-  /** Same-path named outlets activated atomically with this primary route. */
-  outlets?: readonly Route[];
-  load?: () => MaybePromise<LoadedRoute>;
-  redirectTo?: string;
-  data?: Record<string, unknown>;
-  preload?: boolean;
-  viewTransition?: boolean;
-  canActivate?: CanActivateFn[];
-  canDeactivate?: CanDeactivateFn[];
-  prepare?: readonly PrepareRouteDataFn[];
+export interface RouteBase {
+  readonly name?: string;
+  readonly path: string;
+  readonly sourceRoute?: unknown;
+  readonly data?: Record<string, unknown>;
+}
+
+export interface RedirectRoute extends RouteBase {
+  readonly kind?: 'redirect';
+  readonly redirectTo: string;
+  readonly outlet?: never;
+  readonly outlets?: never;
+  readonly load?: never;
+  readonly preload?: never;
+  readonly viewTransition?: never;
+  readonly canActivate?: never;
+  readonly canDeactivate?: never;
+  readonly prepare?: never;
+}
+
+export interface RenderableRoute extends RouteBase {
+  readonly kind?: 'route';
+  readonly outlet?: string;
+  readonly outlets?: readonly RenderableRoute[];
+  readonly load?: () => MaybePromise<LoadedRoute>;
+  readonly preload?: boolean;
+  readonly viewTransition?: boolean;
+  readonly canActivate?: CanActivateFn[];
+  readonly canDeactivate?: CanDeactivateFn[];
+  readonly prepare?: readonly PrepareRouteDataFn[];
+  readonly redirectTo?: never;
+}
+
+export type Route = RedirectRoute | RenderableRoute;
+
+function isRedirectRoute(route: Route): route is RedirectRoute {
+  return route.kind === 'redirect' || typeof route.redirectTo === 'string';
 }
 
 export interface NavigationTransition {
@@ -846,12 +868,14 @@ export function createRouter(config: RouterConfig): Router {
       throw new Error('Cannot update history state on a disposed router');
     }
 
-    const entry = history.createDefaultUpdate().previousEntry ?? {
-      href: currentHref(),
-      scroll: readScroll(),
-      state: null,
-    };
+    const update = history.createDefaultUpdate();
+    const entry = update.previousEntry;
+    if (!entry) {
+      throw new Error('History manager did not provide a current entry.');
+    }
+
     const nextEntry: HistoryEntry = {
+      id: entry.id,
       href: entry.href,
       scroll: readScroll(),
       state: state ?? null,
@@ -862,7 +886,7 @@ export function createRouter(config: RouterConfig): Router {
         '',
         nextEntry.href,
       );
-    history.commitUpdate({ ...history.createDefaultUpdate(), nextEntry }, nextEntry.href);
+    history.commitUpdate({ ...update, nextEntry }, nextEntry.href);
     dispatchRouterLocationChange();
 
     if (currentState) {
@@ -1247,10 +1271,8 @@ export function createRouter(config: RouterConfig): Router {
     }
 
     const primaryRoute = match.route;
-    const routes = [primaryRoute, ...(primaryRoute.outlets ?? [])];
-    const historyState = request.historyUpdate.nextEntry?.state ?? null;
 
-    if (primaryRoute.redirectTo) {
+    if (isRedirectRoute(primaryRoute)) {
       return {
         type: 'redirect',
         request,
@@ -1258,6 +1280,12 @@ export function createRouter(config: RouterConfig): Router {
         replace: true,
       };
     }
+
+    const routes: readonly RenderableRoute[] = [
+      primaryRoute,
+      ...(primaryRoute.outlets ?? []),
+    ];
+    const historyState = request.historyUpdate.nextEntry?.state ?? null;
 
     let loadedRoutes: LoadedRoute[];
     try {

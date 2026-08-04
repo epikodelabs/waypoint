@@ -20,6 +20,8 @@ export type RouteRedirect = {
   readonly replace?: boolean;
 };
 
+export type EmptyRouteData = Readonly<Record<string, never>>;
+
 export type FramePrepareResult = void | RouteData;
 
 export type FramePrepareFn<
@@ -53,7 +55,7 @@ export type InferPreparedData<
   ? [AwaitedPrepareResult<TPrepare[number]>] extends [never]
     ? Readonly<Record<string, never>>
     : Simplify<UnionToIntersection<AwaitedPrepareResult<TPrepare[number]>>>
-  : Readonly<Record<string, never>>;
+  : EmptyRouteData;
 
 export type FrameAfterEnterFn<
   TData extends RouteData = RouteData,
@@ -90,7 +92,7 @@ export interface LazyViewDefinition {
 export type ViewDefinition = EagerViewDefinition | LazyViewDefinition;
 
 export type FrameView<
-  TData extends RouteData = RouteData,
+  TData extends RouteData = EmptyRouteData,
 > = ViewDefinition & {
   readonly kind: 'frame';
   readonly beforeEnter?: readonly RouterCanActivateFn[];
@@ -102,24 +104,30 @@ export type FrameView<
 export type InferFrameData<TFrame> =
   TFrame extends FrameView<infer TData>
     ? TData
-    : Readonly<Record<string, never>>;
+    : EmptyRouteData;
 
 export interface RouteDefinitionBase<
   TPath extends string = string,
   TName extends string | undefined = string | undefined,
-  TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
-  TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
 > {
-  readonly kind: 'route';
   readonly path: TPath;
   readonly name?: TName;
+  readonly data?: Readonly<Record<string, unknown>>;
+  readonly providers?: NavigationProviders;
+}
+
+export interface RenderableRouteDefinitionBase<
+  TPath extends string = string,
+  TName extends string | undefined = string | undefined,
+  TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
+  TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
+> extends RouteDefinitionBase<TPath, TName> {
+  readonly kind: 'route';
   readonly outlet?: string;
   readonly preload?: boolean;
   readonly viewTransition?: boolean;
   readonly paramsSchema?: TParamsSchema;
   readonly querySchema?: TQuerySchema;
-  readonly data?: Readonly<Record<string, unknown>>;
-  readonly providers?: NavigationProviders;
 }
 
 export type RouteOptions<
@@ -127,14 +135,15 @@ export type RouteOptions<
   TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
   TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
 > = Omit<
-  RouteDefinitionBase<string, TName, TParamsSchema, TQuerySchema>,
+  RenderableRouteDefinitionBase<string, TName, TParamsSchema, TQuerySchema>,
   'kind' | 'path'
 >;
 
 export interface RedirectRouteDefinition<
   TPath extends string = string,
   TName extends string | undefined = string | undefined,
-> extends RouteDefinitionBase<TPath, TName, undefined, undefined> {
+> extends RouteDefinitionBase<TPath, TName> {
+  readonly kind: 'redirect';
   readonly redirectTo: string;
 }
 
@@ -144,10 +153,10 @@ export type RenderableRoute<
   TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
   TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
   TFrame extends FrameView<any> | undefined = FrameView<any> | undefined,
-> = RouteDefinitionBase<TPath, TName, TParamsSchema, TQuerySchema> &
+> = RenderableRouteDefinitionBase<TPath, TName, TParamsSchema, TQuerySchema> &
   ViewDefinition & {
     readonly frame?: TFrame;
-    readonly redirectTo?: undefined;
+    readonly redirectTo?: never;
   };
 
 export type RouteDefinition<
@@ -165,7 +174,7 @@ export type InferRoutePreparedData<TRoute> =
     ? TFrame extends FrameView<any>
       ? InferFrameData<TFrame>
       : Readonly<Record<string, never>>
-    : Readonly<Record<string, never>>;
+    : EmptyRouteData;
 
 export interface LayoutDefinitionBase<
   TPath extends string = string,

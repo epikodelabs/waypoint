@@ -1,4 +1,4 @@
-﻿import {
+import {
   DestroyRef,
   Directive,
   ElementRef,
@@ -46,4 +46,3 @@ export class RouterOutlet implements OnInit {
     return name !== '' || this.element.closest('route-host') === null;
   }
 }
-

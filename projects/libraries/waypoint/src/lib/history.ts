@@ -4,6 +4,7 @@ export interface ScrollPosition {
 }
 
 export interface HistoryEntry {
+  readonly id: number;
   readonly href: string;
   readonly scroll: ScrollPosition;
   readonly state: unknown;
@@ -32,6 +33,7 @@ export class HistoryManager {
 
   private entries: HistoryEntry[] = [];
   private index = -1;
+  private nextId = 1;
 
   private get currentHref(): string {
     return this.location.pathname + this.location.search + this.location.hash;
@@ -54,6 +56,7 @@ export class HistoryManager {
     }
 
     this.entries = [{
+      id: this.nextId++,
       href: this.currentHref,
       scroll: this.readScroll(),
       state: this.readHistoryState(),
@@ -67,6 +70,7 @@ export class HistoryManager {
       const entry = this.entries[this.index];
       if (entry) {
         this.entries[this.index] = {
+          id: entry.id,
           href: entry.href,
           scroll,
           state: entry.state,
@@ -91,7 +95,9 @@ export class HistoryManager {
     this.ensureHistoryEntry();
     const previousScroll = this.saveCurrentScroll();
     const previousIndex = this.index;
+    const currentEntry = this.entries[this.index];
     const nextEntry: HistoryEntry = {
+      id: replace && currentEntry ? currentEntry.id : this.nextId++,
       href,
       scroll: replace ? previousScroll : ZERO_SCROLL,
       state: state ?? null,
@@ -140,6 +146,7 @@ export class HistoryManager {
         state: this.readHistoryState(),
       }
       : {
+        id: this.nextId++,
         href,
         scroll: ZERO_SCROLL,
         state: this.readHistoryState(),
@@ -210,6 +217,9 @@ export class HistoryManager {
   commitUpdate(update: HistoryUpdate, href: string): void {
     this.index = update.nextIndex;
     this.entries[this.index] = update.nextEntry ?? {
+      id: update.type === 'replace' && update.previousEntry
+        ? update.previousEntry.id
+        : this.nextId++,
       href,
       scroll: update.type === 'replace' ? update.previousScroll : ZERO_SCROLL,
       state: null,

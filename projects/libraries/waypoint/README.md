@@ -1,4 +1,4 @@
-﻿# Waypoint
+# Waypoint
 
 Waypoint is a typed Angular navigation library built around a simple idea:
 
