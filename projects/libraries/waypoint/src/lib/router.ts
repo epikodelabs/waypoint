@@ -38,6 +38,7 @@ import type {
   RouteDefinition,
   RouteOptions,
   NavigationTree,
+  RouteContributionDefinition,
 } from './navigation-definitions';
 
 import type { TypedHref, TypedNavigate } from './typed-navigation';
@@ -86,6 +87,7 @@ export interface RouterOptions {
   readonly viewTransitions?: ViewTransitionsOption;
   readonly namedRoutes?: readonly NamedRouteDefinition[];
   readonly resolveRoutes?: (url: URL) => Promise<NavigationTree | null | undefined>;
+  readonly contributions?: readonly RouteContributionDefinition[];
 }
 
 export interface NamedRouteDefinition {
@@ -519,7 +521,10 @@ export class Router<TRoutes extends NavigationTree = any> {
         optional: true,
       }) ?? '/';
 
-    this.registry = createRouteRegistry(this.configuration.routes);
+    this.registry = createRouteRegistry(
+      this.configuration.routes,
+      this.configuration.contributions,
+    );
     for (const route of this.configuration.namedRoutes ?? []) {
       this.namedRouteCatalog.set(route.name, route);
     }
@@ -883,7 +888,10 @@ export class Router<TRoutes extends NavigationTree = any> {
       ...this.configuration,
       routes: merged,
     };
-    this.registry = createRouteRegistry(this.configuration.routes);
+    this.registry = createRouteRegistry(
+      this.configuration.routes,
+      this.configuration.contributions,
+    );
   }
 
   private restartEngine(): void {

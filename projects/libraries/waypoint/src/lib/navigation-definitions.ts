@@ -191,8 +191,31 @@ export type LayoutDefinition<
     readonly frame?: TFrame;
   };
 
+export interface RouteSlotDefinition<
+  TId extends string = string,
+> {
+  readonly kind: 'route-slot';
+  readonly id: TId;
+}
+
+export interface RouteContributionDefinition<
+  TSlotId extends string = string,
+  TId extends string = string,
+  TEntries extends NavigationTree = NavigationTree,
+> {
+  readonly kind: 'route-contribution';
+  readonly slotId: TSlotId;
+  readonly id: TId;
+  readonly entries: TEntries;
+}
+
 export type AnyRouteDefinition = RouteDefinition<any, any, any, any, any>;
 export type AnyLayoutDefinition = LayoutDefinition<any, any, any>;
+export type AnyRouteSlotDefinition = RouteSlotDefinition<any>;
+export type AnyRouteContributionDefinition = RouteContributionDefinition<any, any, any>;
 
-export type NavigationEntry = AnyRouteDefinition | AnyLayoutDefinition;
+export type NavigationEntry =
+  | AnyRouteDefinition
+  | AnyLayoutDefinition
+  | AnyRouteSlotDefinition;
 export type NavigationTree = readonly NavigationEntry[];
