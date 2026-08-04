@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildRouteGraph } from '../lib/ir/expand-navigation.js';
-import { validateRouteGraph } from '../lib/validation/validate-navigation.js';
-import type { ParsedRouteGraph } from '../lib/index.js';
+import { expandNavigation } from '../lib/ir/expand-navigation.js';
+import { validateNavigation } from '../lib/validation/validate-navigation.js';
+import type { SemanticNavigationProgram } from '../lib/index.js';
 
 const source = { filePath: '/app/routes.ts', exportName: 'routes' } as const;
 
 test('compiles routesFor entries relative to the retained slot context', () => {
-  const graph: ParsedRouteGraph = {
+  const graph: SemanticNavigationProgram = {
     entry: source.filePath,
     routes: [{
       kind: 'layout',
@@ -32,16 +32,16 @@ test('compiles routesFor entries relative to the retained slot context', () => {
     }],
   };
 
-  const built = buildRouteGraph(graph);
-  assert.deepEqual(built.diagnostics, []);
-  assert.equal(built.model.slots[0]?.parentPath, '/app');
-  assert.equal(built.model.branches[0]?.path, '/app/dashboard');
-  assert.equal(built.model.branches[0]?.slotId, 'workspace');
-  assert.equal(built.model.routeSets[0]?.branchIds[0], 'dashboard');
+  const expanded = expandNavigation(graph);
+  assert.deepEqual(expanded.diagnostics, []);
+  assert.equal(expanded.model.slots[0]?.parentPath, '/app');
+  assert.equal(expanded.model.branches[0]?.path, '/app/dashboard');
+  assert.equal(expanded.model.branches[0]?.slotId, 'workspace');
+  assert.equal(expanded.model.routeSets[0]?.branchIds[0], 'dashboard');
 });
 
 test('reports routesFor declarations targeting unknown slots', () => {
-  const graph: ParsedRouteGraph = {
+  const graph: SemanticNavigationProgram = {
     entry: source.filePath,
     routes: [],
     routeSets: [{
@@ -51,12 +51,12 @@ test('reports routesFor declarations targeting unknown slots', () => {
       entries: [],
     }],
   };
-  const built = buildRouteGraph(graph);
-  assert.equal(built.diagnostics[0]?.code, 'WPT2002');
+  const expanded = expandNavigation(graph);
+  assert.equal(expanded.diagnostics[0]?.code, 'WPT2002');
 });
 
 test('validates duplicate inherited path parameter names', () => {
-  const graph: ParsedRouteGraph = {
+  const graph: SemanticNavigationProgram = {
     entry: source.filePath,
     routes: [{
       kind: 'layout',
@@ -79,7 +79,7 @@ test('validates duplicate inherited path parameter names', () => {
       }],
     }],
   };
-  const built = buildRouteGraph(graph);
-  const validated = validateRouteGraph(built.model);
+  const expanded = expandNavigation(graph);
+  const validated = validateNavigation(expanded.model);
   assert.ok(validated.diagnostics.some(item => item.code === 'WPT2211'));
 });

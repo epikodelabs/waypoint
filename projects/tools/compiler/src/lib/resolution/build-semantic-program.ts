@@ -3,21 +3,21 @@ import type { RouteCompilerDiagnostic } from '../compiler/contracts.js';
 import type { RouteProgramContext } from '../discovery/program.js';
 import type { RouteDiscovery } from '../discovery/discover-route-sources.js';
 import type {
-  ParsedRouteEntry,
-  ParsedRouteEntryLayout,
-  ParsedRouteEntryRedirect,
-  ParsedRouteEntryRoute,
-  ParsedRouteGraph,
-  ParsedRoutePolicy,
-  ParsedRouteSlot,
-  ParsedRoutesFor,
-  ParsedSchema,
-  ParsedSchemaRecord,
+  SemanticEntry,
+  SemanticLayout,
+  SemanticRedirect,
+  SemanticRoute,
+  SemanticNavigationProgram,
+  SemanticPolicy,
+  SemanticRouteSlot,
+  SemanticRoutesFor,
+  SemanticSchema,
+  SemanticSchemaRecord,
   SourceReference,
 } from '../ir/model.js';
 
-export interface AnalyzeRouteGraphResult {
-  readonly graph: ParsedRouteGraph;
+export interface BuildSemanticProgramResult {
+  readonly program: SemanticNavigationProgram;
   readonly diagnostics: readonly RouteCompilerDiagnostic[];
 }
 
@@ -30,15 +30,15 @@ interface AnalyzerContext {
   >;
 }
 
-type ParsedRouteOptions = Pick<
-  ParsedRouteEntryRoute,
+type SemanticRouteOptions = Pick<
+  SemanticRoute,
   'name' | 'outlet' | 'policy' | 'paramsSchema' | 'querySchema'
 >;
 
-export function resolveRouteDiscovery(
+export function buildSemanticProgram(
   programContext: RouteProgramContext,
   discovery: RouteDiscovery,
-): AnalyzeRouteGraphResult {
+): BuildSemanticProgramResult {
   const diagnostics: RouteCompilerDiagnostic[] = [];
   const context: AnalyzerContext = {
     programContext,
@@ -54,7 +54,7 @@ export function resolveRouteDiscovery(
   }
 
   return {
-    graph: {
+    program: {
       entry: discovery.entry,
       routes: parseRouteArray(
         context,
@@ -124,7 +124,7 @@ function parseRouteArray(
     | SourceReference
     | undefined,
   resolutionStack: Set<string>,
-): readonly ParsedRouteEntry[] {
+): readonly SemanticEntry[] {
   const current =
     resolveExpression(
       context,
@@ -138,7 +138,7 @@ function parseRouteArray(
     );
   }
 
-  const output: ParsedRouteEntry[] = [];
+  const output: SemanticEntry[] = [];
 
   for (const element of current.elements) {
     if (ts.isSpreadElement(element)) {
@@ -180,7 +180,7 @@ function parseRouteEntry(
     | SourceReference
     | undefined,
   resolutionStack: Set<string>,
-): ParsedRouteEntry {
+): SemanticEntry {
   const current =
     resolveExpression(
       context,
@@ -267,7 +267,7 @@ function parseRouteEntry(
 function parseRouteSlot(
   call: ts.CallExpression,
   source: SourceReference,
-): ParsedRouteSlot {
+): SemanticRouteSlot {
   return {
     kind: 'slot',
     id: readStringLiteral(call.arguments[0]),
@@ -278,8 +278,8 @@ function parseRouteSlot(
 function discoverRoutesFor(
   context: AnalyzerContext,
   declarations: readonly ts.VariableDeclaration[],
-): readonly ParsedRoutesFor[] {
-  const output: ParsedRoutesFor[] = [];
+): readonly SemanticRoutesFor[] {
+  const output: SemanticRoutesFor[] = [];
 
   for (const declaration of declarations) {
     if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
@@ -344,7 +344,7 @@ function parsePageRoute(
     | SourceReference
     | undefined,
   resolutionStack: Set<string>,
-): ParsedRouteEntryRoute {
+): SemanticRoute {
   return {
     kind: 'route',
     path: readStringLiteral(
@@ -375,7 +375,7 @@ function parseLayoutRoute(
     | SourceReference
     | undefined,
   resolutionStack: Set<string>,
-): ParsedRouteEntryLayout {
+): SemanticLayout {
   return {
     kind: 'layout',
     path: readStringLiteral(
@@ -411,7 +411,7 @@ function parseRedirectRoute(
     | SourceReference
     | undefined,
   resolutionStack: Set<string>,
-): ParsedRouteEntryRedirect {
+): SemanticRedirect {
   return {
     kind: 'redirect',
     path: readStringLiteral(
@@ -437,7 +437,7 @@ function parseRouteOptions(
     | ts.Expression
     | undefined,
   resolutionStack: Set<string>,
-): ParsedRouteOptions {
+): SemanticRouteOptions {
   if (!expression) {
     return {};
   }
@@ -461,13 +461,13 @@ function parseRouteOptions(
   let name: string | undefined;
   let outlet: string | undefined;
   let policy:
-    | ParsedRoutePolicy
+    | SemanticPolicy
     | undefined;
   let paramsSchema:
-    | ParsedSchemaRecord
+    | SemanticSchemaRecord
     | undefined;
   let querySchema:
-    | ParsedSchemaRecord
+    | SemanticSchemaRecord
     | undefined;
 
   for (const property of current.properties) {
@@ -533,7 +533,7 @@ function parsePolicy(
   context: AnalyzerContext,
   expression: ts.Expression,
   resolutionStack: Set<string>,
-): ParsedRoutePolicy | undefined {
+): SemanticPolicy | undefined {
   const current =
     resolveExpression(
       context,
@@ -604,7 +604,7 @@ function parseSchemaRecord(
   context: AnalyzerContext,
   expression: ts.Expression,
   resolutionStack: Set<string>,
-): ParsedSchemaRecord | undefined {
+): SemanticSchemaRecord | undefined {
   const current =
     resolveExpression(
       context,
@@ -624,7 +624,7 @@ function parseSchemaRecord(
   const record:
     Record<
       string,
-      ParsedSchema
+      SemanticSchema
     > = {};
 
   for (const property of current.properties) {
@@ -650,7 +650,7 @@ function parseSchema(
   context: AnalyzerContext,
   expression: ts.Expression,
   resolutionStack: Set<string>,
-): ParsedSchema {
+): SemanticSchema {
   const current =
     resolveExpression(
       context,

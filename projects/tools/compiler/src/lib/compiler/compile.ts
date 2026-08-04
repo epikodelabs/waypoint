@@ -5,10 +5,10 @@ import { bundleArtifacts } from '../emitters/bundle-artifacts.js';
 import { emitBrowserEntries } from '../emitters/emit-browser-entries.js';
 import { planRouteArtifacts } from '../planning/plan-artifacts.js';
 import { emitServerArtifacts } from '../emitters/emit-server-artifacts.js';
-import { buildRouteGraph } from '../ir/expand-navigation.js';
-import { parseRoutes } from '../resolution/parse-routes.js';
+import { expandNavigation } from '../ir/expand-navigation.js';
+import { resolveNavigationProgram } from '../resolution/resolve-navigation-program.js';
 import { evaluateStaticRouteData } from '../resolution/evaluate-static-route-data.js';
-import { validateRouteGraph } from '../validation/validate-navigation.js';
+import { validateNavigation } from '../validation/validate-navigation.js';
 import { diagnostic, hasErrors } from './diagnostics.js';
 import type { RouteCompilerDiagnostic, RouteCompilerOptions, RouteCompilerResult } from './contracts.js';
 
@@ -18,16 +18,16 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
 
   if (!planned.dryRun) await ensureOutputDirectories(planned);
 
-  const parsed = await parseRoutes(planned);
-  diagnostics.push(...parsed.diagnostics);
+  const semantic = await resolveNavigationProgram(planned);
+  diagnostics.push(...semantic.diagnostics);
 
-  const evaluated = await evaluateStaticRouteData(parsed.graph);
+  const evaluated = await evaluateStaticRouteData(semantic.program);
   diagnostics.push(...evaluated.diagnostics);
 
-  const built = buildRouteGraph(parsed.graph);
-  diagnostics.push(...built.diagnostics);
+  const expanded = expandNavigation(semantic.program);
+  diagnostics.push(...expanded.diagnostics);
 
-  const validated = validateRouteGraph(built.model);
+  const validated = validateNavigation(expanded.model);
   diagnostics.push(...validated.diagnostics);
 
   if (hasErrors(diagnostics)) {
@@ -39,7 +39,7 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
     return { planned, diagnostics, emitted: [], implemented: true };
   }
 
-  const plannedArtifacts = planRouteArtifacts(planned, built.model);
+  const plannedArtifacts = planRouteArtifacts(planned, expanded.model);
   diagnostics.push(...plannedArtifacts.diagnostics);
 
   if (hasErrors(diagnostics)) {

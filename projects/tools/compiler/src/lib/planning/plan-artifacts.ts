@@ -10,7 +10,7 @@ import type {
   ServerRouteIndexDocument,
   ServerRouteShardDescriptor,
 } from '../compiler/contracts.js';
-import type { CompiledRouteModel } from '../ir/model.js';
+import type { ExpandedNavigationModel } from '../ir/model.js';
 
 export interface PlanArtifactsResult {
   readonly plan: RouteArtifactPlan;
@@ -19,7 +19,7 @@ export interface PlanArtifactsResult {
 
 export function planRouteArtifacts(
   planned: PlannedCompilerOutputs,
-  model: CompiledRouteModel,
+  model: ExpandedNavigationModel,
   generatedAt = new Date().toISOString(),
 ): PlanArtifactsResult {
   const diagnostics: RouteCompilerDiagnostic[] = [];
@@ -132,8 +132,8 @@ export function planRouteArtifacts(
 }
 
 function compareBranches(
-  left: CompiledRouteModel['branches'][number],
-  right: CompiledRouteModel['branches'][number],
+  left: ExpandedNavigationModel['branches'][number],
+  right: ExpandedNavigationModel['branches'][number],
 ): number {
   return left.path.localeCompare(right.path) || left.id.localeCompare(right.id);
 }

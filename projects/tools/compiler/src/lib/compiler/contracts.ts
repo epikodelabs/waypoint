@@ -1,8 +1,8 @@
 import type {
-  CompiledRouteBranch,
-  CompiledRouteModel,
-  CompiledRouteSet,
-  CompiledRouteSlot,
+  ExpandedRouteBranch,
+  ExpandedNavigationModel,
+  ExpandedRouteSet,
+  ExpandedRouteSlot,
 } from '../ir/model.js';
 
 export interface RouteCompilerOutputs {
@@ -51,14 +51,14 @@ export interface ServerRouteIndexDocument {
   readonly entry: string;
   readonly generatedAt: string;
   readonly shards: readonly ServerRouteShardDescriptor[];
-  readonly slots: readonly CompiledRouteSlot[];
-  readonly routeSets: readonly CompiledRouteSet[];
+  readonly slots: readonly ExpandedRouteSlot[];
+  readonly routeSets: readonly ExpandedRouteSet[];
 }
-export interface ServerRouteShardDocument { readonly version: 1; readonly prefix: string; readonly branches: readonly CompiledRouteBranch[]; }
+export interface ServerRouteShardDocument { readonly version: 1; readonly prefix: string; readonly branches: readonly ExpandedRouteBranch[]; }
 export interface RouteArtifactManifestDocument {
   readonly version: 1;
   readonly generatedAt: string;
-  readonly slots: readonly CompiledRouteSlot[];
+  readonly slots: readonly ExpandedRouteSlot[];
   readonly routeSets: readonly {
     readonly id: string;
     readonly slotId: string;

@@ -5,20 +5,20 @@ import {
 import type { RouteCompilerDiagnostic } from '../compiler/contracts.js';
 import { diagnostic } from '../compiler/diagnostics.js';
 import type {
-  CompiledRouteBranch,
-  CompiledRouteModel,
-  ParsedSchema,
+  ExpandedRouteBranch,
+  ExpandedNavigationModel,
+  SemanticSchema,
 } from '../ir/model.js';
 
-export interface ValidateRouteGraphResult {
+export interface ValidateNavigationResult {
   readonly diagnostics: readonly RouteCompilerDiagnostic[];
 }
 
-export function validateRouteGraph(model: CompiledRouteModel): ValidateRouteGraphResult {
+export function validateNavigation(model: ExpandedNavigationModel): ValidateNavigationResult {
   const diagnostics: RouteCompilerDiagnostic[] = [];
-  const names = new Map<string, CompiledRouteBranch>();
-  const literalPaths = new Map<string, CompiledRouteBranch>();
-  const patterns = new Map<string, CompiledRouteBranch>();
+  const names = new Map<string, ExpandedRouteBranch>();
+  const literalPaths = new Map<string, ExpandedRouteBranch>();
+  const patterns = new Map<string, ExpandedRouteBranch>();
   const routeSetIds = new Set<string>();
 
   for (const routeSet of model.routeSets) {
@@ -78,7 +78,7 @@ export function validateRouteGraph(model: CompiledRouteModel): ValidateRouteGrap
 }
 
 function validateBranch(
-  branch: CompiledRouteBranch,
+  branch: ExpandedRouteBranch,
   diagnostics: RouteCompilerDiagnostic[],
 ): void {
   let params: readonly string[];
@@ -157,7 +157,6 @@ function validateBranch(
   }
 }
 
-function containsOptional(schema: ParsedSchema): boolean {
+function containsOptional(schema: SemanticSchema): boolean {
   return schema.kind === 'optional';
 }
-export { validateRouteGraph as validateNavigation };

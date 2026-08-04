@@ -6,37 +6,37 @@ import {
 } from './route-path.js';
 import { diagnostic } from '../compiler/diagnostics.js';
 import type {
-  CompiledLayoutSummary,
-  CompiledOutletSummary,
-  CompiledRouteBranch,
-  CompiledRouteModel,
-  CompiledRouteSet,
-  CompiledRouteSlot,
-  ParsedRouteEntry,
-  ParsedRouteEntryLayout,
-  ParsedRouteEntryRedirect,
-  ParsedRouteEntryRoute,
-  ParsedRouteGraph,
-  ParsedRoutePolicy,
-  ParsedRoutesFor,
+  ExpandedLayout,
+  ExpandedOutlet,
+  ExpandedRouteBranch,
+  ExpandedNavigationModel,
+  ExpandedRouteSet,
+  ExpandedRouteSlot,
+  SemanticEntry,
+  SemanticLayout,
+  SemanticRedirect,
+  SemanticRoute,
+  SemanticNavigationProgram,
+  SemanticPolicy,
+  SemanticRoutesFor,
   SourceReference,
 } from './model.js';
 
-export interface BuildRouteGraphResult {
-  readonly model: CompiledRouteModel;
+export interface ExpandNavigationResult {
+  readonly model: ExpandedNavigationModel;
   readonly diagnostics: readonly RouteCompilerDiagnostic[];
 }
 
 interface LayoutContext {
   readonly id: number;
   readonly parent?: LayoutContext;
-  readonly summary: CompiledLayoutSummary;
+  readonly summary: ExpandedLayout;
   readonly depth: number;
 }
 
 interface PolicyContext {
   readonly parent?: PolicyContext;
-  readonly policy: ParsedRoutePolicy;
+  readonly policy: SemanticPolicy;
   readonly depth: number;
 }
 
@@ -47,7 +47,7 @@ interface RouteContext {
 }
 
 interface SlotRecord {
-  readonly compiled: CompiledRouteSlot;
+  readonly compiled: ExpandedRouteSlot;
   readonly context: RouteContext;
 }
 
@@ -56,14 +56,14 @@ interface PendingGroup {
   readonly context: RouteContext;
   readonly slotId?: string;
   readonly routeSetId?: string;
-  primary?: ParsedRouteEntryRoute | ParsedRouteEntryRedirect;
-  readonly outlets: ParsedRouteEntryRoute[];
+  primary?: SemanticRoute | SemanticRedirect;
+  readonly outlets: SemanticRoute[];
 }
 
-export function buildRouteGraph(graph: ParsedRouteGraph): BuildRouteGraphResult {
+export function expandNavigation(graph: SemanticNavigationProgram): ExpandNavigationResult {
   const diagnostics: RouteCompilerDiagnostic[] = [];
   const slots = new Map<string, SlotRecord>();
-  const routeSets: CompiledRouteSet[] = [];
+  const routeSets: ExpandedRouteSet[] = [];
   const groups = new Map<string, PendingGroup>();
   let layoutContextId = 0;
 
@@ -98,7 +98,7 @@ export function buildRouteGraph(graph: ParsedRouteGraph): BuildRouteGraphResult 
     visitEntries(routeSet.entries, slot.context, routeSet.slotId, routeSetId);
   }
 
-  const branches: CompiledRouteBranch[] = [];
+  const branches: ExpandedRouteBranch[] = [];
   for (const pending of groups.values()) {
     if (!pending.primary) {
       const first = pending.outlets[0];
@@ -141,7 +141,7 @@ export function buildRouteGraph(graph: ParsedRouteGraph): BuildRouteGraphResult 
   };
 
   function visitEntries(
-    entries: readonly ParsedRouteEntry[],
+    entries: readonly SemanticEntry[],
     context: RouteContext,
     slotId: string | undefined,
     routeSetId: string | undefined,
@@ -214,12 +214,12 @@ export function buildRouteGraph(graph: ParsedRouteGraph): BuildRouteGraphResult 
   }
 }
 
-function createBranch(group: PendingGroup): CompiledRouteBranch {
+function createBranch(group: PendingGroup): ExpandedRouteBranch {
   const primary = group.primary!;
   const layouts = materializeLayouts(group.context.layouts);
   const routePolicy = primary.policy;
   const policies = materializePolicies(group.context.policies, routePolicy);
-  const outlets: CompiledOutletSummary[] = group.outlets.map(outlet => ({
+  const outlets: ExpandedOutlet[] = group.outlets.map(outlet => ({
     path: group.path,
     pageType: outlet.pageType,
     loadMode: outlet.loadMode,
@@ -248,9 +248,9 @@ function createBranch(group: PendingGroup): CompiledRouteBranch {
   };
 }
 
-function materializeLayouts(context: LayoutContext | undefined): readonly CompiledLayoutSummary[] {
+function materializeLayouts(context: LayoutContext | undefined): readonly ExpandedLayout[] {
   if (!context) return Object.freeze([]);
-  const result = new Array<CompiledLayoutSummary>(context.depth);
+  const result = new Array<ExpandedLayout>(context.depth);
   let current: LayoutContext | undefined = context;
   while (current) {
     result[current.depth - 1] = current.summary;
@@ -261,11 +261,11 @@ function materializeLayouts(context: LayoutContext | undefined): readonly Compil
 
 function materializePolicies(
   context: PolicyContext | undefined,
-  routePolicy: ParsedRoutePolicy | undefined,
-): readonly ParsedRoutePolicy[] {
+  routePolicy: SemanticPolicy | undefined,
+): readonly SemanticPolicy[] {
   const count = (context?.depth ?? 0) + (routePolicy ? 1 : 0);
   if (!count) return Object.freeze([]);
-  const result = new Array<ParsedRoutePolicy>(count);
+  const result = new Array<SemanticPolicy>(count);
   let current = context;
   while (current) {
     result[current.depth - 1] = current.policy;
@@ -280,7 +280,7 @@ function compileRedirect(parentPath: string, redirectTo: string): string {
   return redirectTo.startsWith('/') ? joinRoutePath('/', redirectTo) : joinRoutePath(parentPath, redirectTo);
 }
 
-function createRouteSetId(routeSet: ParsedRoutesFor): string {
+function createRouteSetId(routeSet: SemanticRoutesFor): string {
   const exportName = routeSet.source.exportName ?? routeSet.source.localName ?? 'routes';
   const hash = shortHash(`${routeSet.slotId}\u0000${routeSet.source.filePath}\u0000${exportName}`);
   return `${safeStem(routeSet.slotId)}__${safeStem(exportName)}__${hash}`;
@@ -288,7 +288,7 @@ function createRouteSetId(routeSet: ParsedRoutesFor): string {
 
 function createBranchId(
   path: string,
-  layouts: readonly CompiledLayoutSummary[],
+  layouts: readonly ExpandedLayout[],
   source: SourceReference | undefined,
   routeSetId: string | undefined,
 ): string {
@@ -312,7 +312,6 @@ function safeStem(value: string): string {
     .toLowerCase() || 'routes';
 }
 
-function compareBranches(left: CompiledRouteBranch, right: CompiledRouteBranch): number {
+function compareBranches(left: ExpandedRouteBranch, right: ExpandedRouteBranch): number {
   return left.path.localeCompare(right.path) || left.id.localeCompare(right.id);
 }
-export { buildRouteGraph as expandNavigation };

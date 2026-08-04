@@ -1,9 +1,12 @@
 /**
- * AST-free Navigation IR.
+ * AST-free implementation of Waypoint Semantic Model v1.
  *
- * This module implements the concepts defined by semantic-model.md. It has no
- * dependency on TypeScript, Node filesystem APIs, emitters, or output paths.
+ * This module contains navigation meaning only. It has no dependency on
+ * TypeScript, Angular, Node filesystem APIs, artifact planning, or emitters.
  */
+export const NAVIGATION_SEMANTIC_MODEL_VERSION = 1 as const;
+export type NavigationSemanticModelVersion = typeof NAVIGATION_SEMANTIC_MODEL_VERSION;
+
 export interface SourceReference {
   readonly filePath: string;
   readonly exportName?: string;
@@ -12,100 +15,100 @@ export interface SourceReference {
   readonly length?: number;
 }
 
-export interface ParsedRoutePolicy {
+export interface SemanticPolicy {
   readonly allowAnonymous?: boolean;
   readonly roles?: readonly string[];
   readonly permissions?: readonly string[];
 }
 
-export interface ParsedStringSchema { readonly kind: 'string'; readonly default?: string; }
-export interface ParsedNumberSchema { readonly kind: 'number'; readonly default?: number; readonly min?: number; readonly max?: number; }
-export interface ParsedBooleanSchema { readonly kind: 'boolean'; readonly default?: boolean; }
-export interface ParsedArraySchema { readonly kind: 'array'; readonly default?: readonly string[]; }
-export interface ParsedDateSchema { readonly kind: 'date'; readonly default?: string; }
-export interface ParsedOptionalSchema { readonly kind: 'optional'; readonly inner: ParsedSchema; }
-export type ParsedSchema = ParsedStringSchema | ParsedNumberSchema | ParsedBooleanSchema | ParsedArraySchema | ParsedDateSchema | ParsedOptionalSchema;
-export type ParsedSchemaRecord = Readonly<Record<string, ParsedSchema>>;
+export interface SemanticStringSchema { readonly kind: 'string'; readonly default?: string; }
+export interface SemanticNumberSchema { readonly kind: 'number'; readonly default?: number; readonly min?: number; readonly max?: number; }
+export interface SemanticBooleanSchema { readonly kind: 'boolean'; readonly default?: boolean; }
+export interface SemanticArraySchema { readonly kind: 'array'; readonly default?: readonly string[]; }
+export interface SemanticDateSchema { readonly kind: 'date'; readonly default?: string; }
+export interface SemanticOptionalSchema { readonly kind: 'optional'; readonly inner: SemanticSchema; }
+export type SemanticSchema = SemanticStringSchema | SemanticNumberSchema | SemanticBooleanSchema | SemanticArraySchema | SemanticDateSchema | SemanticOptionalSchema;
+export type SemanticSchemaRecord = Readonly<Record<string, SemanticSchema>>;
 
-export interface ParsedRouteEntryBase {
+export interface SemanticEntryBase {
   readonly path: string;
   readonly name?: string;
   readonly outlet?: string;
-  readonly policy?: ParsedRoutePolicy;
-  readonly paramsSchema?: ParsedSchemaRecord;
-  readonly querySchema?: ParsedSchemaRecord;
+  readonly policy?: SemanticPolicy;
+  readonly paramsSchema?: SemanticSchemaRecord;
+  readonly querySchema?: SemanticSchemaRecord;
   readonly source: SourceReference;
   readonly branchSource?: SourceReference;
 }
 
-export interface ParsedRouteEntryLayout extends ParsedRouteEntryBase {
+export interface SemanticLayout extends SemanticEntryBase {
   readonly kind: 'layout';
   readonly pageType?: string;
   readonly loadMode: 'eager' | 'lazy';
-  readonly entries: readonly ParsedRouteEntry[];
+  readonly entries: readonly SemanticEntry[];
 }
 
-export interface ParsedRouteEntryRoute extends ParsedRouteEntryBase {
+export interface SemanticRoute extends SemanticEntryBase {
   readonly kind: 'route';
   readonly pageType?: string;
   readonly loadMode: 'eager' | 'lazy';
 }
 
-export interface ParsedRouteEntryRedirect extends ParsedRouteEntryBase {
+export interface SemanticRedirect extends SemanticEntryBase {
   readonly kind: 'redirect';
   readonly redirectTo: string;
 }
 
-export interface ParsedRouteSlot {
+export interface SemanticRouteSlot {
   readonly kind: 'slot';
   readonly id: string;
   readonly source: SourceReference;
 }
 
-export type ParsedRouteEntry = ParsedRouteEntryLayout | ParsedRouteEntryRoute | ParsedRouteEntryRedirect | ParsedRouteSlot;
+export type SemanticEntry = SemanticLayout | SemanticRoute | SemanticRedirect | SemanticRouteSlot;
 
-export interface ParsedRoutesFor {
+export interface SemanticRoutesFor {
   readonly kind: 'routes-for';
   readonly slotId: string;
-  readonly entries: readonly ParsedRouteEntry[];
+  readonly entries: readonly SemanticEntry[];
   readonly source: SourceReference;
 }
 
-export interface ParsedRouteGraph {
+export interface SemanticNavigationProgram {
   readonly entry: string;
-  readonly routes: readonly ParsedRouteEntry[];
-  readonly routeSets: readonly ParsedRoutesFor[];
+  readonly routes: readonly SemanticEntry[];
+  readonly routeSets: readonly SemanticRoutesFor[];
 }
 
-export interface CompiledLayoutSummary {
+export interface ExpandedLayout {
   readonly path: string;
   readonly pageType?: string;
   readonly loadMode: 'eager' | 'lazy';
-  readonly policy?: ParsedRoutePolicy;
+  readonly policy?: SemanticPolicy;
 }
 
-export interface CompiledOutletSummary {
+export interface ExpandedOutlet {
   readonly path: string;
   readonly pageType?: string;
   readonly loadMode: 'eager' | 'lazy';
   readonly outlet: string;
 }
 
-export interface CompiledRouteSlot {
+export interface ExpandedRouteSlot {
   readonly id: string;
   readonly parentPath: string;
   readonly layoutDepth: number;
   readonly source: SourceReference;
 }
 
-export interface CompiledRouteSet {
+export interface ExpandedRouteSet {
   readonly id: string;
   readonly slotId: string;
   readonly source: SourceReference;
   readonly branchIds: readonly string[];
 }
 
-export interface CompiledRouteBranch {
+export interface ExpandedRouteBranch {
   readonly id: string;
   readonly kind: 'route' | 'redirect';
   readonly path: string;
@@ -114,25 +117,18 @@ export interface CompiledRouteBranch {
   readonly pageType?: string;
   readonly loadMode?: 'eager' | 'lazy';
   readonly redirectTo?: string;
-  readonly paramsSchema?: ParsedSchemaRecord;
-  readonly querySchema?: ParsedSchemaRecord;
-  readonly layouts: readonly CompiledLayoutSummary[];
-  readonly outlets: readonly CompiledOutletSummary[];
-  readonly policies: readonly ParsedRoutePolicy[];
+  readonly paramsSchema?: SemanticSchemaRecord;
+  readonly querySchema?: SemanticSchemaRecord;
+  readonly layouts: readonly ExpandedLayout[];
+  readonly outlets: readonly ExpandedOutlet[];
+  readonly policies: readonly SemanticPolicy[];
   readonly source?: SourceReference;
   readonly slotId?: string;
   readonly routeSetId?: string;
 }
 
-export interface CompiledRouteModel {
-  readonly branches: readonly CompiledRouteBranch[];
-  readonly slots: readonly CompiledRouteSlot[];
-  readonly routeSets: readonly CompiledRouteSet[];
+export interface ExpandedNavigationModel {
+  readonly branches: readonly ExpandedRouteBranch[];
+  readonly slots: readonly ExpandedRouteSlot[];
+  readonly routeSets: readonly ExpandedRouteSet[];
 }
-
-/** Semantic model produced by source resolution. */
-export type ResolvedNavigationModel = ParsedRouteGraph;
-
-/** Expanded matcher and ownership model produced from the semantic model. */
-export type ExpandedNavigationModel = CompiledRouteModel;
-
