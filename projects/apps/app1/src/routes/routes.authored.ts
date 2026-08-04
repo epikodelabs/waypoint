@@ -1,4 +1,4 @@
-﻿import { type NavigationTree } from '@epikodelabs/waypoint';
+import { type NavigationTree } from '@epikodelabs/waypoint';
 
 import { appShellRoute } from './app-shell.route';
 import { introBranchRoutes } from './intro.route';
@@ -9,4 +9,3 @@ export const routes = [
   ...legacyBranchRoutes,
   appShellRoute,
 ] as const satisfies NavigationTree;
-

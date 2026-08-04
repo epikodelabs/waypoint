@@ -2378,4 +2378,40 @@ idescribe('Router', () => {
         });
     });
 
+    describe('revalidation', () => {
+        it('should rerun the current navigation without changing browser history', async () => {
+            let loadCount = 0;
+
+            router = createRouter({
+                routes: [{
+                    path: '',
+                    load: async () => {
+                        loadCount++;
+                        return {
+                            component: createComponent(`Home ${loadCount}`),
+                        };
+                    },
+                }],
+                onSameUrlNavigation: 'ignore',
+                render: (_name, node) => {
+                    outlet.replaceChildren(node);
+                },
+            });
+
+            expect(await router.navigate('/')).toBeTrue();
+            expect(loadCount).toBe(1);
+            expect(outlet.textContent).toBe('Home 1');
+
+            const pushState = spyOn(window.history, 'pushState').and.callThrough();
+            const replaceState = spyOn(window.history, 'replaceState').and.callThrough();
+
+            expect(await router.revalidate()).toBeTrue();
+            expect(loadCount).toBe(2);
+            expect(outlet.textContent).toBe('Home 2');
+            expect(pushState).not.toHaveBeenCalled();
+            expect(replaceState).not.toHaveBeenCalled();
+        });
+    });
+
+
 });

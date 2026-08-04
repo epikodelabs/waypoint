@@ -1,4 +1,4 @@
-﻿import {
+import {
   layout,
   type NavigationTree,
 } from '@epikodelabs/waypoint';
@@ -25,4 +25,3 @@ export const appShellRoute = layout(
   DemoShellComponent,
   appShellEntries,
 );
-

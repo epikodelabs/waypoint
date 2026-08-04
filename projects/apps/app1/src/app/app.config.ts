@@ -1,4 +1,4 @@
-﻿import {
+import {
   ApplicationConfig,
   ApplicationModule,
   importProvidersFrom,
@@ -18,4 +18,3 @@ export const appConfig: ApplicationConfig = {
     }),
   ],
 };
-

@@ -1,4 +1,4 @@
-﻿import { Component } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterLink } from '@epikodelabs/waypoint';
 
 @Component({
@@ -126,4 +126,3 @@ import { RouterLink } from '@epikodelabs/waypoint';
   `,
 })
 export class ReportsPage {}
-

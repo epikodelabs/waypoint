@@ -1,4 +1,4 @@
-﻿import {
+import {
   Component,
   inject,
 } from '@angular/core';
@@ -25,4 +25,3 @@ export class App {
     return this.session.currentUser();
   }
 }
-
