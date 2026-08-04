@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { buildNavigationIr } from '../lib/ir/build-navigation-ir.js';
 import { expandNavigation } from '../lib/ir/expand-navigation.js';
 import { validateNavigation } from '../lib/validation/validate-navigation.js';
 import type { SemanticNavigationProgram } from '../lib/index.js';
@@ -32,7 +33,7 @@ test('compiles routesFor entries relative to the retained slot context', () => {
     }],
   };
 
-  const expanded = expandNavigation(graph);
+  const expanded = expandNavigation(buildNavigationIr(graph));
   assert.deepEqual(expanded.diagnostics, []);
   assert.equal(expanded.model.slots[0]?.parentPath, '/app');
   assert.equal(expanded.model.branches[0]?.path, '/app/dashboard');
@@ -51,7 +52,7 @@ test('reports routesFor declarations targeting unknown slots', () => {
       entries: [],
     }],
   };
-  const expanded = expandNavigation(graph);
+  const expanded = expandNavigation(buildNavigationIr(graph));
   assert.equal(expanded.diagnostics[0]?.code, 'WPT2002');
 });
 
@@ -79,7 +80,7 @@ test('validates duplicate inherited path parameter names', () => {
       }],
     }],
   };
-  const expanded = expandNavigation(graph);
+  const expanded = expandNavigation(buildNavigationIr(graph));
   const validated = validateNavigation(expanded.model);
   assert.ok(validated.diagnostics.some(item => item.code === 'WPT2211'));
 });

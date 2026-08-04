@@ -5,6 +5,7 @@ import { bundleArtifacts } from '../emitters/bundle-artifacts.js';
 import { emitBrowserEntries } from '../emitters/emit-browser-entries.js';
 import { planRouteArtifacts } from '../planning/plan-artifacts.js';
 import { emitServerArtifacts } from '../emitters/emit-server-artifacts.js';
+import { buildNavigationIr } from '../ir/build-navigation-ir.js';
 import { expandNavigation } from '../ir/expand-navigation.js';
 import { resolveNavigationProgram } from '../resolution/resolve-navigation-program.js';
 import { evaluateStaticRouteData } from '../resolution/evaluate-static-route-data.js';
@@ -24,7 +25,8 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
   const evaluated = await evaluateStaticRouteData(semantic.program);
   diagnostics.push(...evaluated.diagnostics);
 
-  const expanded = expandNavigation(semantic.program);
+  const navigationIr = buildNavigationIr(semantic.program);
+  const expanded = expandNavigation(navigationIr);
   diagnostics.push(...expanded.diagnostics);
 
   const validated = validateNavigation(expanded.model);

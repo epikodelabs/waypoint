@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { buildNavigationIr } from '../lib/ir/build-navigation-ir.js';
 import { expandNavigation } from '../lib/ir/expand-navigation.js';
 import type { SemanticNavigationProgram } from '../lib/index.js';
 
@@ -21,8 +22,8 @@ const graph: SemanticNavigationProgram = {
 };
 
 test('derives stable route-set and anonymous branch identities', () => {
-  const first = expandNavigation(graph).model;
-  const second = expandNavigation(graph).model;
+  const first = expandNavigation(buildNavigationIr(graph)).model;
+  const second = expandNavigation(buildNavigationIr(graph)).model;
   assert.equal(first.routeSets[0]?.id, second.routeSets[0]?.id);
   assert.equal(first.branches[0]?.id, second.branches[0]?.id);
 });

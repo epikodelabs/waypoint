@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { planRouteArtifacts } from '../lib/planning/plan-artifacts.js';
+import { buildNavigationIr } from '../lib/ir/build-navigation-ir.js';
 import { expandNavigation } from '../lib/ir/expand-navigation.js';
 import type { SemanticNavigationProgram, PlannedCompilerOutputs } from '../lib/index.js';
 
@@ -33,7 +34,8 @@ const graph: SemanticNavigationProgram = {
 };
 
 test('keeps AST concerns out of expansion and artifact planning', () => {
-  const model = expandNavigation(graph).model;
+  const ir = buildNavigationIr(graph);
+  const model = expandNavigation(ir).model;
   const planned: PlannedCompilerOutputs = {
     entry: '/app/routes.ts',
     serverOutput: '/dist/server.json',
