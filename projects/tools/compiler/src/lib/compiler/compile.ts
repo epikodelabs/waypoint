@@ -9,7 +9,10 @@ import { buildNavigationIr } from '../ir/build-navigation-ir.js';
 import { expandNavigation } from '../ir/expand-navigation.js';
 import { resolveNavigationProgram } from '../resolution/resolve-navigation-program.js';
 import { evaluateStaticRouteData } from '../resolution/evaluate-static-route-data.js';
-import { validateNavigation } from '../validation/validate-navigation.js';
+import {
+  validateExpandedNavigation,
+  validateNavigationIr,
+} from '../validation/validate-navigation.js';
 import { diagnostic, hasErrors } from './diagnostics.js';
 import type { RouteCompilerDiagnostic, RouteCompilerOptions, RouteCompilerResult } from './contracts.js';
 
@@ -26,11 +29,23 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
   diagnostics.push(...evaluated.diagnostics);
 
   const navigationIr = buildNavigationIr(semantic.program);
+  const validatedIr = validateNavigationIr(navigationIr);
+  diagnostics.push(...validatedIr.diagnostics);
+
+  if (hasErrors(diagnostics)) {
+    diagnostics.unshift(diagnostic(
+      'WPT0002',
+      'error',
+      `Route compilation for ${path.basename(planned.entry)} stopped before expansion because Navigation IR validation failed.`,
+    ));
+    return { planned, diagnostics, emitted: [], implemented: true };
+  }
+
   const expanded = expandNavigation(navigationIr);
   diagnostics.push(...expanded.diagnostics);
 
-  const validated = validateNavigation(expanded.model);
-  diagnostics.push(...validated.diagnostics);
+  const validatedExpanded = validateExpandedNavigation(expanded.model);
+  diagnostics.push(...validatedExpanded.diagnostics);
 
   if (hasErrors(diagnostics)) {
     diagnostics.unshift(diagnostic(

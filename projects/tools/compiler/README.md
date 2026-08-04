@@ -1,29 +1,82 @@
 # Route Compiler
 
-`@epikodelabs/route-compiler` is the planned compiler package for deriving:
+`@epikodelabs/route-compiler` resolves authored Waypoint navigation declarations into an AST-free semantic program, validates and expands that program, plans protected route artifacts, and emits server metadata and focused browser entries.
 
-- server authorization/index metadata;
-- named route catalogs;
-- browser route entry modules;
-- artifact manifests for protected route delivery.
+## Pipeline
 
-This package is intentionally scaffolded as a plain Node/TypeScript project, not
-an Angular project.
+```text
+TypeScript source
+→ discovery
+→ semantic resolution
+→ Navigation IR
+→ expansion
+→ validation
+→ artifact planning
+→ emitters
+```
 
-## Planned responsibilities
+## Project structure
 
-- parse authored route source;
-- statically evaluate server-relevant fields such as `path`, `name`, and `policy`;
-- emit server metadata in a language-neutral format;
-- emit focused browser route entry modules;
-- hand those entries off to a bundler step.
+```text
+src/lib/
+  compiler/    orchestration, configuration, diagnostics, output contracts
+  discovery/   TypeScript program and declaration discovery
+  resolution/  AST-to-semantic-program resolution
+  ir/          Semantic Model v1, path rules, navigation expansion
+  validation/  validation over expanded navigation
+  planning/    deterministic artifact planning
+  emitters/    browser/server emission and bundling boundary
+```
 
-## Status
+`semantic-model.md` is the normative language contract. `src/lib/ir/model.ts` is its AST-free implementation.
 
-The current implementation provides:
+The compiler uses only stage-specific terminology:
 
-- a typed programmatic API;
-- a CLI entrypoint;
-- compilation planning and output-path normalization.
+```text
+SemanticRoute
+→ ExpandedRouteBranch
+→ PlannedBrowserEntry / PlannedServerShard
+```
 
-Route AST parsing and artifact emission are not implemented yet.
+Legacy `Parsed*`, `Compiled*`, and `RouteGraph` names are intentionally absent.
+
+## Current capabilities
+
+- `routeSlot()` and exported `routesFor()` discovery;
+- semantic source provenance;
+- inherited path, layout, policy, and ownership expansion;
+- strict path, parameter, schema, name, outlet, and ownership validation;
+- deterministic route-set and branch identity;
+- server index and shard planning;
+- focused browser-entry emission;
+- dry-run compilation.
+
+Artifact bundling remains the next implementation stage.
+
+## Navigation IR
+
+The compiler lowers the AST-free semantic program into a compact Navigation IR
+before expansion:
+
+```text
+SemanticNavigationProgram
+→ NavigationIr
+→ ExpandedNavigationModel
+```
+
+Navigation IR interns repeated identities and stores child lists as ranges. See
+`NAVIGATION-IR.md` for the representation contract.
+
+## Validation pipeline
+
+Validation is split at the Navigation IR boundary:
+
+```text
+SemanticNavigationProgram
+→ NavigationIr
+→ validateNavigationIr()
+→ ExpandedNavigationModel
+→ validateExpandedNavigation()
+```
+
+IR validation checks structural references, ranges, schemas, slots, and `routesFor()` ownership before expansion. Expanded validation checks composed paths, parameter/schema agreement, names, patterns, outlets, and redirects. Shared validation diagnostics use stable `NAV*` codes.

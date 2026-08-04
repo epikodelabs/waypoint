@@ -20,7 +20,11 @@ export {
   readIrString,
 } from './ir/navigation-ir.js';
 export * from './ir/route-path.js';
-export { validateNavigation } from './validation/validate-navigation.js';
+export {
+  validateExpandedNavigation,
+  validateNavigationIr,
+} from './validation/validate-navigation.js';
+export { NavigationDiagnosticCode } from './validation/diagnostic-codes.js';
 export { planRouteArtifacts } from './planning/plan-artifacts.js';
 export { emitBrowserEntries } from './emitters/emit-browser-entries.js';
 export { emitServerArtifacts } from './emitters/emit-server-artifacts.js';

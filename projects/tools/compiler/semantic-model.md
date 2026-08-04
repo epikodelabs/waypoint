@@ -2,6 +2,8 @@
 
 ## Status
 
+**Finalized: Semantic Model v1.** Changes to the laws or entities in this document require an explicit semantic-model revision. Additive compiler metadata and artifact formats do not change the semantic model.
+
 This document defines the semantic model of the Waypoint navigation language.
 
 It describes what Waypoint route declarations mean independently of:
@@ -15,6 +17,25 @@ It describes what Waypoint route declarations mean independently of:
 - file names and output directories.
 
 The compiler, runtime, server integration, and tooling should all implement this model consistently.
+
+---
+
+
+## Normative decisions for v1
+
+The following decisions are frozen for Semantic Model v1:
+
+- `routeSlot()` and named rendering outlets are separate concepts.
+- A slot is retained after route-set expansion.
+- `routesFor()` targets exactly one existing slot.
+- One owner per slot is supported in v1.
+- Slot IDs and route names are globally unique in one navigation program.
+- Paths compose segment-by-segment through layouts and slot contexts.
+- Optional path segments and optional path-parameter schemas are not supported.
+- `paramsSchema` refines path parameters but never changes path shape.
+- Invalid supplied schema values fail rather than being clamped or repaired.
+- Artifact files, names, hashes, and delivery URLs are derived data, not semantic entities.
+- TypeScript AST nodes cannot appear in the resolved semantic program.
 
 ---
 
@@ -297,7 +318,7 @@ A route slot is not a named rendering outlet.
 The distinction is fundamental:
 
 ```text
-routeSlot()  extends the route graph
+routeSlot()  extends the navigation
 outlet       selects a rendered view target
 ```
 

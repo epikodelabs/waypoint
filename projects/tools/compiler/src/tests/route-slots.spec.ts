@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildNavigationIr } from '../lib/ir/build-navigation-ir.js';
 import { expandNavigation } from '../lib/ir/expand-navigation.js';
-import { validateNavigation } from '../lib/validation/validate-navigation.js';
+import { validateExpandedNavigation } from '../lib/validation/validate-navigation.js';
 import type { SemanticNavigationProgram } from '../lib/index.js';
 
 const source = { filePath: '/app/routes.ts', exportName: 'routes' } as const;
@@ -81,6 +81,6 @@ test('validates duplicate inherited path parameter names', () => {
     }],
   };
   const expanded = expandNavigation(buildNavigationIr(graph));
-  const validated = validateNavigation(expanded.model);
-  assert.ok(validated.diagnostics.some(item => item.code === 'WPT2211'));
+  const validated = validateExpandedNavigation(expanded.model);
+  assert.ok(validated.diagnostics.some(item => item.code === 'NAV1101'));
 });
