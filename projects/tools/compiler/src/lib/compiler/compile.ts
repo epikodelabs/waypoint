@@ -69,7 +69,7 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
   const emittedBrowser = await emitBrowserEntries(planned, plannedArtifacts.plan);
   diagnostics.push(...emittedBrowser.diagnostics);
 
-  const bundled = await bundleArtifacts(planned);
+  const bundled = await bundleArtifacts(planned, plannedArtifacts.plan);
   diagnostics.push(...bundled.diagnostics);
 
   diagnostics.unshift(diagnostic(
@@ -91,5 +91,6 @@ async function ensureOutputDirectories(planned: RouteCompilerResult['planned']):
     fs.mkdir(path.dirname(planned.serverOutput), { recursive: true }),
     fs.mkdir(planned.entriesOutput, { recursive: true }),
     fs.mkdir(path.dirname(planned.manifestOutput), { recursive: true }),
+    fs.mkdir(planned.artifactsOutput, { recursive: true }),
   ]);
 }

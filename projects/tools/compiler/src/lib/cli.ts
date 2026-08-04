@@ -21,6 +21,7 @@ async function main(): Promise<void> {
   process.stdout.write(`serverOutput: ${result.planned.serverOutput}\n`);
   process.stdout.write(`entriesOutput: ${result.planned.entriesOutput}\n`);
   process.stdout.write(`manifestOutput: ${result.planned.manifestOutput}\n`);
+  process.stdout.write(`artifactsOutput: ${result.planned.artifactsOutput}\n`);
   process.stdout.write(`dryRun: ${result.planned.dryRun}\n`);
 }
 
@@ -63,6 +64,7 @@ function readCompileOptions(args: readonly string[]): RouteCompilerOptions {
     serverOutput,
     entriesOutput,
     manifestOutput,
+    artifactsOutput: flags.get('artifacts-output'),
     routesExport: flags.get('routes-export'),
     dryRun,
   };
@@ -76,6 +78,7 @@ function printUsage(): void {
       '--server-output <file> ' +
       '--entries-output <dir> ' +
       '--manifest-output <file> ' +
+      '[--artifacts-output <dir>] ' +
       '[--routes-export <name>] ' +
       '[--dry-run]\n',
   );

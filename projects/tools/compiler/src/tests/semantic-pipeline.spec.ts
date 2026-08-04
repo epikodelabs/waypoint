@@ -41,6 +41,7 @@ test('keeps AST concerns out of expansion and artifact planning', () => {
     serverOutput: '/dist/server.json',
     entriesOutput: '/dist/entries',
     manifestOutput: '/dist/manifest.json',
+    artifactsOutput: '/dist/artifacts',
     dryRun: true,
     routesExport: 'routes',
   };

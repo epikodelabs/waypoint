@@ -82,3 +82,7 @@ SemanticNavigationProgram
 ```
 
 IR validation checks structural references, ranges, schemas, slots, and `routesFor()` ownership before expansion. Expanded validation checks composed paths, parameter/schema agreement, names, patterns, outlets, and redirects. Shared validation diagnostics use stable `NAV*` codes.
+
+## Artifact Plan v1
+
+The compiler now produces a versioned `RouteArtifactPlan` before emission. The plan is the sole contract for server emitters, browser-entry emitters, and the future bundler. It records hierarchical artifact dependencies, generated entries, isolated browser bundle requirements, server shards, and manifest/index documents. See `ARTIFACT-PLAN-V1.md`.

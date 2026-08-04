@@ -1,3 +1,4 @@
+export { ARTIFACT_PLAN_VERSION } from './compiler/contracts.js';
 export { compileRoutes } from './compiler/compile.js';
 export { normalizeCompilerOptions } from './compiler/config.js';
 export { diagnostic, hasErrors, toSourceSpan } from './compiler/diagnostics.js';
