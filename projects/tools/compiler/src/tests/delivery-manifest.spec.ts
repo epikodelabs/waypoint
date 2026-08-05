@@ -60,6 +60,8 @@ const bundleResult: ArtifactBundleResult = {
   }],
   diagnostics: [],
   emitted: ['/dist/artifacts/workspace-set-ABC123.js'],
+  replaced: [],
+  removed: [],
 };
 
 test('finalizes server and browser delivery metadata from actual bundle outputs', () => {
@@ -82,7 +84,7 @@ test('rejects an incomplete bundle result', () => {
   assert.throws(
     () => finalizeDeliveryDocuments(
       plan,
-      { artifacts: [], diagnostics: [], emitted: [] },
+      { artifacts: [], diagnostics: [], emitted: [], replaced: [], removed: [] },
       path.join('/dist', 'server.json'),
       path.join('/dist', 'manifest.json'),
     ),

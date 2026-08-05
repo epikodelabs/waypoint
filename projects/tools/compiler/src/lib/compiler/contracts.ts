@@ -209,7 +209,12 @@ export interface BundledArtifact {
 export interface ArtifactBundleResult {
   readonly artifacts: readonly BundledArtifact[];
   readonly diagnostics: readonly RouteCompilerDiagnostic[];
+  /** Files present in the newly published artifact directory. */
   readonly emitted: readonly string[];
+  /** Published files whose paths also existed in the previous artifact set. */
+  readonly replaced: readonly string[];
+  /** Stale files removed by replacing the previous artifact directory. */
+  readonly removed: readonly string[];
 }
 
 export interface RouteCompilerResult {

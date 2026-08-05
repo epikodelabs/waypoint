@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { build, type BuildResult, type Metafile, type OutputFile } from 'esbuild';
 import { diagnostic } from '../compiler/diagnostics.js';
 import type {
@@ -17,12 +18,12 @@ interface PreparedBundle {
 }
 
 /**
- * Bundles every route-set entry independently.
+ * Bundles every route-set entry independently and publishes the complete
+ * artifact directory with one atomic directory swap.
  *
- * Artifact Plan v1 explicitly forbids shared protected chunks, so each
+ * Artifact Plan v1 explicitly forbids shared protected chunks, so every
  * artifact is built in its own esbuild invocation with splitting disabled.
- * All builds use write:false and are persisted only after every artifact has
- * built successfully, preventing publication of a partial artifact set.
+ * Nothing is published until all builds and all staging writes succeed.
  */
 export async function bundleArtifacts(
   planned: PlannedCompilerOutputs,
@@ -37,6 +38,8 @@ export async function bundleArtifacts(
         `Planned ${plan.artifacts.length} isolated browser artifact(s) for ${planned.artifactsOutput}.`,
       )],
       emitted: Object.freeze([]),
+      replaced: Object.freeze([]),
+      removed: Object.freeze([]),
     };
   }
 
@@ -60,34 +63,52 @@ export async function bundleArtifacts(
   }
 
   if (diagnostics.some(item => item.level === 'error')) {
-    return {
-      artifacts: Object.freeze([]),
-      diagnostics: Object.freeze(diagnostics),
-      emitted: Object.freeze([]),
-    };
+    return emptyFailure(diagnostics);
   }
 
-  await fs.mkdir(planned.artifactsOutput, { recursive: true });
-  await Promise.all(prepared.map(async item => {
-    await fs.mkdir(path.dirname(item.artifact.outputPath), { recursive: true });
-    await fs.writeFile(item.artifact.outputPath, item.outputFile.contents);
-  }));
+  let publication: PublicationChanges;
+  try {
+    publication = await publishArtifactDirectory(
+      planned.artifactsOutput,
+      prepared,
+    );
+  } catch (error) {
+    diagnostics.push(diagnostic(
+      'WPT4002',
+      'error',
+      `Failed to publish browser artifacts atomically: ${formatBuildError(error)}`,
+    ));
+    return emptyFailure(diagnostics);
+  }
 
   const artifacts = Object.freeze(prepared
     .map(item => item.artifact)
     .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)));
-  const emitted = Object.freeze(artifacts.map(artifact => artifact.outputPath));
 
   diagnostics.push(diagnostic(
     'WPT4000',
     'info',
-    `Bundled ${artifacts.length} isolated browser artifact(s) into ${planned.artifactsOutput}.`,
+    `Bundled and published ${artifacts.length} isolated browser artifact(s) into ${planned.artifactsOutput}; removed ${publication.removed.length} stale file(s).`,
   ));
 
   return {
     artifacts,
     diagnostics: Object.freeze(diagnostics),
-    emitted,
+    emitted: publication.emitted,
+    replaced: publication.replaced,
+    removed: publication.removed,
+  };
+}
+
+function emptyFailure(
+  diagnostics: readonly RouteCompilerDiagnostic[],
+): ArtifactBundleResult {
+  return {
+    artifacts: Object.freeze([]),
+    diagnostics: Object.freeze([...diagnostics]),
+    emitted: Object.freeze([]),
+    replaced: Object.freeze([]),
+    removed: Object.freeze([]),
   };
 }
 
@@ -115,10 +136,11 @@ async function buildArtifact(
 
   const outputFile = requireJavaScriptOutput(result, artifact);
   if (!result.metafile) {
-    throw new Error(`esbuild did not return metadata for \"${artifact.artifactKey}\".`);
+    throw new Error(`esbuild did not return metadata for "${artifact.artifactKey}".`);
   }
   const outputMeta = readOutputMetadata(result.metafile, artifact);
   const outputPath = path.resolve(outputFile.path);
+  requireInsideDirectory(artifact.bundle.outputDirectory, outputPath);
 
   return {
     outputFile,
@@ -136,6 +158,127 @@ async function buildArtifact(
         .sort((left, right) => left.localeCompare(right))),
     },
   };
+}
+
+interface PublicationChanges {
+  readonly emitted: readonly string[];
+  readonly replaced: readonly string[];
+  readonly removed: readonly string[];
+}
+
+async function publishArtifactDirectory(
+  outputDirectory: string,
+  prepared: readonly PreparedBundle[],
+): Promise<PublicationChanges> {
+  const target = path.resolve(outputDirectory);
+  const parent = path.dirname(target);
+  const stem = path.basename(target);
+  const token = `${process.pid}-${randomUUID()}`;
+  const staging = path.join(parent, `.${stem}.staging-${token}`);
+  const backup = path.join(parent, `.${stem}.backup-${token}`);
+
+  await fs.mkdir(parent, { recursive: true });
+  const previousFiles = await listFiles(target);
+  const nextFiles = new Set<string>();
+
+  try {
+    await fs.mkdir(staging, { recursive: true });
+
+    for (const item of prepared) {
+      const relative = portableRelative(target, item.artifact.outputPath);
+      if (relative.startsWith('../') || relative === '..') {
+        throw new Error(
+          `Artifact output "${item.artifact.outputPath}" is outside "${target}".`,
+        );
+      }
+      nextFiles.add(relative);
+      const stagedPath = path.join(staging, relative);
+      await fs.mkdir(path.dirname(stagedPath), { recursive: true });
+      await fs.writeFile(stagedPath, item.outputFile.contents);
+    }
+
+    const hadTarget = await exists(target);
+    if (hadTarget) await fs.rename(target, backup);
+
+    try {
+      await fs.rename(staging, target);
+    } catch (error) {
+      if (hadTarget && await exists(backup)) {
+        await fs.rename(backup, target);
+      }
+      throw error;
+    }
+
+    if (await exists(backup)) {
+      await fs.rm(backup, { recursive: true, force: true });
+    }
+  } catch (error) {
+    await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+    if (!await exists(target) && await exists(backup)) {
+      await fs.rename(backup, target).catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+    await fs.rm(backup, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  const emitted = [...nextFiles]
+    .sort()
+    .map(relative => path.join(target, relative));
+  const replaced = [...nextFiles]
+    .filter(relative => previousFiles.has(relative))
+    .sort()
+    .map(relative => path.join(target, relative));
+  const removed = [...previousFiles]
+    .filter(relative => !nextFiles.has(relative))
+    .sort()
+    .map(relative => path.join(target, relative));
+
+  return {
+    emitted: Object.freeze(emitted),
+    replaced: Object.freeze(replaced),
+    removed: Object.freeze(removed),
+  };
+}
+
+async function listFiles(directory: string): Promise<Set<string>> {
+  const result = new Set<string>();
+  if (!await exists(directory)) return result;
+
+  async function visit(current: string): Promise<void> {
+    for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await visit(absolute);
+      } else if (entry.isFile()) {
+        result.add(portableRelative(directory, absolute));
+      }
+    }
+  }
+
+  await visit(directory);
+  return result;
+}
+
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function requireInsideDirectory(directory: string, filePath: string): void {
+  const relative = path.relative(path.resolve(directory), path.resolve(filePath));
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Output "${filePath}" is outside artifact directory "${directory}".`);
+  }
+}
+
+function portableRelative(from: string, to: string): string {
+  return path.relative(from, to).replace(/\\/g, '/');
 }
 
 function requireJavaScriptOutput(

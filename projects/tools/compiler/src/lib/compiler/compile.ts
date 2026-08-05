@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { normalizeCompilerOptions } from './config.js';
 import { bundleArtifacts } from '../emitters/bundle-artifacts.js';
 import { emitBrowserEntries } from '../emitters/emit-browser-entries.js';
@@ -67,10 +68,15 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
   const emittedBrowser = await emitBrowserEntries(planned, plannedArtifacts.plan);
   diagnostics.push(...emittedBrowser.diagnostics);
 
+  const artifactSnapshot = planned.dryRun
+    ? null
+    : await snapshotDirectory(planned.artifactsOutput);
+
   const bundled = await bundleArtifacts(planned, plannedArtifacts.plan);
   diagnostics.push(...bundled.diagnostics);
 
   if (hasErrors(diagnostics)) {
+    await artifactSnapshot?.restore();
     diagnostics.unshift(diagnostic(
       'WPT0002',
       'error',
@@ -84,17 +90,28 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
     };
   }
 
-  const delivery = planned.dryRun
-    ? {
-        serverIndex: plannedArtifacts.plan.serverIndex,
-        manifest: plannedArtifacts.plan.manifest,
-      }
-    : finalizeDeliveryDocuments(
-        plannedArtifacts.plan,
-        bundled,
-        planned.serverOutput,
-        planned.manifestOutput,
-      );
+  let delivery;
+  try {
+    delivery = planned.dryRun
+      ? {
+          serverIndex: plannedArtifacts.plan.serverIndex,
+          manifest: plannedArtifacts.plan.manifest,
+        }
+      : finalizeDeliveryDocuments(
+          plannedArtifacts.plan,
+          bundled,
+          planned.serverOutput,
+          planned.manifestOutput,
+        );
+  } catch (error) {
+    await artifactSnapshot?.restore();
+    diagnostics.push(diagnostic(
+      'WPT3102',
+      'error',
+      `Failed to finalize delivery metadata: ${formatError(error)}`,
+    ));
+    return { planned, diagnostics, emitted: emittedBrowser.emitted, implemented: true };
+  }
 
   const emittedServer = await emitServerArtifacts(
     planned,
@@ -102,6 +119,18 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
     delivery,
   );
   diagnostics.push(...emittedServer.diagnostics);
+
+  if (hasErrors(emittedServer.diagnostics)) {
+    await artifactSnapshot?.restore();
+    diagnostics.unshift(diagnostic(
+      'WPT0002',
+      'error',
+      `Route compilation for ${path.basename(planned.entry)} restored the previous artifact set because delivery publication failed.`,
+    ));
+    return { planned, diagnostics, emitted: emittedBrowser.emitted, implemented: true };
+  }
+
+  await artifactSnapshot?.discard();
 
   diagnostics.unshift(diagnostic(
     'WPT0001',
@@ -122,6 +151,52 @@ async function ensureOutputDirectories(planned: RouteCompilerResult['planned']):
     fs.mkdir(path.dirname(planned.serverOutput), { recursive: true }),
     fs.mkdir(planned.entriesOutput, { recursive: true }),
     fs.mkdir(path.dirname(planned.manifestOutput), { recursive: true }),
-    fs.mkdir(planned.artifactsOutput, { recursive: true }),
   ]);
+}
+
+interface DirectorySnapshot {
+  restore(): Promise<void>;
+  discard(): Promise<void>;
+}
+
+async function snapshotDirectory(directory: string): Promise<DirectorySnapshot> {
+  const target = path.resolve(directory);
+  const backup = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.compiler-snapshot-${process.pid}-${randomUUID()}`,
+  );
+  const existed = await pathExists(target);
+
+  if (existed) {
+    await fs.cp(target, backup, { recursive: true, force: true });
+  }
+
+  let settled = false;
+  return {
+    async restore(): Promise<void> {
+      if (settled) return;
+      settled = true;
+      await fs.rm(target, { recursive: true, force: true });
+      if (existed) await fs.rename(backup, target);
+      else await fs.rm(backup, { recursive: true, force: true });
+    },
+    async discard(): Promise<void> {
+      if (settled) return;
+      settled = true;
+      await fs.rm(backup, { recursive: true, force: true });
+    },
+  };
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

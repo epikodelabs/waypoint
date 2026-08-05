@@ -154,3 +154,45 @@ test('does not publish any bundle when one planned entry fails', async () => {
     await fs.rm(cwd, { recursive: true, force: true });
   }
 });
+
+
+test('removes stale hashed artifacts when publishing a successful build', async () => {
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'waypoint-bundler-stale-'));
+  try {
+    const plan = await createPlan(cwd);
+    const output = path.join(cwd, 'out/artifacts');
+    await fs.mkdir(output, { recursive: true });
+    const stale = path.join(output, 'alpha-set-STALE.js');
+    await fs.writeFile(stale, 'stale');
+
+    const result = await bundleArtifacts(plannedOutputs(cwd), plan);
+
+    assert.equal(result.diagnostics.some(item => item.level === 'error'), false);
+    assert.deepEqual(result.removed, [stale]);
+    await assert.rejects(fs.access(stale));
+    assert.equal(result.emitted.length, 2);
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('preserves the previous successful artifact set when a later build fails', async () => {
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'waypoint-bundler-preserve-'));
+  try {
+    const plan = await createPlan(cwd);
+    const first = await bundleArtifacts(plannedOutputs(cwd), plan);
+    assert.equal(first.diagnostics.some(item => item.level === 'error'), false);
+    const previous = new Map<string, string>();
+    for (const file of first.emitted) previous.set(file, await fs.readFile(file, 'utf8'));
+
+    await fs.rm(plan.artifacts[1]!.entry.outputPath);
+    const failed = await bundleArtifacts(plannedOutputs(cwd), plan);
+
+    assert.equal(failed.diagnostics.some(item => item.code === 'WPT4001'), true);
+    for (const [file, contents] of previous) {
+      assert.equal(await fs.readFile(file, 'utf8'), contents);
+    }
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});

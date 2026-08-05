@@ -89,3 +89,14 @@ IR validation checks structural references, ranges, schemas, slots, and `routesF
 ## Artifact Plan v1
 
 The compiler now produces a versioned `RouteArtifactPlan` before emission. The plan is the sole contract for server emitters, browser-entry emitters, and the future bundler. It records hierarchical artifact dependencies, generated entries, isolated browser bundle requirements, server shards, and manifest/index documents. See `ARTIFACT-PLAN-V1.md`.
+## Atomic publication
+
+Artifact Bundler v1 publishes through a staging directory and one directory
+rename. A successful compilation replaces the complete artifact set, removes
+stale content-hashed files, and records emitted, replaced, and removed paths
+separately.
+
+Server shards, the server index, and the browser manifest are staged together
+and committed with rollback backups. If delivery publication fails, the
+compiler restores the previous browser artifact directory and does not expose a
+partially updated delivery set.
