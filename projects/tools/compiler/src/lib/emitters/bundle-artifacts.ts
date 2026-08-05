@@ -151,11 +151,16 @@ async function buildArtifact(
       fileName: path.basename(outputPath),
       hash: outputFile.hash,
       bytes: outputFile.contents.byteLength,
-      imports: Object.freeze(outputMeta.imports
-        .map(item => item.path)
-        .sort((left, right) => left.localeCompare(right))),
-      inputs: Object.freeze(Object.keys(outputMeta.inputs)
-        .sort((left, right) => left.localeCompare(right))),
+      imports: Object.freeze(
+        [...new Set(
+          outputMeta.imports.map(item => item.path),
+        )].sort((a, b) => a.localeCompare(b)),
+      ),
+      inputs: Object.freeze(
+        [...new Set(
+          Object.keys(outputMeta.inputs),
+        )].sort(),
+      ),
     },
   };
 }

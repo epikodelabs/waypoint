@@ -319,12 +319,29 @@ function discoverRoutesFor(
       length: declaration.getWidth(sourceFile),
     };
 
+    const hasExplicitRouteSetId = resolved.arguments.length >= 3;
+    const routeSetIdArgument = hasExplicitRouteSetId
+      ? resolved.arguments[1]
+      : undefined;
+    const entriesArgument = resolved.arguments[
+      hasExplicitRouteSetId ? 2 : 1
+    ];
+
+    if (!entriesArgument) {
+      throw new Error(
+        'routesFor() requires slotId, routeSetId, and entries.',
+      );
+    }
+
     output.push({
       kind: 'routes-for',
+      id: routeSetIdArgument
+        ? readStringLiteral(routeSetIdArgument)
+        : undefined,
       slotId: readStringLiteral(resolved.arguments[0]),
       entries: parseRouteArray(
         context,
-        resolved.arguments[1],
+        entriesArgument,
         source,
         new Set<string>(),
       ),

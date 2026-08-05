@@ -418,6 +418,13 @@ function compileRedirect(parentPath: string, redirectTo: string): string {
 }
 
 function createRouteSetId(ir: NavigationIr, routeSet: NavigationIrRouteSetRecord): string {
+  const explicitId = readIrString(ir, routeSet.id ?? NO_IR_REF);
+  if (explicitId) {
+    return explicitId;
+  }
+
+  // Compatibility with Navigation IR produced from the former two-argument
+  // routesFor(slotId, entries) authoring form.
   const slotId = readIrString(ir, routeSet.slotId) ?? 'slot';
   const source = sourceFromIr(ir, routeSet.source);
   const exportName = source?.exportName ?? source?.localName ?? 'routes';

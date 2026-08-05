@@ -74,13 +74,27 @@ export function validateNavigationIr(
 
   const ownerBySlot = new Map<string, number>();
   const routeSetIdentities = new Set<string>();
+  const routeSetIds = new Set<string>();
   for (let index = 0; index < ir.routeSets.length; index++) {
     const routeSet = ir.routeSets[index]!;
     validateRange(routeSet.firstEntry, routeSet.entryCount, ir.entryRefs.length, `route set ${index} entry`, diagnostics);
+    validateStringRef(ir, routeSet.id ?? NO_IR_REF, `route set ${index} id`, diagnostics, true);
     validateSourceRef(ir, routeSet.source, `route set ${index} source`, diagnostics, false);
     const slotId = readRequiredString(ir, routeSet.slotId, `route set ${index} slotId`, diagnostics);
     if (!slotId) continue;
     const source = decodeIrSource(ir, routeSet.source);
+    const routeSetId = readIrString(ir, routeSet.id ?? NO_IR_REF);
+    if (routeSetId) {
+      if (routeSetIds.has(routeSetId)) {
+        diagnostics.push(diagnostic(
+          Code.duplicateRouteSetIdentity,
+          'error',
+          `Duplicate route set id "${routeSetId}".`,
+          source,
+        ));
+      }
+      routeSetIds.add(routeSetId);
+    }
     if (!slotSources.has(slotId)) {
       diagnostics.push(diagnostic(
         Code.unknownRouteSlot,

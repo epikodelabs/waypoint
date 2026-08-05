@@ -1,27 +1,11 @@
-import {
-  Component,
-  inject,
-} from '@angular/core';
-import {
-  RouterOutlet,
-  RouterLink,
-} from '@epikodelabs/waypoint';
-import { DemoSessionService, DemoUser } from './demo-session.service';
+import { Component } from '@angular/core';
+import { RouterLink, RouterOutlet } from '@epikodelabs/waypoint';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [
-    RouterOutlet,
-    RouterLink,
-  ],
+  imports: [RouterLink, RouterOutlet],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
-export class App {
-  readonly session = inject(DemoSessionService);
-
-  get currentUser(): DemoUser {
-    return this.session.currentUser();
-  }
-}
+export class App {}

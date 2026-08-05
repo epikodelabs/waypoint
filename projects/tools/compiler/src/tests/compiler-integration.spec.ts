@@ -18,14 +18,14 @@ test('discovers routeSlot and exported routesFor declarations end to end', async
     'export declare function route(path: string, component: unknown, options?: unknown): unknown;',
     'export declare function layout(path: string, component: unknown, entries: readonly unknown[]): unknown;',
     'export declare function routeSlot(id: string): unknown;',
-    'export declare function routesFor(id: string, entries: readonly unknown[]): unknown;',
+    'export declare function routesFor(slotId: string, routeSetId: string, entries: readonly unknown[]): unknown;',
     'export declare const s: any;',
   ].join('\n'));
   await fs.writeFile(path.join(cwd, 'routes.ts'), `
     import { layout, route, routeSlot, routesFor, s } from '@epikodelabs/waypoint';
     class AppLayout {}
     class ProjectPage {}
-    export const projectRoutes = routesFor('workspace', [
+    export const projectRoutes = routesFor('workspace', 'project-routes', [
       route('/projects/:projectId', ProjectPage, {
         name: 'project',
         paramsSchema: { projectId: s.number({ min: 1 }) },
@@ -58,9 +58,10 @@ test('discovers routeSlot and exported routesFor declarations end to end', async
     const manifest = JSON.parse(await fs.readFile(path.join(cwd, 'out/manifest.json'), 'utf8'));
     assert.equal(manifest.slots[0].id, 'workspace');
     assert.equal(manifest.routes[0].path, '/app/projects/:projectId');
+    assert.equal(manifest.routeSets[0].id, 'project-routes');
     assert.equal(manifest.routes[0].routeSetId, manifest.routeSets[0].id);
-    assert.equal(result.emitted.some(file => file.includes('route-set-workspace')), true);
-    assert.match(manifest.artifacts[0].file, /^artifacts\/workspace__project-routes__[a-f0-9]+-[A-Z0-9]+\.js$/i);
+    assert.equal(result.emitted.some(file => file.includes('route-set-project-routes')), true);
+    assert.match(manifest.artifacts[0].file, /^artifacts\/project-routes-[A-Z0-9]+\.js$/i);
     assert.equal(typeof manifest.artifacts[0].hash, 'string');
     assert.equal(manifest.artifacts[0].bytes > 0, true);
   } finally {

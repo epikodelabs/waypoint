@@ -1,0 +1,8 @@
+{
+  "compiler:build": "tsc -p projects/tools/compiler/tsconfig.json",
+  "compiler:check": "tsc -p projects/tools/compiler/tsconfig.json --noEmit",
+  "compiler:compile": "npm run compiler:build && node scripts/compile-routes.mjs",
+  "compiler:compile:clean": "node scripts/clean-routes.mjs && npm run compiler:compile",
+  "compiler:compile:check": "npm run compiler:build && node scripts/compile-routes.mjs --dry-run",
+  "compiler:watch": "npm run compiler:build && node scripts/watch-routes.mjs"
+}

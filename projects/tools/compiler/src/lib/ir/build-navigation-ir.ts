@@ -163,6 +163,7 @@ export function buildNavigationIr(
   for (const routeSet of program.routeSets) {
     const [firstEntry, entryCount] = buildEntryList(routeSet.entries);
     routeSets.push({
+      id: internString(routeSet.id),
       slotId: internString(routeSet.slotId),
       source: internSource(routeSet.source),
       firstEntry,

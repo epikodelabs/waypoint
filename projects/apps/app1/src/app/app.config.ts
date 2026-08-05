@@ -1,5 +1,5 @@
 import {
-  ApplicationConfig,
+  type ApplicationConfig,
   ApplicationModule,
   importProvidersFrom,
   provideBrowserGlobalErrorListeners,
@@ -8,6 +8,7 @@ import { BrowserModule } from '@angular/platform-browser';
 import { provideRouter } from '@epikodelabs/waypoint';
 
 import { routes } from './app.routes';
+import { loadProtectedRouteBranch } from './protected-route-loader';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -15,6 +16,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     ...provideRouter(routes, {
       viewTransitions: true,
+      resolveRoutes: loadProtectedRouteBranch,
     }),
   ],
 };

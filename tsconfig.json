@@ -35,6 +35,12 @@
       "path": "./projects/apps/app1/tsconfig.app.json"
     },
     {
+      "path": "./projects/apps/app2/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/apps/shared/tsconfig.app.json"
+    },
+    {
       "path": "./projects/tools/compiler/tsconfig.json"
     }
   ]
