@@ -16,8 +16,9 @@ export function diagnostic(
   message: string,
   source?: SourceReference,
   details: Pick<RouteCompilerDiagnostic, 'routePath' | 'routeName'> = {},
+  metadata: Pick<RouteCompilerDiagnostic, 'stage' | 'suggestion'> = {},
 ): RouteCompilerDiagnostic {
-  return { code, level, message, source: toSourceSpan(source), ...details };
+  return { code, level, message, source: toSourceSpan(source), ...details, ...metadata };
 }
 
 export function hasErrors(diagnostics: readonly RouteCompilerDiagnostic[]): boolean {

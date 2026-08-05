@@ -1,15 +1,11 @@
 import path from 'node:path';
 import type {
   ArtifactBundleResult,
+  FinalizedDeliveryDocuments,
   RouteArtifactManifestDocument,
   RouteArtifactPlan,
   ServerRouteIndexDocument,
 } from '../compiler/contracts.js';
-
-export interface FinalizedDeliveryDocuments {
-  readonly serverIndex: ServerRouteIndexDocument;
-  readonly manifest: RouteArtifactManifestDocument;
-}
 
 /** Combines the immutable plan with actual esbuild outputs. */
 export function finalizeDeliveryDocuments(

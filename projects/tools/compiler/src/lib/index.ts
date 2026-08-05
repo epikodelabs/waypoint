@@ -1,5 +1,11 @@
-export { ARTIFACT_PLAN_VERSION } from './compiler/contracts.js';
-export { compileRoutes } from './compiler/compile.js';
+export {
+  ARTIFACT_PLAN_VERSION,
+  COMPILER_CONTRACT_VERSION,
+  SERVER_ROUTE_INDEX_VERSION,
+  SERVER_ROUTE_SHARD_VERSION,
+  ROUTE_ARTIFACT_MANIFEST_VERSION,
+} from './compiler/contracts.js';
+export { compile, compileRoutes } from './compiler/compile.js';
 export { normalizeCompilerOptions } from './compiler/config.js';
 export { diagnostic, hasErrors, toSourceSpan } from './compiler/diagnostics.js';
 
@@ -26,6 +32,7 @@ export {
   validateNavigationIr,
 } from './validation/validate-navigation.js';
 export { NavigationDiagnosticCode } from './validation/diagnostic-codes.js';
+export { validateArtifactPlan, validateFinalizedDelivery } from './validation/validate-artifact-plan.js';
 export { planRouteArtifacts } from './planning/plan-artifacts.js';
 export { finalizeDeliveryDocuments } from './planning/finalize-delivery.js';
 export { emitBrowserEntries } from './emitters/emit-browser-entries.js';

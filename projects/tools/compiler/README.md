@@ -100,3 +100,10 @@ Server shards, the server index, and the browser manifest are staged together
 and committed with rollback backups. If delivery publication fails, the
 compiler restores the previous browser artifact directory and does not expose a
 partially updated delivery set.
+
+## Compiler Contracts v1
+
+The stable library entry point is `compile(options)`. `compileRoutes` remains an alias.
+Set `profile: true` to collect immutable per-stage timings and `inspect: true` to retain the semantic model, Navigation IR, expanded model, Artifact Plan, bundle result, and finalized delivery documents in `result.inspection`.
+
+Artifact Plan v1 is validated before emission. Finalized delivery metadata is validated against actual bundle outputs before transactional publication.

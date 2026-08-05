@@ -16,5 +16,7 @@ export function normalizeCompilerOptions(options: RouteCompilerOptions): Planned
     ),
     dryRun: options.dryRun === true,
     routesExport: options.routesExport ?? 'routes',
+    inspect: options.inspect === true,
+    profile: options.profile === true,
   };
 }

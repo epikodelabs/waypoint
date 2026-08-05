@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
 import { normalizeCompilerOptions } from './config.js';
 import { bundleArtifacts } from '../emitters/bundle-artifacts.js';
@@ -15,120 +16,195 @@ import {
   validateExpandedNavigation,
   validateNavigationIr,
 } from '../validation/validate-navigation.js';
+import {
+  validateArtifactPlan,
+  validateFinalizedDelivery,
+} from '../validation/validate-artifact-plan.js';
 import { diagnostic, hasErrors } from './diagnostics.js';
-import type { RouteCompilerDiagnostic, RouteCompilerOptions, RouteCompilerResult } from './contracts.js';
+import type {
+  ArtifactBundleResult,
+  CompilerInspection,
+  CompilerStageName,
+  CompilerStageTiming,
+  FinalizedDeliveryDocuments,
+  PlannedCompilerOutputs,
+  RouteArtifactPlan,
+  RouteCompilerDiagnostic,
+  RouteCompilerOptions,
+  RouteCompilerResult,
+} from './contracts.js';
+import type { SemanticNavigationProgram, ExpandedNavigationModel } from '../ir/model.js';
+import type { NavigationIr } from '../ir/navigation-ir.js';
 
-export async function compileRoutes(options: RouteCompilerOptions): Promise<RouteCompilerResult> {
+/** Stable Compiler Contracts v1 entry point. */
+export async function compile(options: RouteCompilerOptions): Promise<RouteCompilerResult> {
   const planned = normalizeCompilerOptions(options);
   const diagnostics: RouteCompilerDiagnostic[] = [];
+  const timings: CompilerStageTiming[] = [];
+  const emitted: string[] = [];
+
+  let semantic: SemanticNavigationProgram | undefined;
+  let navigationIr: NavigationIr | undefined;
+  let expanded: ExpandedNavigationModel | undefined;
+  let artifactPlan: RouteArtifactPlan | undefined;
+  let bundles: ArtifactBundleResult | undefined;
+  let delivery: FinalizedDeliveryDocuments | undefined;
+
+  const run = async <T>(stage: CompilerStageName, action: () => T | Promise<T>): Promise<T> => {
+    const started = performance.now();
+    try {
+      return await action();
+    } finally {
+      if (planned.profile) {
+        timings.push(Object.freeze({
+          stage,
+          durationMs: Number((performance.now() - started).toFixed(3)),
+        }));
+      }
+    }
+  };
+
+  const finish = (success: boolean): RouteCompilerResult => {
+    const inspection: CompilerInspection | undefined = planned.inspect
+      && semantic && navigationIr && expanded && artifactPlan
+      ? Object.freeze({
+          semantic,
+          navigationIr,
+          expanded,
+          artifactPlan,
+          bundles,
+          delivery,
+        })
+      : undefined;
+
+    return Object.freeze({
+      planned,
+      diagnostics: Object.freeze([...diagnostics]),
+      emitted: Object.freeze([...emitted]),
+      implemented: true,
+      success,
+      timings: Object.freeze([...timings]),
+      inspection,
+    });
+  };
 
   if (!planned.dryRun) await ensureOutputDirectories(planned);
 
-  const semantic = await resolveNavigationProgram(planned);
-  diagnostics.push(...semantic.diagnostics);
+  const resolved = await run('resolve', () => resolveNavigationProgram(planned));
+  semantic = resolved.program;
+  diagnostics.push(...resolved.diagnostics);
 
-  const evaluated = await evaluateStaticRouteData(semantic.program);
+  const evaluated = await run('evaluate', () => evaluateStaticRouteData(semantic!));
   diagnostics.push(...evaluated.diagnostics);
 
-  const navigationIr = buildNavigationIr(semantic.program);
-  const validatedIr = validateNavigationIr(navigationIr);
+  navigationIr = await run('ir', () => buildNavigationIr(semantic!));
+  const validatedIr = await run('validate-ir', () => validateNavigationIr(navigationIr!));
   diagnostics.push(...validatedIr.diagnostics);
 
   if (hasErrors(diagnostics)) {
-    diagnostics.unshift(diagnostic(
-      'WPT0002',
-      'error',
-      `Route compilation for ${path.basename(planned.entry)} stopped before expansion because Navigation IR validation failed.`,
-    ));
-    return { planned, diagnostics, emitted: [], implemented: true };
+    diagnostics.unshift(stopDiagnostic(planned, 'expansion', 'Navigation IR validation failed'));
+    return finish(false);
   }
 
-  const expanded = expandNavigation(navigationIr);
-  diagnostics.push(...expanded.diagnostics);
+  const expandedResult = await run('expand', () => expandNavigation(navigationIr!));
+  expanded = expandedResult.model;
+  diagnostics.push(...expandedResult.diagnostics);
 
-  const validatedExpanded = validateExpandedNavigation(expanded.model);
+  const validatedExpanded = await run(
+    'validate-expanded',
+    () => validateExpandedNavigation(expanded!),
+  );
   diagnostics.push(...validatedExpanded.diagnostics);
 
   if (hasErrors(diagnostics)) {
-    diagnostics.unshift(diagnostic(
-      'WPT0002',
-      'error',
-      `Route compilation for ${path.basename(planned.entry)} stopped before emission because validation failed.`,
-    ));
-    return { planned, diagnostics, emitted: [], implemented: true };
+    diagnostics.unshift(stopDiagnostic(planned, 'planning', 'expanded navigation validation failed'));
+    return finish(false);
   }
 
-  const plannedArtifacts = planRouteArtifacts(planned, expanded.model);
+  const plannedArtifacts = await run('plan', () => planRouteArtifacts(planned, expanded!));
+  artifactPlan = plannedArtifacts.plan;
   diagnostics.push(...plannedArtifacts.diagnostics);
 
+  const validatedPlan = await run('validate-plan', () => validateArtifactPlan(artifactPlan!));
+  diagnostics.push(...validatedPlan.diagnostics);
+
   if (hasErrors(diagnostics)) {
-    return { planned, diagnostics, emitted: [], implemented: true };
+    diagnostics.unshift(stopDiagnostic(planned, 'emission', 'Artifact Plan v1 validation failed'));
+    return finish(false);
   }
 
-  const emittedBrowser = await emitBrowserEntries(planned, plannedArtifacts.plan);
+  const emittedBrowser = await run(
+    'emit-entries',
+    () => emitBrowserEntries(planned, artifactPlan!),
+  );
   diagnostics.push(...emittedBrowser.diagnostics);
+  emitted.push(...emittedBrowser.emitted);
 
   const artifactSnapshot = planned.dryRun
     ? null
     : await snapshotDirectory(planned.artifactsOutput);
 
-  const bundled = await bundleArtifacts(planned, plannedArtifacts.plan);
-  diagnostics.push(...bundled.diagnostics);
+  bundles = await run('bundle', () => bundleArtifacts(planned, artifactPlan!));
+  diagnostics.push(...bundles.diagnostics);
 
   if (hasErrors(diagnostics)) {
     await artifactSnapshot?.restore();
-    diagnostics.unshift(diagnostic(
-      'WPT0002',
-      'error',
-      `Route compilation for ${path.basename(planned.entry)} stopped before delivery metadata was emitted because artifact bundling failed.`,
-    ));
-    return {
-      planned,
-      diagnostics,
-      emitted: emittedBrowser.emitted,
-      implemented: true,
-    };
+    diagnostics.unshift(stopDiagnostic(planned, 'delivery finalization', 'artifact bundling failed'));
+    return finish(false);
   }
+  emitted.push(...bundles.emitted);
 
-  let delivery;
   try {
-    delivery = planned.dryRun
+    delivery = await run('finalize', () => planned.dryRun
       ? {
-          serverIndex: plannedArtifacts.plan.serverIndex,
-          manifest: plannedArtifacts.plan.manifest,
+          serverIndex: artifactPlan!.serverIndex,
+          manifest: artifactPlan!.manifest,
         }
       : finalizeDeliveryDocuments(
-          plannedArtifacts.plan,
-          bundled,
+          artifactPlan!,
+          bundles!,
           planned.serverOutput,
           planned.manifestOutput,
-        );
+        ));
   } catch (error) {
     await artifactSnapshot?.restore();
     diagnostics.push(diagnostic(
       'WPT3102',
       'error',
       `Failed to finalize delivery metadata: ${formatError(error)}`,
+      undefined,
+      {},
+      { stage: 'finalize' },
     ));
-    return { planned, diagnostics, emitted: emittedBrowser.emitted, implemented: true };
+    return finish(false);
   }
 
-  const emittedServer = await emitServerArtifacts(
-    planned,
-    plannedArtifacts.plan,
-    delivery,
+  if (!planned.dryRun) {
+    const validatedDelivery = await run(
+      'validate-delivery',
+      () => validateFinalizedDelivery(artifactPlan!, bundles!, delivery!),
+    );
+    diagnostics.push(...validatedDelivery.diagnostics);
+  }
+
+  if (hasErrors(diagnostics)) {
+    await artifactSnapshot?.restore();
+    diagnostics.unshift(stopDiagnostic(planned, 'publication', 'delivery validation failed'));
+    return finish(false);
+  }
+
+  const emittedServer = await run(
+    'publish',
+    () => emitServerArtifacts(planned, artifactPlan!, delivery!),
   );
   diagnostics.push(...emittedServer.diagnostics);
 
   if (hasErrors(emittedServer.diagnostics)) {
     await artifactSnapshot?.restore();
-    diagnostics.unshift(diagnostic(
-      'WPT0002',
-      'error',
-      `Route compilation for ${path.basename(planned.entry)} restored the previous artifact set because delivery publication failed.`,
-    ));
-    return { planned, diagnostics, emitted: emittedBrowser.emitted, implemented: true };
+    diagnostics.unshift(stopDiagnostic(planned, 'completion', 'delivery publication failed and the previous artifact set was restored'));
+    return finish(false);
   }
+  emitted.push(...emittedServer.emitted);
 
   await artifactSnapshot?.discard();
 
@@ -138,15 +214,25 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
     `${planned.dryRun ? 'Planned' : 'Compiled'} routes from ${path.basename(planned.entry)}.`,
   ));
 
-  return {
-    planned,
-    diagnostics,
-    emitted: [...emittedBrowser.emitted, ...bundled.emitted, ...emittedServer.emitted],
-    implemented: true,
-  };
+  return finish(true);
 }
 
-async function ensureOutputDirectories(planned: RouteCompilerResult['planned']): Promise<void> {
+/** Compatibility name retained for existing integrations. */
+export const compileRoutes = compile;
+
+function stopDiagnostic(
+  planned: PlannedCompilerOutputs,
+  before: string,
+  reason: string,
+): RouteCompilerDiagnostic {
+  return diagnostic(
+    'WPT0002',
+    'error',
+    `Route compilation for ${path.basename(planned.entry)} stopped before ${before} because ${reason}.`,
+  );
+}
+
+async function ensureOutputDirectories(planned: PlannedCompilerOutputs): Promise<void> {
   await Promise.all([
     fs.mkdir(path.dirname(planned.serverOutput), { recursive: true }),
     fs.mkdir(planned.entriesOutput, { recursive: true }),
@@ -167,9 +253,7 @@ async function snapshotDirectory(directory: string): Promise<DirectorySnapshot> 
   );
   const existed = await pathExists(target);
 
-  if (existed) {
-    await fs.cp(target, backup, { recursive: true, force: true });
-  }
+  if (existed) await fs.cp(target, backup, { recursive: true, force: true });
 
   let settled = false;
   return {
