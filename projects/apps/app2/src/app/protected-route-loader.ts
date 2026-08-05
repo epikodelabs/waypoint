@@ -1,86 +1,47 @@
-﻿import type {
-  NavigationTree,
-} from '@epikodelabs/waypoint';
+import type { NavigationTree } from '@epikodelabs/waypoint';
+import type { ResolveNavigationResponse } from '../navigation-delivery';
 
-interface RouteModule {
-  readonly default?: unknown;
-}
+interface RouteModule { readonly default?: unknown; }
+const loadedArtifacts = new Map<string, Promise<NavigationTree>>();
 
-const importRouteModule =
-  new Function(
-    'url',
-    'return import(url);',
-  ) as (
-    url: string,
-  ) => Promise<RouteModule>;
-
-function isRouteArray(
-  value: unknown,
-): value is NavigationTree {
+function isRouteArray(value: unknown): value is NavigationTree {
   return Array.isArray(value);
 }
 
-export async function loadProtectedRouteBranch(
-  url: URL,
-): Promise<NavigationTree | null> {
-  const requestPath =
-    `${url.pathname}${url.search}${url.hash}`;
-  const response =
-    await fetch(
-      `/api/routes/module?path=${encodeURIComponent(requestPath)}`,
-      {
+async function importArtifact(descriptor: ResolveNavigationResponse): Promise<NavigationTree> {
+  const existing = loadedArtifacts.get(descriptor.artifactKey);
+  if (existing) return existing;
+
+  const pending = (async () => {
+    for (const dependency of descriptor.dependencies) {
+      const response = await fetch(`/api/navigation/artifacts/${encodeURIComponent(dependency)}`, {
         credentials: 'same-origin',
-        headers: {
-          Accept: 'text/javascript',
-        },
-      },
-    );
-
-  if (
-    response.status === 401 ||
-    response.status === 403 ||
-    response.status === 404
-  ) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to resolve route branch for ${requestPath}: ${response.status}`,
-    );
-  }
-
-  const moduleSource =
-    await response.text();
-  const blobUrl =
-    URL.createObjectURL(
-      new Blob(
-        [moduleSource],
-        {
-          type: 'text/javascript',
-        },
-      ),
-    );
-
-  try {
-    const loaded =
-      await importRouteModule(
-        blobUrl,
-      );
-    const branch =
-      loaded.default;
-
-    if (!isRouteArray(branch)) {
-      throw new Error(
-        `Route module for ${requestPath} did not export a route array.`,
-      );
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) throw new Error(`Failed to resolve dependency ${dependency}: ${response.status}`);
+      await importArtifact(await response.json() as ResolveNavigationResponse);
     }
 
-    return Object.freeze(
-      [...branch],
-    ) as NavigationTree;
-  } finally {
-    URL.revokeObjectURL(blobUrl);
-  }
+    const loaded = await import(/* @vite-ignore */ descriptor.moduleUrl) as RouteModule;
+    if (!isRouteArray(loaded.default)) {
+      throw new Error(`Artifact ${descriptor.artifactKey} did not export a route array.`);
+    }
+    return Object.freeze([...loaded.default]) as NavigationTree;
+  })();
+
+  loadedArtifacts.set(descriptor.artifactKey, pending);
+  try { return await pending; }
+  catch (error) { loadedArtifacts.delete(descriptor.artifactKey); throw error; }
 }
 
+export async function loadProtectedRouteBranch(url: URL): Promise<NavigationTree | null> {
+  const requestPath = `${url.pathname}${url.search}${url.hash}`;
+  const response = await fetch(`/api/navigation/resolve?path=${encodeURIComponent(requestPath)}`, {
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
+
+  if ([401, 403, 404].includes(response.status)) return null;
+  if (!response.ok) throw new Error(`Failed to resolve ${requestPath}: ${response.status}`);
+  return importArtifact(await response.json() as ResolveNavigationResponse);
+}

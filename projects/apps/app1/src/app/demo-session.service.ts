@@ -90,6 +90,12 @@ export class DemoSessionService {
     }
 
     this.currentUserId.set(nextUser.id);
+
+    if (typeof document !== 'undefined') {
+      document.cookie =
+        `identity=${encodeURIComponent(nextUser.id)}; Path=/; SameSite=Lax`;
+    }
+
     this.adminAccess.set(nextUser.canAccessAdmin);
     this.draftDirty.set(nextUser.prefersDraftGuard);
   }
