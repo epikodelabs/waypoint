@@ -3,8 +3,10 @@ import path from 'node:path';
 import { diagnostic } from '../compiler/diagnostics.js';
 import type {
   PlannedCompilerOutputs,
+  RouteArtifactManifestDocument,
   RouteArtifactPlan,
   RouteCompilerDiagnostic,
+  ServerRouteIndexDocument,
 } from '../compiler/contracts.js';
 
 export interface EmitServerResult {
@@ -12,9 +14,18 @@ export interface EmitServerResult {
   readonly emitted: readonly string[];
 }
 
+export interface ServerDeliveryDocuments {
+  readonly serverIndex: ServerRouteIndexDocument;
+  readonly manifest: RouteArtifactManifestDocument;
+}
+
 export async function emitServerArtifacts(
   planned: PlannedCompilerOutputs,
   plan: RouteArtifactPlan,
+  delivery: ServerDeliveryDocuments = {
+    serverIndex: plan.serverIndex,
+    manifest: plan.manifest,
+  },
 ): Promise<EmitServerResult> {
   const emitted: string[] = [];
 
@@ -27,8 +38,8 @@ export async function emitServerArtifacts(
 
     await fs.mkdir(path.dirname(planned.serverOutput), { recursive: true });
     await fs.mkdir(path.dirname(planned.manifestOutput), { recursive: true });
-    await writeJson(planned.serverOutput, plan.serverIndex);
-    await writeJson(planned.manifestOutput, plan.manifest);
+    await writeJson(planned.serverOutput, delivery.serverIndex);
+    await writeJson(planned.manifestOutput, delivery.manifest);
     emitted.push(planned.serverOutput, planned.manifestOutput);
   }
 
@@ -36,7 +47,7 @@ export async function emitServerArtifacts(
     diagnostics: [diagnostic(
       'WPT3100',
       'info',
-      `${planned.dryRun ? 'Planned' : 'Emitted'} ${plan.manifest.routes.length} route branches, ${plan.manifest.slots.length} slots, and ${plan.manifest.routeSets.length} route sets into ${plan.serverShards.length} shard(s).`,
+      `${planned.dryRun ? 'Planned' : 'Emitted'} ${delivery.manifest.routes.length} route branches, ${delivery.manifest.slots.length} slots, and ${delivery.manifest.routeSets.length} route sets into ${plan.serverShards.length} shard(s).`,
     )],
     emitted,
   };

@@ -12,6 +12,8 @@ TypeScript source
 → expansion
 → validation
 → artifact planning
+→ isolated artifact bundling
+→ delivery finalization
 → emitters
 ```
 
@@ -51,9 +53,10 @@ Legacy `Parsed*`, `Compiled*`, and `RouteGraph` names are intentionally absent.
 - deterministic route-set and branch identity;
 - server index and shard planning;
 - focused browser-entry emission;
+- isolated esbuild bundles per exported `routesFor()`;
+- content-hashed artifact filenames and esbuild metadata;
+- finalized server and browser delivery manifests;
 - dry-run compilation.
-
-Artifact bundling remains the next implementation stage.
 
 ## Navigation IR
 

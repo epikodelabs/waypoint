@@ -106,6 +106,11 @@ export interface ServerArtifactDescriptor {
   readonly parentRouteSetId?: string;
   readonly dependencies: readonly string[];
   readonly branchCount: number;
+  /** Portable path from the server index directory to the emitted ESM artifact. */
+  readonly file?: string;
+  readonly hash?: string;
+  readonly bytes?: number;
+  readonly imports?: readonly string[];
 }
 
 export interface ServerRouteIndexDocument {
@@ -150,6 +155,12 @@ export interface RouteArtifactManifestDocument {
     readonly entryFile: string;
     readonly bundleDirectory: string;
     readonly fileNameTemplate: string;
+    /** Portable path from the manifest directory to the emitted ESM artifact. */
+    readonly file?: string;
+    readonly hash?: string;
+    readonly bytes?: number;
+    readonly imports?: readonly string[];
+    readonly inputs?: readonly string[];
     readonly branchIds: readonly string[];
   }[];
   readonly routes: readonly {
@@ -181,6 +192,24 @@ export interface RouteArtifactPlan {
   readonly serverShards: readonly PlannedServerShard[];
   readonly serverIndex: ServerRouteIndexDocument;
   readonly manifest: RouteArtifactManifestDocument;
+}
+
+
+export interface BundledArtifact {
+  readonly artifactKey: string;
+  readonly routeSetId: string;
+  readonly outputPath: string;
+  readonly fileName: string;
+  readonly hash: string;
+  readonly bytes: number;
+  readonly imports: readonly string[];
+  readonly inputs: readonly string[];
+}
+
+export interface ArtifactBundleResult {
+  readonly artifacts: readonly BundledArtifact[];
+  readonly diagnostics: readonly RouteCompilerDiagnostic[];
+  readonly emitted: readonly string[];
 }
 
 export interface RouteCompilerResult {

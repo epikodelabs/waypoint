@@ -339,15 +339,24 @@ idescribe('Router', () => {
     describe('route matching', () => {
         it('should refresh a cached route pattern when its path changes', async () => {
             const route = routeWithComponent('first', 'Route');
-            router = createRouter({ routes: [route], render: (name, node) => {
+
+            router = createRouter({
+                routes: [route],
+                render: (_name, node) => {
                 outlet.replaceChildren(node);
-            }, });
+                },
+            });
+
             await router.navigate('/first');
-            route.path = 'second';
+
+            (route as { path: string }).path = 'second';
+
             await router.navigate('/second');
+
             expect(router.state.current?.path).toBe('/second');
             expect(outlet.textContent).toBe('Route');
         });
+        
         it('should match parameterized routes', async () => {
             const config: VanillaRouterConfig = {
                 routes: [
@@ -2381,37 +2390,59 @@ idescribe('Router', () => {
     describe('revalidation', () => {
         it('should rerun the current navigation without changing browser history', async () => {
             let loadCount = 0;
+            let prepareCount = 0;
 
             router = createRouter({
-                routes: [{
-                    path: '',
-                    load: async () => {
-                        loadCount++;
+            routes: [{
+                path: '',
+                load: async () => {
+                loadCount++;
+
+                return {
+                    component: route =>
+                    document.createTextNode(
+                        String(route.data['message']),
+                    ),
+
+                    prepare: [
+                    async () => {
+                        prepareCount++;
+
                         return {
-                            component: createComponent(`Home ${loadCount}`),
+                        message: `Home ${prepareCount}`,
                         };
                     },
-                }],
-                onSameUrlNavigation: 'ignore',
-                render: (_name, node) => {
-                    outlet.replaceChildren(node);
+                    ],
+                };
                 },
+            }],
+            onSameUrlNavigation: 'ignore',
+            render: (_name, node) => {
+                outlet.replaceChildren(node);
+            },
             });
 
             expect(await router.navigate('/')).toBeTrue();
             expect(loadCount).toBe(1);
+            expect(prepareCount).toBe(1);
             expect(outlet.textContent).toBe('Home 1');
 
-            const pushState = spyOn(window.history, 'pushState').and.callThrough();
-            const replaceState = spyOn(window.history, 'replaceState').and.callThrough();
+            const pushState =
+            spyOn(window.history, 'pushState').and.callThrough();
+            const replaceState =
+            spyOn(window.history, 'replaceState').and.callThrough();
 
             expect(await router.revalidate()).toBeTrue();
-            expect(loadCount).toBe(2);
+
+            // Lazy route configuration remains cached.
+            expect(loadCount).toBe(1);
+
+            // Navigation-dependent data is recomputed.
+            expect(prepareCount).toBe(2);
             expect(outlet.textContent).toBe('Home 2');
+
             expect(pushState).not.toHaveBeenCalled();
             expect(replaceState).not.toHaveBeenCalled();
         });
     });
-
-
 });

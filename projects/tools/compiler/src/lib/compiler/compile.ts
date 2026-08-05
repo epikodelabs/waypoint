@@ -4,6 +4,7 @@ import { normalizeCompilerOptions } from './config.js';
 import { bundleArtifacts } from '../emitters/bundle-artifacts.js';
 import { emitBrowserEntries } from '../emitters/emit-browser-entries.js';
 import { planRouteArtifacts } from '../planning/plan-artifacts.js';
+import { finalizeDeliveryDocuments } from '../planning/finalize-delivery.js';
 import { emitServerArtifacts } from '../emitters/emit-server-artifacts.js';
 import { buildNavigationIr } from '../ir/build-navigation-ir.js';
 import { expandNavigation } from '../ir/expand-navigation.js';
@@ -63,14 +64,44 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
     return { planned, diagnostics, emitted: [], implemented: true };
   }
 
-  const emittedServer = await emitServerArtifacts(planned, plannedArtifacts.plan);
-  diagnostics.push(...emittedServer.diagnostics);
-
   const emittedBrowser = await emitBrowserEntries(planned, plannedArtifacts.plan);
   diagnostics.push(...emittedBrowser.diagnostics);
 
   const bundled = await bundleArtifacts(planned, plannedArtifacts.plan);
   diagnostics.push(...bundled.diagnostics);
+
+  if (hasErrors(diagnostics)) {
+    diagnostics.unshift(diagnostic(
+      'WPT0002',
+      'error',
+      `Route compilation for ${path.basename(planned.entry)} stopped before delivery metadata was emitted because artifact bundling failed.`,
+    ));
+    return {
+      planned,
+      diagnostics,
+      emitted: emittedBrowser.emitted,
+      implemented: true,
+    };
+  }
+
+  const delivery = planned.dryRun
+    ? {
+        serverIndex: plannedArtifacts.plan.serverIndex,
+        manifest: plannedArtifacts.plan.manifest,
+      }
+    : finalizeDeliveryDocuments(
+        plannedArtifacts.plan,
+        bundled,
+        planned.serverOutput,
+        planned.manifestOutput,
+      );
+
+  const emittedServer = await emitServerArtifacts(
+    planned,
+    plannedArtifacts.plan,
+    delivery,
+  );
+  diagnostics.push(...emittedServer.diagnostics);
 
   diagnostics.unshift(diagnostic(
     'WPT0001',
@@ -81,7 +112,7 @@ export async function compileRoutes(options: RouteCompilerOptions): Promise<Rout
   return {
     planned,
     diagnostics,
-    emitted: [...emittedServer.emitted, ...emittedBrowser.emitted],
+    emitted: [...emittedBrowser.emitted, ...bundled.emitted, ...emittedServer.emitted],
     implemented: true,
   };
 }

@@ -60,6 +60,9 @@ test('discovers routeSlot and exported routesFor declarations end to end', async
     assert.equal(manifest.routes[0].path, '/app/projects/:projectId');
     assert.equal(manifest.routes[0].routeSetId, manifest.routeSets[0].id);
     assert.equal(result.emitted.some(file => file.includes('route-set-workspace')), true);
+    assert.match(manifest.artifacts[0].file, /^artifacts\/workspace__project-routes__[a-f0-9]+-[A-Z0-9]+\.js$/i);
+    assert.equal(typeof manifest.artifacts[0].hash, 'string');
+    assert.equal(manifest.artifacts[0].bytes > 0, true);
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }

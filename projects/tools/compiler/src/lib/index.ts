@@ -27,6 +27,7 @@ export {
 } from './validation/validate-navigation.js';
 export { NavigationDiagnosticCode } from './validation/diagnostic-codes.js';
 export { planRouteArtifacts } from './planning/plan-artifacts.js';
+export { finalizeDeliveryDocuments } from './planning/finalize-delivery.js';
 export { emitBrowserEntries } from './emitters/emit-browser-entries.js';
 export { emitServerArtifacts } from './emitters/emit-server-artifacts.js';
 export { bundleArtifacts } from './emitters/bundle-artifacts.js';
