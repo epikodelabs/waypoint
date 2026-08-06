@@ -1,235 +1,232 @@
 # Waypoint
 
-Waypoint is a typed Angular navigation library built around a simple idea:
+> **The client shouldn't know about navigation it isn't allowed to use.**
 
-**the client shouldn't know about navigation it isn't allowed to use.**
+Waypoint is a typed Angular navigation library built around a different assumption
+than traditional client-side routers: **navigation is runtime configuration, not
+a static application asset**.
 
-Most Angular applications ship the entire route graph to every browser. Authentication and authorization decide whether a user may *enter* a route, but every route already exists in the client. Open DevTools, inspect bundles, or browse lazy imports and you can often discover areas of an application you were never supposed to know existed.
+Instead of shipping the complete route graph to every browser and relying on
+guards to deny access, Waypoint allows navigation to be **compiled, filtered by
+the server, and delivered on demand**. Clients receive only the navigation they
+are authorized to discover.
 
-Waypoint takes a different approach.
+---
 
-Routes are authored once, compiled into navigation artifacts, and can be delivered by the server on demand. Every user receives only the navigation they're allowed to discover. Unauthorized destinations aren't merely blocked—they simply aren't part of the client's navigation model.
+# Why Waypoint?
 
-The result is an architecture that scales naturally to applications with large route graphs, tenant-specific functionality, enterprise permissions, and feature licensing, while keeping the developer experience familiar to anyone who has used Angular Router.
+Most routers answer one question:
 
-The best part? You don't have to give up everything you already like about routing. Waypoint still speaks fluent URLs—paths, redirects, layouts, lazy loading, typed params, typed query strings, and named navigation—it simply treats the server as the authority for what navigation exists.
+> "How do I navigate between pages?"
 
-## Why you'll like it
+Waypoint answers another one first:
 
-- **Server-driven navigation.** Clients receive only the routes they're authorized to discover instead of downloading the application's complete navigation graph.
-- **Typed from end to end.** Params and query strings are declared once using a compact schema builder (`s.string`, `s.number`, `s.boolean`, `s.array`, `s.date`) and their types flow through navigation helpers, lifecycle hooks, and generated links.
-- **One destination. One definition.** URL, rendering, lifecycle, schemas, and application identity live together instead of being scattered across route configs, guards, resolvers, and components.
-- **Function-based lifecycle.** `prepare`, `beforeEnter`, `beforeLeave`, and `afterEnter` are just functions. Inject services, load data, redirect, or cancel navigation without framework ceremony.
-- **Shell composition.** `layout(...)` composes application chrome around groups of routes without turning layouts into navigation state.
-- **Standalone-first.** Designed for modern Angular applications instead of carrying years of routing history.
+> "Which pages should this browser even know exist?"
 
-Waypoint intentionally stays close to the routing model Angular developers already know. The difference isn't the API—it's the architecture behind it.
+This makes Waypoint particularly suitable for:
 
-## Installation
+- enterprise applications
+- multi-tenant systems
+- role-based applications
+- feature licensing
+- plugin architectures
+- server-driven UI
+
+---
+
+# Highlights
+
+- Server-driven navigation
+- Typed params and query strings
+- Function-based navigation lifecycle
+- Layout composition
+- Named outlets
+- Lazy loading
+- Standalone Angular
+- Atomic runtime configuration
+- Explicit revalidation
+- Compiler-driven navigation artifacts
+
+---
+
+# Installation
 
 ```bash
 npm install @epikodelabs/waypoint
 ```
 
-Waypoint is built for modern standalone Angular applications and depends only on `@angular/core` and `@angular/common`.
+---
 
-## Quick start
-
-Here's a realistic route definition. Don't worry about every option just yet—the concepts underneath it are deliberately small.
+# Quick start
 
 ```ts
-import { inject } from '@angular/core';
-import {
-  frame,
-  layout,
-  route,
-  s,
-  type NavigationTree,
-} from '@epikodelabs/waypoint';
-
-const projectRoute = route(
-  '/projects/:projectId',
-  frame(ProjectPage, {
-    beforeEnter: [
-      () =>
-        inject(SessionService).authenticated()
-          ? true
-          : {
-              redirectTo: '/auth/login',
-              replace: true,
-            },
-    ],
-
-    prepare: [
-      context => ({
-        project: inject(ProjectStore).load(
-          context.params.projectId,
-        ),
-      }),
-    ],
-
-    afterEnter: [
-      route =>
-        inject(AnalyticsService)
-          .trackProjectVisit(route.path),
-    ],
-  }),
-
-  {
-    name: 'project',
-
-    paramsSchema: {
-      projectId: s.number({ min: 1 }),
-    },
-
-    querySchema: {
-      tab: s.string('overview'),
-    },
-  },
-);
-
-export const routes = [
+const routes = [
   layout('/app', AppShellComponent, [
-    projectRoute,
+    route(
+      '/projects/:projectId',
+      frame(ProjectPage, {
+        prepare: [
+          ctx => ({
+            project: inject(ProjectStore)
+              .load(ctx.params.projectId),
+          }),
+        ],
+      }),
+      {
+        paramsSchema: {
+          projectId: s.number(),
+        },
+      },
+    ),
   ]),
-] as const satisfies NavigationTree;
+];
 ```
 
-Read it out loud and it almost explains itself:
+Everything about a destination lives together:
 
-*"there's a project page at `/projects/:projectId`, it's known as `project`, users must be authenticated before entering it, the project loads before rendering, and visits are tracked after navigation completes."*
+- URL
+- lifecycle
+- schemas
+- rendering
+- identity
 
-That's the entire philosophy behind Waypoint: one destination, one definition.
+---
 
-## Core ideas
+# Core concepts
 
-Waypoint is built around four small concepts.
+## route()
 
-Once these click, everything else is detail.
+Describes a destination.
 
-### `route(path, frame, options)`
+Owns:
 
-A route describes a public destination.
-
-It owns:
-
-- the public URL
-- typed params
-- typed query strings
-- application identity (`name`)
+- path
+- params
+- query
 - redirects
-- navigation behavior
+- navigation identity
 
-### `frame(component, options)`
+## frame()
 
-A frame binds a component to its lifecycle.
+Connects rendering with navigation lifecycle.
 
-This is where navigation behavior lives:
+Lifecycle includes:
 
-- `prepare`
-- `beforeEnter`
-- `beforeLeave`
-- `afterEnter`
+- prepare
+- beforeEnter
+- beforeLeave
+- afterEnter
 
-Each hook is simply a function.
+## layout()
 
-Inject services, fetch data, redirect, or cancel navigation without implementing framework-specific interfaces.
+Composes application shells without turning layouts into navigation state.
 
-### `layout(path, component, entries)`
+---
 
-Layouts compose application shells.
+# Dynamic configuration
 
-They provide navigation bars, side panels, and shared chrome around groups of routes without becoming part of the route identity themselves.
-
-### Typed navigation
-
-Because routes declare their schemas once, Waypoint generates fully typed navigation helpers.
+Navigation is runtime configuration.
 
 ```ts
-router.navigateTo.project({
-  params: {
-    projectId: 42,
-  },
+const changed = router.replaceConfiguration({
+  routes,
+  transitions,
 });
+
+if (changed) {
+  await router.revalidate();
+}
 ```
 
-Required params, optional query values, and generated hrefs all stay synchronized with the route definition.
+`replaceConfiguration()` installs a new navigation model atomically.
 
-## Server-driven navigation
+`revalidate()` decides whether the current URL should be matched again.
 
-Waypoint's defining feature is that routes can be compiled into server-side navigation artifacts.
+Keeping those operations separate allows applications to update permissions,
+feature flags, server state, and navigation in a single transaction.
 
-Instead of treating routing as a static client configuration, Waypoint allows the server to determine which navigation branches should be delivered for the current user.
+---
 
-Conceptually:
+# Immutable routes
+
+Route definitions should be treated as immutable configuration values.
+
+Prefer replacing route objects rather than mutating them.
+
+This keeps runtime caching deterministic and makes configuration replacement
+predictable.
+
+---
+
+# Server-driven navigation
+
+Author routes once.
 
 ```
 TypeScript routes
-
         ↓
-
-Navigation compiler
-
+Waypoint compiler
         ↓
-
-Server navigation artifacts
-
+Navigation artifacts
         ↓
-
-Identity & authorization
-
+Authorization
         ↓
-
-Authorized route graph
-
+Filtered route graph
         ↓
-
 Browser
 ```
 
-This architecture makes it practical to build applications where navigation changes according to:
+The browser receives only the navigation it is allowed to discover.
 
-- permissions
-- tenant
-- subscription
-- feature flags
-- deployment
-- environment
+---
 
-without shipping every possible destination to every client.
+# Example applications
 
-Waypoint does **not** replace authorization.
+## App1
 
-Servers must still authorize every request.
+Demonstrates Waypoint as a traditional client-side router with:
 
-Waypoint simply reduces unnecessary disclosure of application structure by ensuring browsers only receive navigation they're expected to use.
-
-## What the example application demonstrates
-
-`projects/apps/app1` provides a complete reference application showing:
-
-- typed params and query schemas
 - layouts
-- frame lifecycle
+- lifecycle
 - lazy loading
 - named outlets
-- generated navigation helpers
-
-`projects/apps/app2` demonstrates the server-driven navigation model, where the browser receives its route graph from the server instead of embedding the complete application navigation at build time.
-
-## A note on scope
-
-Waypoint intentionally focuses on navigation.
-
-It supports familiar routing concepts such as URLs, redirects, layouts, lazy loading, typed parameters, and browser history while remaining considerably smaller than Angular Router's full feature surface.
-
-Reach for Waypoint when you want:
-
 - typed navigation
-- modern standalone Angular APIs
-- function-based lifecycle
-- server-driven route delivery
-- privacy-safer navigation architecture
-- one destination definition instead of scattered routing infrastructure
 
-We're excited about making navigation both simpler and more scalable, and we'd love for you to build with Waypoint.
+## App2
+
+Demonstrates server-driven navigation.
+
+The browser starts with no route graph.
+
+Navigation artifacts are requested from the server, installed with
+`replaceConfiguration()`, then activated using `revalidate()`.
+
+---
+
+# Philosophy
+
+Waypoint intentionally keeps the public API small.
+
+The complexity belongs in the compiler and navigation pipeline—not in
+application code.
+
+Applications describe navigation once.
+
+Waypoint derives everything else.
+
+---
+
+# Roadmap
+
+- richer compiler diagnostics
+- plugin navigation
+- artifact visualization
+- devtools support
+- Routty integration
+- Switchboard integration
+
+---
+
+# License
+
+MIT
