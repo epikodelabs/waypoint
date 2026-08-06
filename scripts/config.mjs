@@ -23,7 +23,7 @@ export const routeEntry = resolvePath(
 
 export const developmentOutputRoot = resolvePath(
   workspaceRoot,
-  'dist/.waypoint/app2',
+  'dist/waypoint-generated/app2',
 );
 
 export const productionOutputRoot = resolvePath(

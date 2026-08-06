@@ -44,6 +44,7 @@ import type {
 } from './navigation-definitions';
 
 import type { TypedHref, TypedNavigate } from './typed-navigation';
+import type { RouteRuntime } from './route-runtime';
 
 import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-events';
 
@@ -60,7 +61,6 @@ import {
 } from './query-schema';
 
 import {
-  LoadedRoute,
   type CanActivateFn,
   type CanDeactivateFn,
   createRouter,
@@ -311,7 +311,7 @@ function adaptFrameTransitions(
 function adaptParamsParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): LoadedRoute['parseParams'] {
+): RouteRuntime['parseParams'] {
   const schema = route.paramsSchema;
   if (!schema) return undefined;
 
@@ -322,7 +322,7 @@ function adaptParamsParser(
 function adaptQueryParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): LoadedRoute['parseQuery'] {
+): RouteRuntime['parseQuery'] {
   const schema = route.querySchema;
   if (!schema) return undefined;
 
@@ -908,7 +908,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     }
 
     const resolution = Promise.resolve(this.configuration.resolveRoutes(url))
-      .then((routes) => {
+      .then(async (routes) => {
         if (!routes || routes.length === 0) {
           this.unresolvedRouteKeys.add(key);
           return false;
@@ -916,7 +916,7 @@ export class Router<TRoutes extends NavigationTree = any> {
 
         this.unresolvedRouteKeys.delete(key);
         this.mergeRoutes(routes);
-        this.restartEngine();
+        await this.installCurrentRegistry();
         return true;
       })
       .catch((error) => {
@@ -945,24 +945,26 @@ export class Router<TRoutes extends NavigationTree = any> {
     );
   }
 
-  private restartEngine(): void {
-    if (!this.engine) {
+  private async installCurrentRegistry(): Promise<void> {
+    const engine = this.engine;
+
+    if (!engine) {
       return;
     }
 
-    const previous = this.engine;
+    engine.replaceConfiguration({
+      routes: adaptRoutes(
+        this.registry.groups,
+        this.appRef,
+        this.injector,
+      ),
+      transitions: adaptFrameTransitions(
+        this.registry.groups,
+        this.injector,
+      ),
+    });
 
-    previous.dispose();
-    this.engine = null;
-    this.currentState = EMPTY_ROUTER_STATE;
-    this.requestTick();
-
-    const nextEngine = this.createEngine();
-
-    nextEngine.start();
-    this.engine = nextEngine;
-    this.currentState = snapshotRouterState(nextEngine.state);
-    this.requestTick();
+    await engine.revalidate();
   }
 
   private createEngine(): VanillaRouter {

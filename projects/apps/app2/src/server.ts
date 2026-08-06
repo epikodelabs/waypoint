@@ -77,20 +77,30 @@ function allowed(branch: Branch, request: Request): boolean {
 async function descriptorFor(
   artifactKey: string,
 ): Promise<
-  (ArtifactDescriptor & { readonly moduleUrl: string }) | null
+  (ArtifactDescriptor & {
+    readonly moduleUrl: string;
+  }) | null
 > {
-  const index = await loadServerIndex();
-  const artifact = index.artifacts.find(
-    item => item.artifactKey === artifactKey,
-  );
+  const index =
+    await loadServerIndex();
 
-  if (!artifact?.file || !artifact.hash) return null;
+  const artifact =
+    index.artifacts.find(
+      item =>
+        item.artifactKey === artifactKey,
+    );
+
+  if (!artifact?.file || !artifact.hash) {
+    return null;
+  }
 
   return {
     ...artifact,
     moduleUrl:
-      `/api/navigation/modules/` +
-      `${encodeURIComponent(artifactKey)}.${artifact.hash}.js`,
+      '/api/navigation/modules/'
+      + encodeURIComponent(
+        path.basename(artifact.file),
+      ),
   };
 }
 
@@ -211,45 +221,73 @@ app.get(
 
 app.get(
   '/api/navigation/modules/:module',
-  async (request, response, next) => {
+  async (
+    request,
+    response,
+    next,
+  ) => {
     try {
-      const match =
-        /^(.+)\.([A-Za-z0-9_-]+)\.js$/.exec(
+      const requestedFile =
+        decodeURIComponent(
           request.params['module'],
         );
 
-      if (!match) {
+      const index =
+        await loadServerIndex();
+
+      const descriptor =
+        index.artifacts.find(
+          artifact =>
+            artifact.file
+            && path.basename(
+              artifact.file,
+            ) === requestedFile,
+        );
+
+      if (!descriptor?.file) {
         response.status(404).end();
         return;
       }
 
-      const artifactKey = decodeURIComponent(match[1]!);
-
-      if (!await canAccessArtifact(artifactKey, request)) {
+      if (
+        !await canAccessArtifact(
+          descriptor.artifactKey,
+          request,
+        )
+      ) {
         response
-          .status(request.principal ? 403 : 401)
+          .status(
+            request.principal
+              ? 403
+              : 401,
+          )
           .end();
-        return;
-      }
 
-      const descriptor = await descriptorFor(artifactKey);
-
-      if (!descriptor || descriptor.hash !== match[2]) {
-        response.status(404).end();
         return;
       }
 
       response.set({
-        'Cache-Control': 'private, no-store',
-        'Content-Type': 'text/javascript; charset=utf-8',
-        Vary: 'Authorization, Cookie',
-        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control':
+          'private, no-store',
+        'Content-Type':
+          'text/javascript; charset=utf-8',
+        Vary:
+          'Authorization, Cookie',
+        'X-Content-Type-Options':
+          'nosniff',
       });
 
       response.sendFile(
-        resolveOutputPath(descriptor.file!),
+        resolveOutputPath(
+          descriptor.file,
+        ),
         error => {
-          if (error && !response.headersSent) next(error);
+          if (
+            error
+            && !response.headersSent
+          ) {
+            next(error);
+          }
         },
       );
     } catch (error) {

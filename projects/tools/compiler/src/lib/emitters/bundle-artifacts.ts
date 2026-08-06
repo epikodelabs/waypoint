@@ -112,6 +112,57 @@ function emptyFailure(
   };
 }
 
+function extractFileNameHash(
+  artifact: PlannedRouteArtifact,
+  fileName: string,
+): string {
+  const template =
+    path.basename(
+      artifact.bundle.fileNameTemplate,
+    );
+
+  const marker = '[hash]';
+  const markerIndex =
+    template.indexOf(marker);
+
+  if (markerIndex < 0) {
+    throw new Error(
+      `Artifact filename template "${template}" does not contain "[hash]".`,
+    );
+  }
+
+  const prefix =
+    template.slice(0, markerIndex);
+
+  const suffix =
+    template.slice(
+      markerIndex + marker.length,
+    );
+
+  if (
+    !fileName.startsWith(prefix)
+    || !fileName.endsWith(suffix)
+  ) {
+    throw new Error(
+      `Artifact filename "${fileName}" does not match template "${template}".`,
+    );
+  }
+
+  const hash =
+    fileName.slice(
+      prefix.length,
+      fileName.length - suffix.length,
+    );
+
+  if (!hash) {
+    throw new Error(
+      `Artifact filename "${fileName}" contains an empty hash.`,
+    );
+  }
+
+  return hash;
+}
+
 async function buildArtifact(
   artifact: PlannedRouteArtifact,
 ): Promise<PreparedBundle> {
@@ -139,8 +190,22 @@ async function buildArtifact(
     throw new Error(`esbuild did not return metadata for "${artifact.artifactKey}".`);
   }
   const outputMeta = readOutputMetadata(result.metafile, artifact);
-  const outputPath = path.resolve(outputFile.path);
-  requireInsideDirectory(artifact.bundle.outputDirectory, outputPath);
+  const outputPath =
+  path.resolve(outputFile.path);
+
+  requireInsideDirectory(
+    artifact.bundle.outputDirectory,
+    outputPath,
+  );
+
+  const fileName =
+    path.basename(outputPath);
+
+  const hash =
+    extractFileNameHash(
+      artifact,
+      fileName,
+    );
 
   return {
     outputFile,
@@ -148,8 +213,8 @@ async function buildArtifact(
       artifactKey: artifact.artifactKey,
       routeSetId: artifact.routeSetId,
       outputPath,
-      fileName: path.basename(outputPath),
-      hash: outputFile.hash,
+      fileName,
+      hash,
       bytes: outputFile.contents.byteLength,
       imports: Object.freeze(
         [...new Set(

@@ -44,7 +44,7 @@ const outputRoot =
       )
     : path.resolve(
         workspaceRoot,
-        'dist/.waypoint/app2',
+        'dist/waypoint-generated/app2',
       );
 
 const indexPath =

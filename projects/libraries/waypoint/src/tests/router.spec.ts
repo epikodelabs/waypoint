@@ -1106,10 +1106,18 @@ idescribe('Router', () => {
             await router.navigate('/about');
             scrollX = 320;
             scrollY = 480;
+            const popstate = new Promise<void>(resolve => {
+                window.addEventListener(
+                    'popstate',
+                    () => resolve(),
+                    { once: true },
+                );
+            });
+
             window.history.back();
-            const popstateEvent = new PopStateEvent('popstate');
-            window.dispatchEvent(popstateEvent);
+            await popstate;
             await delay(50);
+
             expect(scrollToSpy).toHaveBeenCalledWith(30, 140);
             expect(router.state.current?.path).toBe('/');
         });

@@ -13,7 +13,6 @@ export {
   createRouter,
   type ActivatedRoute,
   type DeactivationContext,
-  type LoadedRoute,
   type NavigationContext,
   type NavigationOptions,
   type NavigationPhase,
