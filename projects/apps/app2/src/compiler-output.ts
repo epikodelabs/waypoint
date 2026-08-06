@@ -34,13 +34,28 @@ export interface ServerShard {
   readonly branches: readonly Branch[];
 }
 
-const outputRoot = process.env['WAYPOINT_OUTPUT_ROOT']
-  ? path.resolve(process.env['WAYPOINT_OUTPUT_ROOT'])
-  : path.resolve(import.meta.dirname, '../waypoint');
+const workspaceRoot =
+  path.resolve(process.cwd());
 
-const indexPath = process.env['WAYPOINT_SERVER_INDEX']
-  ? path.resolve(process.env['WAYPOINT_SERVER_INDEX'])
-  : path.join(outputRoot, 'server-index.json');
+const outputRoot =
+  process.env['WAYPOINT_OUTPUT_ROOT']
+    ? path.resolve(
+        process.env['WAYPOINT_OUTPUT_ROOT'],
+      )
+    : path.resolve(
+        workspaceRoot,
+        'dist/.waypoint/app2',
+      );
+
+const indexPath =
+  process.env['WAYPOINT_SERVER_INDEX']
+    ? path.resolve(
+        process.env['WAYPOINT_SERVER_INDEX'],
+      )
+    : path.join(
+        outputRoot,
+        'server-index.json',
+      );
 
 export function loadServerIndex(): Promise<ServerIndex> {
   return readJson<ServerIndex>(indexPath);

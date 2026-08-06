@@ -9,20 +9,44 @@ async function main(): Promise<void> {
     return;
   }
 
-  const result = await compileRoutes(readCompileOptions(process.argv.slice(3)));
+  const result = await compileRoutes(
+    readCompileOptions(
+      process.argv.slice(3),
+    ),
+  );
+
   for (const diagnostic of result.diagnostics) {
     const label = diagnostic.code
       ? `${diagnostic.level.toUpperCase()} ${diagnostic.code}`
       : diagnostic.level.toUpperCase();
-    process.stdout.write(`[${label}] ${diagnostic.message}\n`);
+
+    process.stdout.write(
+      `[${label}] ${diagnostic.message}\n`,
+    );
   }
 
-  process.stdout.write(`entry: ${result.planned.entry}\n`);
-  process.stdout.write(`serverOutput: ${result.planned.serverOutput}\n`);
-  process.stdout.write(`entriesOutput: ${result.planned.entriesOutput}\n`);
-  process.stdout.write(`manifestOutput: ${result.planned.manifestOutput}\n`);
-  process.stdout.write(`artifactsOutput: ${result.planned.artifactsOutput}\n`);
-  process.stdout.write(`dryRun: ${result.planned.dryRun}\n`);
+  process.stdout.write(
+    `entry: ${result.planned.entry}\n`,
+  );
+  process.stdout.write(
+    `serverOutput: ${result.planned.serverOutput}\n`,
+  );
+  process.stdout.write(
+    `entriesOutput: ${result.planned.entriesOutput}\n`,
+  );
+  process.stdout.write(
+    `manifestOutput: ${result.planned.manifestOutput}\n`,
+  );
+  process.stdout.write(
+    `artifactsOutput: ${result.planned.artifactsOutput}\n`,
+  );
+  process.stdout.write(
+    `dryRun: ${result.planned.dryRun}\n`,
+  );
+
+  if (!result.success) {
+    process.exitCode = 1;
+  }
 }
 
 function readCompileOptions(args: readonly string[]): RouteCompilerOptions {

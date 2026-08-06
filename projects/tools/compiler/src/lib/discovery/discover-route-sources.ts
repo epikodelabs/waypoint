@@ -1,71 +1,249 @@
 import ts from 'typescript';
-import type { RouteProgramContext } from './program.js';
 
-/** AST-bearing compiler stage. No AST node escapes into the resolved model. */
+import type {
+  RouteProgramContext,
+} from './program.js';
+
+/**
+ * AST-bearing compiler stage.
+ *
+ * No TypeScript AST node escapes beyond the resolution pipeline.
+ */
 export interface RouteDiscovery {
   readonly entry: string;
   readonly rootRoutes: ts.VariableDeclaration;
-  readonly exportedCandidates: readonly ts.VariableDeclaration[];
+  readonly exportedCandidates:
+    readonly ts.VariableDeclaration[];
 }
 
 export function discoverRouteSources(
   programContext: RouteProgramContext,
   routesExport = 'routes',
 ): RouteDiscovery {
-  const rootRoutes = findRootRoutes(programContext.sourceFile, routesExport);
+  const rootRoutes =
+    resolveExportedVariableDeclaration(
+      programContext,
+      routesExport,
+    );
+
   if (!rootRoutes?.initializer) {
     throw new Error(
-      `Could not find a "${routesExport}" declaration in ${programContext.entry}.`,
+      `Could not resolve an exported "${routesExport}" declaration from ${programContext.entry}.`,
     );
   }
 
-  const exportedCandidates: ts.VariableDeclaration[] = [];
-  for (const sourceFile of programContext.program.getSourceFiles()) {
-    if (sourceFile.isDeclarationFile || isDependencyFile(sourceFile.fileName)) {
+  const exportedCandidates =
+    discoverExportedCandidates(
+      programContext.program,
+    );
+
+  return {
+    entry: programContext.entry,
+    rootRoutes,
+    exportedCandidates:
+      Object.freeze(exportedCandidates),
+  };
+}
+
+/**
+ * Resolves an export from the compiler entry module through:
+ *
+ * - direct exports;
+ * - named re-exports;
+ * - export-star barrels;
+ * - chained aliases.
+ *
+ * For example:
+ *
+ * public-api.ts
+ *   export * from './lib';
+ *
+ * lib/index.ts
+ *   export * from './routes';
+ *
+ * routes/index.ts
+ *   export * from './routes.authored';
+ *
+ * routes.authored.ts
+ *   export const routes = [...];
+ */
+function resolveExportedVariableDeclaration(
+  context: RouteProgramContext,
+  exportName: string,
+): ts.VariableDeclaration | undefined {
+  const moduleSymbol =
+    context.checker.getSymbolAtLocation(
+      context.sourceFile,
+    );
+
+  if (!moduleSymbol) {
+    return undefined;
+  }
+
+  const exportedSymbol =
+    context.checker
+      .getExportsOfModule(moduleSymbol)
+      .find(symbol =>
+        symbol.getName() === exportName,
+      );
+
+  if (!exportedSymbol) {
+    return undefined;
+  }
+
+  const targetSymbol =
+    resolveAliasedSymbol(
+      context.checker,
+      exportedSymbol,
+    );
+
+  return findVariableDeclaration(
+    targetSymbol,
+  );
+}
+
+/**
+ * Resolves aliases defensively.
+ *
+ * getAliasedSymbol() normally returns the final target, but the loop keeps
+ * discovery correct if TypeScript exposes another alias in a barrel chain.
+ */
+function resolveAliasedSymbol(
+  checker: ts.TypeChecker,
+  symbol: ts.Symbol,
+): ts.Symbol {
+  let current = symbol;
+  const visited = new Set<ts.Symbol>();
+
+  while (
+    current.flags & ts.SymbolFlags.Alias
+  ) {
+    if (visited.has(current)) {
+      break;
+    }
+
+    visited.add(current);
+
+    const resolved =
+      checker.getAliasedSymbol(current);
+
+    if (resolved === current) {
+      break;
+    }
+
+    current = resolved;
+  }
+
+  return current;
+}
+
+function findVariableDeclaration(
+  symbol: ts.Symbol,
+): ts.VariableDeclaration | undefined {
+  for (
+    const declaration
+    of symbol.declarations ?? []
+  ) {
+    if (
+      ts.isVariableDeclaration(
+        declaration,
+      )
+      && declaration.initializer
+    ) {
+      return declaration;
+    }
+  }
+
+  const valueDeclaration =
+    symbol.valueDeclaration;
+
+  if (
+    valueDeclaration
+    && ts.isVariableDeclaration(
+      valueDeclaration,
+    )
+    && valueDeclaration.initializer
+  ) {
+    return valueDeclaration;
+  }
+
+  return undefined;
+}
+
+function discoverExportedCandidates(
+  program: ts.Program,
+): ts.VariableDeclaration[] {
+  const candidates:
+    ts.VariableDeclaration[] = [];
+
+  for (
+    const sourceFile
+    of program.getSourceFiles()
+  ) {
+    if (
+      sourceFile.isDeclarationFile
+      || isDependencyFile(
+        sourceFile.fileName,
+      )
+    ) {
       continue;
     }
 
-    for (const statement of sourceFile.statements) {
-      if (!ts.isVariableStatement(statement) || !isExported(statement)) {
+    for (
+      const statement
+      of sourceFile.statements
+    ) {
+      if (
+        !ts.isVariableStatement(
+          statement,
+        )
+        || !isExported(statement)
+      ) {
         continue;
       }
 
-      for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name) && declaration.initializer) {
-          exportedCandidates.push(declaration);
+      for (
+        const declaration
+        of statement
+          .declarationList
+          .declarations
+      ) {
+        if (
+          ts.isIdentifier(
+            declaration.name,
+          )
+          && declaration.initializer
+        ) {
+          candidates.push(
+            declaration,
+          );
         }
       }
     }
   }
 
-  return {
-    entry: programContext.entry,
-    rootRoutes,
-    exportedCandidates: Object.freeze(exportedCandidates),
-  };
+  return candidates;
 }
 
-function findRootRoutes(
-  sourceFile: ts.SourceFile,
-  exportName: string,
-): ts.VariableDeclaration | undefined {
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (ts.isIdentifier(declaration.name) && declaration.name.text === exportName) {
-        return declaration;
-      }
-    }
-  }
-  return undefined;
-}
-
-function isExported(statement: ts.VariableStatement): boolean {
+function isExported(
+  statement: ts.VariableStatement,
+): boolean {
   return statement.modifiers?.some(
-    modifier => modifier.kind === ts.SyntaxKind.ExportKeyword,
+    modifier =>
+      modifier.kind
+      === ts.SyntaxKind.ExportKeyword,
   ) === true;
 }
 
-function isDependencyFile(fileName: string): boolean {
-  return fileName.includes('/node_modules/') || fileName.includes('\\node_modules\\');
+function isDependencyFile(
+  fileName: string,
+): boolean {
+  return (
+    fileName.includes(
+      '/node_modules/',
+    )
+    || fileName.includes(
+      '\\node_modules\\',
+    )
+  );
 }

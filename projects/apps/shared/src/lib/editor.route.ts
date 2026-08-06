@@ -5,8 +5,8 @@ import {
   s,
 } from '@epikodelabs/waypoint';
 
-import { EditorPage, EditorSidebarComponent } from '../../../app1/src/app/demo-pages';
-import { DemoSessionService } from '../../../app1/src/app/demo-session.service';
+import { EditorPage, EditorSidebarComponent } from './demo-pages';
+import { DemoSessionService } from './demo-session.service';
 
 export const editorRoute = route(
   '/editor/:draftId',

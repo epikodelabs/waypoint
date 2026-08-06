@@ -1,6 +1,10 @@
 import { watch } from 'node:fs';
 import { dirname } from 'node:path';
-import { routeEntry, workspaceRoot } from './config.mjs';
+
+import {
+  routeEntry,
+  workspaceRoot,
+} from './config.mjs';
 import { run } from './process.mjs';
 
 let running = false;
@@ -14,12 +18,26 @@ async function compile() {
   }
 
   running = true;
+
   try {
-    await run(process.execPath, ['scripts/compile-routes.mjs'], { cwd: workspaceRoot });
+    const code = await run(
+      process.execPath,
+      ['scripts/compile-routes.mjs'],
+      { cwd: workspaceRoot },
+    );
+
+    if (code !== 0) {
+      console.error(`Route compilation failed with code ${code}.`);
+    }
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(
+      error instanceof Error
+        ? error.message
+        : String(error),
+    );
   } finally {
     running = false;
+
     if (queued) {
       queued = false;
       await compile();

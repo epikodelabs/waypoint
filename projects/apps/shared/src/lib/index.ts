@@ -1,3 +1,3 @@
-import { routes as authoredRoutes } from './routes.authored';
-
-export const routes = authoredRoutes;
+export * from './routes.authored';
+export * from './demo-pages';
+export * from './demo-session.service';

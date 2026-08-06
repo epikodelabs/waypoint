@@ -3,12 +3,12 @@ import {
   route,
 } from '@epikodelabs/waypoint';
 
-import { ReportsSidebarComponent } from '../../../app1/src/app/demo-pages';
+import { ReportsSidebarComponent } from './demo-pages';
 
 export const reportsRoute = lazyRoute(
   '/reports',
   () =>
-    import('../../../app1/src/app/reports.page')
+    import('./reports.page')
       .then(module => module.ReportsPage),
   {
     name: 'reports',

@@ -3,7 +3,7 @@ import {
   routeSlot,
 } from '@epikodelabs/waypoint';
 
-import { DemoShellComponent } from '../../../app1/src/app/demo-pages';
+import { DemoShellComponent } from './demo-pages';
 
 export const appShellRoute = layout(
   '/app',

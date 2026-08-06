@@ -3,7 +3,7 @@ import {
   s,
 } from '@epikodelabs/waypoint';
 
-import { SettingsPage, SettingsSidebarComponent } from '../../../app1/src/app/demo-pages';
+import { SettingsPage, SettingsSidebarComponent } from './demo-pages';
 
 export const settingsRoute = route('/settings', SettingsPage, {
   name: 'settings',

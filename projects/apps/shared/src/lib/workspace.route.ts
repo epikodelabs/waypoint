@@ -5,8 +5,8 @@ import {
   s,
 } from '@epikodelabs/waypoint';
 
-import { WorkspacePage, WorkspaceSidebarComponent } from '../../../app1/src/app/demo-pages';
-import { DemoSessionService } from '../../../app1/src/app/demo-session.service';
+import { WorkspacePage, WorkspaceSidebarComponent } from './demo-pages';
+import { DemoSessionService } from './demo-session.service';
 
 export const workspaceRoute = route(
   '/workspace/:projectId',

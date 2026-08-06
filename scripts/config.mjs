@@ -1,35 +1,68 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const workspaceRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
-export const routeEntry = resolve(workspaceRoot, 'projects/apps/shared/src/lib/index.ts');
-export const outputRoot = resolve(workspaceRoot, 'dist/.waypoint/shared');
+export const workspaceRoot = resolvePath(
+  fileURLToPath(new URL('..', import.meta.url)),
+);
 
-export const compilerOutputs = Object.freeze({
-  serverOutput: resolve(outputRoot, 'server-index.json'),
-  entriesOutput: resolve(outputRoot, 'entries'),
-  manifestOutput: resolve(outputRoot, 'manifest.json'),
-  artifactsOutput: resolve(outputRoot, 'artifacts'),
-});
+export const compilerProject = resolvePath(
+  workspaceRoot,
+  'projects/tools/compiler/tsconfig.json',
+);
 
-const candidates = [
+export const compilerModule = resolvePath(
+  workspaceRoot,
   'dist/tools/compiler/lib/cli.js',
-  'dist/tools/compiler/cli.js',
-  'out-tsc/compiler/lib/cli.js',
-  'out-tsc/compiler/cli.js',
-  'projects/tools/compiler/dist/lib/cli.js',
-  'projects/tools/compiler/dist/cli.js',
-].map(path => resolve(workspaceRoot, path));
+);
+
+export const routeEntry = resolvePath(
+  workspaceRoot,
+  'projects/apps/shared/src/public-api.ts',
+);
+
+export const developmentOutputRoot = resolvePath(
+  workspaceRoot,
+  'dist/.waypoint/app2',
+);
+
+export const productionOutputRoot = resolvePath(
+  workspaceRoot,
+  'dist/apps/app2/waypoint',
+);
+
+export const outputRoot = developmentOutputRoot;
+
+export function compilerOutputsFor(root) {
+  return Object.freeze({
+    serverOutput: resolvePath(root, 'server-index.json'),
+    entriesOutput: resolvePath(root, 'entries'),
+    manifestOutput: resolvePath(root, 'manifest.json'),
+    artifactsOutput: resolvePath(root, 'artifacts'),
+  });
+}
+
+export const compilerOutputs =
+  compilerOutputsFor(developmentOutputRoot);
+
+const compilerCliCandidates = [
+  compilerModule,
+  resolvePath(workspaceRoot, 'dist/tools/compiler/cli.js'),
+  resolvePath(workspaceRoot, 'out-tsc/compiler/lib/cli.js'),
+  resolvePath(workspaceRoot, 'out-tsc/compiler/cli.js'),
+];
 
 export function resolveCompilerCli() {
-  const cli = candidates.find(existsSync);
-  if (cli) return cli;
+  const found = compilerCliCandidates.find(existsSync);
+
+  if (found) {
+    return found;
+  }
 
   throw new Error([
-    'Could not find the compiled route compiler CLI.',
+    'Could not find the compiled compiler CLI.',
     'Run "npm run compiler:build" first.',
     'Checked:',
-    ...candidates.map(path => `  - ${path}`),
+    ...compilerCliCandidates.map(file => `  - ${file}`),
   ].join('\n'));
 }

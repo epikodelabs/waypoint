@@ -4,7 +4,7 @@ import {
   type NavigationTree,
 } from '@epikodelabs/waypoint';
 
-import { DemoShellComponent } from '../demo-pages';
+import { DemoShellComponent } from './demo-pages';
 import { adminBranchRoutes } from './admin.route';
 import { appHomeBranchRoutes } from './app-home.route';
 import { editorBranchRoutes } from './editor.route';
