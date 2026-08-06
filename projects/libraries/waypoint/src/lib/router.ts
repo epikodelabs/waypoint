@@ -37,6 +37,7 @@ import type {
   LayoutDefinition,
   LayoutOptions,
   RenderableRoute,
+  RedirectRouteDefinition,
   RouteDefinition,
   RouteOptions,
   NavigationTree,
@@ -355,6 +356,33 @@ async function resolveViews(
 }
 
 function adaptRoute(
+  route: RedirectRouteDefinition,
+  path: string,
+  redirectTo: string | undefined,
+  layouts: readonly LayoutDefinition[],
+  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
+  appRef: ApplicationRef,
+  injector: EnvironmentInjector,
+): RuntimeRedirectRoute;
+function adaptRoute(
+  route: RenderableRoute,
+  path: string,
+  redirectTo: string | undefined,
+  layouts: readonly LayoutDefinition[],
+  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
+  appRef: ApplicationRef,
+  injector: EnvironmentInjector,
+): RuntimeRenderableRoute;
+function adaptRoute(
+  route: RouteDefinition,
+  path: string,
+  redirectTo: string | undefined,
+  layouts: readonly LayoutDefinition[],
+  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
+  appRef: ApplicationRef,
+  injector: EnvironmentInjector,
+): Route;
+function adaptRoute(
   route: RouteDefinition,
   path: string,
   redirectTo: string | undefined,
@@ -431,8 +459,29 @@ function adaptRoutes(
       injector,
     );
 
+    const authoredPrimary =
+      group.primary.route;
+
+    if (authoredPrimary.kind === 'redirect') {
+      if (group.outlets.length > 0) {
+        throw new Error(
+          `A redirect route cannot have named outlets. Path: "${group.path}"`,
+        );
+      }
+
+      return adaptRoute(
+        authoredPrimary,
+        group.path,
+        group.primary.redirectTo,
+        group.layouts,
+        sharedPreparers,
+        appRef,
+        injector,
+      );
+    }
+
     const primary = adaptRoute(
-      group.primary.route,
+      authoredPrimary,
       group.path,
       group.primary.redirectTo,
       group.layouts,
@@ -441,35 +490,28 @@ function adaptRoutes(
       injector,
     );
 
-    if (primary.kind === 'redirect' || typeof primary.redirectTo === 'string') {
-      if (group.outlets.length > 0) {
-        throw new Error(
-          `A redirect route cannot have named outlets. Path: "${group.path}"`,
+    const outlets = group.outlets.map(
+      (compiled): RuntimeRenderableRoute => {
+        const authoredOutlet =
+          compiled.route;
+
+        if (authoredOutlet.kind === 'redirect') {
+          throw new Error(
+            `Named outlet routes cannot be redirects. Path: "${group.path}"`,
+          );
+        }
+
+        return adaptRoute(
+          authoredOutlet,
+          group.path,
+          compiled.redirectTo,
+          group.layouts,
+          sharedPreparers,
+          appRef,
+          injector,
         );
-      }
-
-      return primary;
-    }
-
-    const outlets = group.outlets.map((compiled): RuntimeRenderableRoute => {
-      const outlet = adaptRoute(
-        compiled.route,
-        group.path,
-        compiled.redirectTo,
-        group.layouts,
-        sharedPreparers,
-        appRef,
-        injector,
-      );
-
-      if (outlet.kind === 'redirect' || typeof outlet.redirectTo === 'string') {
-        throw new Error(
-          `Named outlet routes cannot be redirects. Path: "${group.path}"`,
-        );
-      }
-
-      return outlet;
-    });
+      },
+    );
 
     return outlets.length === 0
       ? primary
