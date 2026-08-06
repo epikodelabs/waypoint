@@ -133,11 +133,26 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
     return finish(false);
   }
 
+  const entrySnapshot = planned.dryRun
+    ? null
+    : await snapshotDirectory(planned.entriesOutput);
+
   const emittedBrowser = await run(
     'emit-entries',
     () => emitBrowserEntries(planned, artifactPlan!),
   );
   diagnostics.push(...emittedBrowser.diagnostics);
+
+  if (hasErrors(emittedBrowser.diagnostics)) {
+    diagnostics.unshift(stopDiagnostic(
+      planned,
+      'artifact bundling',
+      'browser entry publication failed',
+    ));
+    await entrySnapshot?.restore();
+    return finish(false);
+  }
+
   emitted.push(...emittedBrowser.emitted);
 
   const artifactSnapshot = planned.dryRun
@@ -148,7 +163,7 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
   diagnostics.push(...bundles.diagnostics);
 
   if (hasErrors(diagnostics)) {
-    await artifactSnapshot?.restore();
+    await restoreSnapshots(entrySnapshot, artifactSnapshot);
     diagnostics.unshift(stopDiagnostic(planned, 'delivery finalization', 'artifact bundling failed'));
     return finish(false);
   }
@@ -167,7 +182,7 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
           planned.manifestOutput,
         ));
   } catch (error) {
-    await artifactSnapshot?.restore();
+    await restoreSnapshots(entrySnapshot, artifactSnapshot);
     diagnostics.push(diagnostic(
       'WPT3102',
       'error',
@@ -188,7 +203,7 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
   }
 
   if (hasErrors(diagnostics)) {
-    await artifactSnapshot?.restore();
+    await restoreSnapshots(entrySnapshot, artifactSnapshot);
     diagnostics.unshift(stopDiagnostic(planned, 'publication', 'delivery validation failed'));
     return finish(false);
   }
@@ -200,13 +215,13 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
   diagnostics.push(...emittedServer.diagnostics);
 
   if (hasErrors(emittedServer.diagnostics)) {
-    await artifactSnapshot?.restore();
+    await restoreSnapshots(entrySnapshot, artifactSnapshot);
     diagnostics.unshift(stopDiagnostic(planned, 'completion', 'delivery publication failed and the previous artifact set was restored'));
     return finish(false);
   }
   emitted.push(...emittedServer.emitted);
 
-  await artifactSnapshot?.discard();
+  await discardSnapshots(entrySnapshot, artifactSnapshot);
 
   diagnostics.unshift(diagnostic(
     'WPT0001',
@@ -270,6 +285,22 @@ async function snapshotDirectory(directory: string): Promise<DirectorySnapshot> 
       await fs.rm(backup, { recursive: true, force: true });
     },
   };
+}
+
+async function restoreSnapshots(
+  ...snapshots: readonly (DirectorySnapshot | null)[]
+): Promise<void> {
+  for (const snapshot of [...snapshots].reverse()) {
+    await snapshot?.restore();
+  }
+}
+
+async function discardSnapshots(
+  ...snapshots: readonly (DirectorySnapshot | null)[]
+): Promise<void> {
+  for (const snapshot of snapshots) {
+    await snapshot?.discard();
+  }
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

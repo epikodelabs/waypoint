@@ -222,7 +222,19 @@ function discoverExportedCandidates(
     }
   }
 
-  return candidates;
+  const unique = new Map<string, ts.VariableDeclaration>();
+
+  for (const candidate of candidates) {
+    const sourceFile = candidate.getSourceFile();
+    const key = `${sourceFile.fileName}\u0000${candidate.pos}\u0000${candidate.end}`;
+    unique.set(key, candidate);
+  }
+
+  return [...unique.values()].sort((left, right) => {
+    const leftFile = left.getSourceFile().fileName;
+    const rightFile = right.getSourceFile().fileName;
+    return leftFile.localeCompare(rightFile) || left.pos - right.pos;
+  });
 }
 
 function isExported(

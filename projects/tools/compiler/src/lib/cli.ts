@@ -1,97 +1,161 @@
 #!/usr/bin/env node
 import { compileRoutes } from './compiler/compile.js';
-import type { RouteCompilerOptions } from './compiler/contracts.js';
+import type {
+  RouteCompilerDiagnostic,
+  RouteCompilerOptions,
+} from './compiler/contracts.js';
+
+const BOOLEAN_FLAGS = new Set([
+  'dry-run',
+  'profile',
+]);
+
+const VALUE_FLAGS = new Set([
+  'entry',
+  'server-output',
+  'entries-output',
+  'manifest-output',
+  'artifacts-output',
+  'routes-export',
+]);
 
 async function main(): Promise<void> {
-  if (process.argv[2] !== 'compile') {
+  const command = process.argv[2];
+
+  if (command === '--help' || command === '-h') {
+    printUsage();
+    return;
+  }
+
+  if (command !== 'compile') {
     printUsage();
     process.exitCode = 1;
     return;
   }
 
   const result = await compileRoutes(
-    readCompileOptions(
-      process.argv.slice(3),
-    ),
+    readCompileOptions(process.argv.slice(3)),
   );
 
-  for (const diagnostic of result.diagnostics) {
-    const label = diagnostic.code
-      ? `${diagnostic.level.toUpperCase()} ${diagnostic.code}`
-      : diagnostic.level.toUpperCase();
-
-    process.stdout.write(
-      `[${label}] ${diagnostic.message}\n`,
-    );
+  for (const item of result.diagnostics) {
+    writeDiagnostic(item);
   }
 
-  process.stdout.write(
-    `entry: ${result.planned.entry}\n`,
-  );
-  process.stdout.write(
-    `serverOutput: ${result.planned.serverOutput}\n`,
-  );
-  process.stdout.write(
-    `entriesOutput: ${result.planned.entriesOutput}\n`,
-  );
-  process.stdout.write(
-    `manifestOutput: ${result.planned.manifestOutput}\n`,
-  );
-  process.stdout.write(
-    `artifactsOutput: ${result.planned.artifactsOutput}\n`,
-  );
-  process.stdout.write(
-    `dryRun: ${result.planned.dryRun}\n`,
-  );
+  process.stdout.write([
+    `success: ${result.success}`,
+    `entry: ${result.planned.entry}`,
+    `serverOutput: ${result.planned.serverOutput}`,
+    `entriesOutput: ${result.planned.entriesOutput}`,
+    `manifestOutput: ${result.planned.manifestOutput}`,
+    `artifactsOutput: ${result.planned.artifactsOutput}`,
+    `dryRun: ${result.planned.dryRun}`,
+    `emitted: ${result.emitted.length}`,
+    '',
+  ].join('\n'));
+
+  if (result.timings.length > 0) {
+    process.stdout.write('timings:\n');
+    for (const timing of result.timings) {
+      process.stdout.write(
+        `  ${timing.stage}: ${timing.durationMs.toFixed(3)}ms\n`,
+      );
+    }
+  }
 
   if (!result.success) {
     process.exitCode = 1;
   }
 }
 
-function readCompileOptions(args: readonly string[]): RouteCompilerOptions {
+export function readCompileOptions(
+  args: readonly string[],
+): RouteCompilerOptions {
   const flags = new Map<string, string>();
-  let dryRun = false;
+  const booleans = new Set<string>();
 
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
-    if (!key?.startsWith('--')) {
+
+    if (key === '--help' || key === '-h') {
       printUsage();
-      throw new Error('Invalid compiler arguments.');
+      process.exit(0);
+    }
+
+    if (!key?.startsWith('--')) {
+      throw new Error(
+        `Unexpected compiler argument "${key ?? ''}".`,
+      );
     }
 
     const name = key.slice(2);
-    if (name === 'dry-run') {
-      dryRun = true;
+
+    if (BOOLEAN_FLAGS.has(name)) {
+      if (booleans.has(name)) {
+        throw new Error(`Duplicate compiler flag --${name}.`);
+      }
+      booleans.add(name);
       continue;
+    }
+
+    if (!VALUE_FLAGS.has(name)) {
+      throw new Error(`Unknown compiler flag --${name}.`);
+    }
+
+    if (flags.has(name)) {
+      throw new Error(`Duplicate compiler flag --${name}.`);
     }
 
     const value = args[++index];
     if (!value || value.startsWith('--')) {
-      printUsage();
       throw new Error(`Missing value for --${name}.`);
     }
+
     flags.set(name, value);
   }
 
-  const entry = flags.get('entry');
-  const serverOutput = flags.get('server-output');
-  const entriesOutput = flags.get('entries-output');
-  const manifestOutput = flags.get('manifest-output');
-  if (!entry || !serverOutput || !entriesOutput || !manifestOutput) {
-    printUsage();
-    throw new Error('Missing required compiler arguments.');
+  const required = [
+    'entry',
+    'server-output',
+    'entries-output',
+    'manifest-output',
+  ] as const;
+
+  const missing = required.filter(name => !flags.get(name));
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required compiler flag${missing.length === 1 ? '' : 's'}: ${missing.map(name => `--${name}`).join(', ')}.`,
+    );
   }
 
   return {
-    entry,
-    serverOutput,
-    entriesOutput,
-    manifestOutput,
+    entry: flags.get('entry')!,
+    serverOutput: flags.get('server-output')!,
+    entriesOutput: flags.get('entries-output')!,
+    manifestOutput: flags.get('manifest-output')!,
     artifactsOutput: flags.get('artifacts-output'),
     routesExport: flags.get('routes-export'),
-    dryRun,
+    dryRun: booleans.has('dry-run'),
+    profile: booleans.has('profile'),
   };
+}
+
+function writeDiagnostic(item: RouteCompilerDiagnostic): void {
+  const label = item.code
+    ? `${item.level.toUpperCase()} ${item.code}`
+    : item.level.toUpperCase();
+  const location = item.source
+    ? ` ${item.source.file}:${item.source.line ?? item.source.start}:${item.source.column ?? 0}`
+    : '';
+  const suggestion = item.suggestion
+    ? `\n  suggestion: ${item.suggestion}`
+    : '';
+  const line = `[${label}]${location} ${item.message}${suggestion}\n`;
+
+  if (item.level === 'error' || item.level === 'warning') {
+    process.stderr.write(line);
+  } else {
+    process.stdout.write(line);
+  }
 }
 
 function printUsage(): void {
@@ -104,11 +168,14 @@ function printUsage(): void {
       '--manifest-output <file> ' +
       '[--artifacts-output <dir>] ' +
       '[--routes-export <name>] ' +
-      '[--dry-run]\n',
+      '[--dry-run] ' +
+      '[--profile]\n',
   );
 }
 
 void main().catch(error => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? error.message : String(error)}\n`,
+  );
   process.exitCode = 1;
 });
