@@ -362,6 +362,7 @@ function adaptRoute(
   layouts: readonly LayoutDefinition[],
   sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
   appRef: ApplicationRef,
+  documentRef: Document,
   injector: EnvironmentInjector,
 ): RuntimeRedirectRoute;
 function adaptRoute(
@@ -371,6 +372,7 @@ function adaptRoute(
   layouts: readonly LayoutDefinition[],
   sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
   appRef: ApplicationRef,
+  documentRef: Document,
   injector: EnvironmentInjector,
 ): RuntimeRenderableRoute;
 function adaptRoute(
@@ -380,6 +382,7 @@ function adaptRoute(
   layouts: readonly LayoutDefinition[],
   sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
   appRef: ApplicationRef,
+  documentRef: Document,
   injector: EnvironmentInjector,
 ): Route;
 function adaptRoute(
@@ -389,6 +392,7 @@ function adaptRoute(
   layouts: readonly LayoutDefinition[],
   sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
   appRef: ApplicationRef,
+  documentRef: Document,
   injector: EnvironmentInjector,
 ): Route {
   if (route.kind === 'redirect') {
@@ -428,8 +432,8 @@ function adaptRoute(
 
       return {
         component: route.outlet
-          ? composeAngularLeafRouteView(appRef, injector, tokens, views)
-          : composeAngularRouteView(appRef, injector, tokens, views),
+          ? composeAngularLeafRouteView(appRef, documentRef, injector, tokens, views)
+          : composeAngularRouteView(appRef, documentRef, injector, tokens, views),
         prepare: [
           ...(sharedPreparers ?? []),
           ...(adaptFramePreparers(
@@ -449,6 +453,7 @@ function adaptRoute(
 function adaptRoutes(
   groups: readonly CompiledRouteGroup[],
   appRef: ApplicationRef,
+  documentRef: Document,
   injector: EnvironmentInjector,
 ): Route[] {
   return groups.map((group): Route => {
@@ -476,6 +481,7 @@ function adaptRoutes(
         group.layouts,
         sharedPreparers,
         appRef,
+        documentRef,
         injector,
       );
     }
@@ -487,6 +493,7 @@ function adaptRoutes(
       group.layouts,
       sharedPreparers,
       appRef,
+      documentRef,
       injector,
     );
 
@@ -508,6 +515,7 @@ function adaptRoutes(
           group.layouts,
           sharedPreparers,
           appRef,
+          documentRef,
           injector,
         );
       },
@@ -652,7 +660,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     }
 
     const engine = createRouter({
-      routes: adaptRoutes(this.registry.groups, this.appRef, this.injector),
+      routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
 
       baseHref: this.baseHref,
 
@@ -998,6 +1006,7 @@ export class Router<TRoutes extends NavigationTree = any> {
       routes: adaptRoutes(
         this.registry.groups,
         this.appRef,
+        this.document,
         this.injector,
       ),
       transitions: adaptFrameTransitions(
@@ -1011,7 +1020,7 @@ export class Router<TRoutes extends NavigationTree = any> {
 
   private createEngine(): VanillaRouter {
     return createRouter({
-      routes: adaptRoutes(this.registry.groups, this.appRef, this.injector),
+      routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
 
       baseHref: this.baseHref,
 
