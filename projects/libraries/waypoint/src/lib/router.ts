@@ -108,6 +108,10 @@ function isNavigationTreeResolution(
   return Array.isArray(value);
 }
 
+export interface RouteResolutionContext {
+  readonly signal: AbortSignal;
+}
+
 export interface RouterOptions {
   readonly baseHref?: string;
   readonly enableTracing?: boolean;
@@ -117,7 +121,7 @@ export interface RouterOptions {
   readonly preloading?: PreloadingStrategy;
   readonly viewTransitions?: ViewTransitionsOption;
   readonly namedRoutes?: readonly NamedRouteDefinition[];
-  readonly resolveRoutes?: (url: URL) => Promise<RouteResolution>;
+  readonly resolveRoutes?: (url: URL, context: RouteResolutionContext) => Promise<RouteResolution>;
   readonly contributions?: readonly RouteContributionDefinition[];
 }
 
@@ -621,6 +625,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   private registry: ReturnType<typeof createRouteRegistry>;
   private readonly namedRouteCatalog = new Map<string, NamedRouteDefinition>();
   private readonly resolvingRouteKeys = new Map<string, Promise<boolean>>();
+  private readonly resolvingRouteControllers = new Map<string, AbortController>();
   private readonly unresolvedRouteKeys = new Set<string>();
   private resolvedRoutes: NavigationTree = Object.freeze([]);
   private readonly resolvedContributionsById = new Map<string, RouteContributionDefinition>();
@@ -853,6 +858,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     this.resolvedRoutes = Object.freeze([]);
     this.resolvedContributionsById.clear();
     this.unresolvedRouteKeys.clear();
+    this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
     this.rebuildResolvedRegistry();
 
@@ -901,6 +907,7 @@ export class Router<TRoutes extends NavigationTree = any> {
 
     this.resolutionGeneration++;
     this.navigationRequestId++;
+    this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
     this.engine = null;
     this.outlets.clear();
@@ -972,6 +979,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     const url = resolveRouterUrl(href, this.baseHref, location, 'navigate');
 
     if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
+      this.abortResolvedRouteRequests(stripBaseHref(url.pathname, this.baseHref));
       await this.resolveRoutesForUrl(url);
     }
 
@@ -1043,9 +1051,17 @@ export class Router<TRoutes extends NavigationTree = any> {
       return pending;
     }
 
+    if (options.force) {
+      this.resolvingRouteControllers.get(key)?.abort();
+    }
+
+    const controller = new AbortController();
+    this.resolvingRouteControllers.set(key, controller);
     const generation = this.resolutionGeneration;
     let resolution!: Promise<boolean>;
-    resolution = Promise.resolve(this.configuration.resolveRoutes(url))
+    resolution = Promise.resolve(this.configuration.resolveRoutes(url, {
+      signal: controller.signal,
+    }))
       .then(async (resolved) => {
         if (generation !== this.resolutionGeneration) {
           return false;
@@ -1063,6 +1079,9 @@ export class Router<TRoutes extends NavigationTree = any> {
         return true;
       })
       .catch((error) => {
+        if (controller.signal.aborted) {
+          return false;
+        }
         // A transport/import failure is not evidence that the route does not
         // exist. Do not poison the negative-resolution cache; a later
         // navigation should be allowed to retry without an authorization reset.
@@ -1072,11 +1091,23 @@ export class Router<TRoutes extends NavigationTree = any> {
         if (this.resolvingRouteKeys.get(key) === resolution) {
           this.resolvingRouteKeys.delete(key);
         }
+        if (this.resolvingRouteControllers.get(key) === controller) {
+          this.resolvingRouteControllers.delete(key);
+        }
       });
 
     this.resolvingRouteKeys.set(key, resolution);
 
     return resolution;
+  }
+
+
+  private abortResolvedRouteRequests(exceptKey?: string): void {
+    for (const [key, controller] of this.resolvingRouteControllers) {
+      if (key === exceptKey) continue;
+      controller.abort();
+      this.resolvingRouteControllers.delete(key);
+    }
   }
 
   private mergeResolvedNavigation(resolved: Exclude<RouteResolution, null | undefined>): boolean {

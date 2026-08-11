@@ -53,5 +53,6 @@ export {
   type ResolvedNavigationConfiguration,
   type RouterRevalidationOptions,
   type RouteResolution,
+  type RouteResolutionContext,
   type RouterOptions,
 } from './router';

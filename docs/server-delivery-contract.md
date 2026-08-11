@@ -329,3 +329,17 @@ metadata is not sent over this boundary.
 
 A change requires a new delivery-contract version when an existing client could
 no longer safely interpret a server response according to these rules.
+
+## Browser cancellation and publication rollover
+
+A browser integration should treat server resolution as cancellable work. When a
+newer navigation supersedes a pending destination, revocation starts, or the
+router is disposed, the pending resolver receives an abort signal. A module import
+that has already started cannot be physically undone by JavaScript, but an aborted
+resolution must not return or install its contributions.
+
+Content-addressed module delivery can race with atomic compiler publication: a
+resolution may refer to the previous hash just as the server publishes the next
+generation. The default browser resolver may re-resolve once after a module-load
+failure and use the new delivery identity. Deterministic protocol or module-shape
+errors are not retried.

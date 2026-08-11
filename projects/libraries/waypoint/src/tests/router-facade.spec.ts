@@ -291,6 +291,31 @@ describe('Router: flat routes and layouts', () => {
     expect(router.displayUrl).toBe('/app/settings');
   });
 
+
+  it('resolves a protected direct deep link during initial bootstrap', async () => {
+    const deepRoutes = routesFor(
+      'application',
+      'deep-link-routes',
+      [route('/app/deep', SettingsComponent, { name: 'deep' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) =>
+      url.pathname === '/app/deep' ? { contributions: [deepRoutes] } : null,
+    );
+
+    window.history.replaceState(null, '', '/app/deep');
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(resolveRoutes).toHaveBeenCalled();
+    expect(router.state.path).toBe('/app/deep');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+  });
+
   it('composes a missing route branch before named navigation', async () => {
     const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
       if (url.pathname !== '/app/settings') {
@@ -629,6 +654,53 @@ describe('Router: flat routes and layouts', () => {
 
     expect(router.href({ name: 'static' })).toBe('/static');
     expect(router.href({ name: 'dynamic' })).toBeNull();
+  });
+
+
+  it('aborts superseded server route resolution work', async () => {
+    let slowSignal: AbortSignal | undefined;
+    let releaseSlow!: () => void;
+    const slowGate = new Promise<void>(resolve => {
+      releaseSlow = resolve;
+    });
+    const slowRoutes = routesFor(
+      'application',
+      'abort-slow-routes',
+      [route('/abort-slow', ChildComponent)],
+    );
+    const fastRoutes = routesFor(
+      'application',
+      'abort-fast-routes',
+      [route('/abort-fast', SettingsComponent)],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (
+      url: URL,
+      context: { signal: AbortSignal },
+    ) => {
+      if (url.pathname === '/abort-slow') {
+        slowSignal = context.signal;
+        await slowGate;
+        return { contributions: [slowRoutes] };
+      }
+      if (url.pathname === '/abort-fast') {
+        return { contributions: [fastRoutes] };
+      }
+      return null;
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    const slowNavigation = router.navigate({ path: '/abort-slow' });
+    await Promise.resolve();
+    const fastNavigation = router.navigate({ path: '/abort-fast' });
+
+    expect(slowSignal?.aborted).toBeTrue();
+    expect(await fastNavigation).toBeTrue();
+    releaseSlow();
+    expect(await slowNavigation).toBeFalse();
   });
 
   it('uses frame hooks as the route lifecycle API', async () => {

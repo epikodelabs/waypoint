@@ -333,7 +333,11 @@ contract, loads artifacts in dependency-first order, validates each module as a
 installation. Artifact imports are deduplicated by `artifactKey + hash`; when a
 new hash is published for a stable artifact key, Waypoint drops its own cache
 reference to the older delivery identity. Failed imports are evicted so a later
-navigation can retry.
+navigation can retry. Superseded route resolutions receive an `AbortSignal`;
+Waypoint stops obsolete fetch/import pipelines from returning route contributions
+after a newer navigation, revocation, or router disposal. If an artifact URL goes
+stale during an atomic compiler publication, the resolver re-resolves the
+destination once so it can pick up the newly published content hash.
 
 Applications can override the resolution endpoint, fetch implementation, or
 module importer without changing the routing runtime:
@@ -379,9 +383,8 @@ The normative protocol details are documented in
 ## Route revocation
 
 Server-delivered route contributions are active runtime configuration, not permanent
-membership in the application route graph. When permissions, licensing, feature
-availability, or other authorization state changes for the same principal,
-applications can explicitly cross a soft authorization boundary:
+membership in the application route graph. When identity, tenant, licensing, or
+permissions change, applications can explicitly cross an authorization boundary:
 
 ```ts
 await router.revalidate({
@@ -415,78 +418,29 @@ represent the user's complete authorized route catalog, so Waypoint does not
 revoke unrelated contributions on every navigation. Revocation happens only when
 the application explicitly declares that authorization context has changed.
 
-### Hardening invariants
+## Principal replacement
 
-Waypoint treats the server-resolution boundary as asynchronous and untrusted. The
-runtime therefore applies a few additional invariants:
-
-- revocation fails closed: if reauthorization fails, previously resolved routes
-  are still removed from the active engine configuration;
-- transport/import failures are retryable and are not cached as permanent
-  route-missing results;
-- a resolved configuration is validated as one candidate registry before any
-  dynamic route state is committed;
-- delivered contributions cannot replace authored contribution identities;
-- newer navigations supersede older navigations that are still waiting for server
-  resolution; and
-- revocation/disposal invalidates in-flight navigation attempts before they can
-  commit stale destinations.
-
-The compiler and server runtime also reject ambiguous artifact identity rather
-than choosing an arbitrary entry when malformed output contains duplicate
-artifact keys or more than one artifact for a route set.
-
-
-## Principal boundaries
-
-Waypoint distinguishes authorization changes inside one security principal from
-replacing the security principal itself.
-
-A role, permission, feature, or licensing change for the same principal may use
-soft revocation:
-
-```ts
-await router.revalidate({
-  resetResolvedRoutes: true,
-});
-```
-
-This removes dynamically delivered route contributions from the active runtime
-and resolves the current destination again. Downloaded JavaScript modules may
-remain in the browser module cache; soft revocation is a navigation-lifecycle
-operation, not an attempt to erase previously downloaded bytes.
-
-A principal or tenant replacement is a stronger security boundary. Applications
-should establish the new server session and perform a full document navigation
-into a server-authorized landing route. The previous JavaScript realm is then
-discarded before navigation for the new principal is delivered.
+A change of security principal or tenant is a stronger boundary than an ordinary
+permission refresh. Waypoint's recommended model is to establish the new principal
+on the server, select an authorized landing destination with `resolveLanding()`,
+and perform a full document navigation. The new document starts from the public
+route-slot skeleton and receives only artifacts authorized for the new principal.
 
 ```text
-principal A runtime
-      ↓ session replacement
-server selects an authorized landing route for principal B
-      ↓ full document navigation
-fresh browser realm
-      ↓
-principal B route delivery
+same principal + permissions changed
+    → revoke + revalidate
+
+principal / tenant changed
+    → server session switch
+    → authorized landing
+    → full document replace
+    → fresh JavaScript realm
 ```
 
-The practical invariant is:
-
-> Downloaded artifacts may be cached within one realm. Active contributions are
-> revocable. Replacing the principal replaces the realm.
-
-Waypoint's server router provides `resolveLanding(candidates, principal)` to
-select the first candidate that is actually server-authorized, including its
-complete artifact dependency chain. Authentication, cookie/session mutation,
-and the candidate policy remain application concerns.
-Applications should also ensure that browser back/forward-cache restoration cannot revive a realm created for a different principal. A restored document should compare its principal/session generation with the current session and reload before becoming interactive when they differ.
-
-Artifact boundaries should also follow authorization boundaries. Because a
-browser artifact is authorized atomically, routes intended for different
-principal classes should not be bundled into one `routesFor()` artifact. Use a
-nested `routeSlot()` plus a separately owned `routesFor()` contribution for
-sensitive areas such as administration.
+Downloaded code is not claimed to be erasable from browser caches, but it does not
+remain installed in the new application's JavaScript realm. Authorization
+boundaries should therefore align with independently deliverable `routesFor()`
+artifact boundaries.
 
 ---
 

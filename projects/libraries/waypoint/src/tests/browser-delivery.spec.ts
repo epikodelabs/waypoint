@@ -230,3 +230,100 @@ describe('browser server delivery', () => {
     expect(request).toBe('/internal/waypoint/resolve?path=%2Fapp');
   });
 });
+
+// Hardening: delivery work follows router cancellation and publication generations.
+describe('browser delivery hardening', () => {
+  it('passes an abort signal to server resolution and stops before importing artifacts', async () => {
+    let seenSignal: AbortSignal | undefined;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let imports = 0;
+    const resolver = createServerNavigationResolver({
+      async fetch(_input, init) {
+        seenSignal = init.signal;
+        await gate;
+        return response(200, {
+          version: 1,
+          artifactKey: 'workspace',
+          artifacts: [
+            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+          ],
+        });
+      },
+      async importModule() {
+        imports += 1;
+        return { default: contribution('workspace') };
+      },
+    });
+    const controller = new AbortController();
+    const pending = resolver(
+      new URL('https://waypoint.test/app/workspace'),
+      { signal: controller.signal },
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(seenSignal).toBe(controller.signal);
+    controller.abort();
+    release();
+
+    await expectAsync(pending).toBeRejected();
+    expect(imports).toBe(0);
+  });
+
+  it('re-resolves once when an artifact URL becomes stale during publication', async () => {
+    let resolution = 0;
+    const imports: string[] = [];
+    const resolver = createServerNavigationResolver({
+      async fetch() {
+        resolution += 1;
+        const hash = resolution === 1 ? 'OLD' : 'NEW';
+        return response(200, {
+          version: 1,
+          artifactKey: 'workspace',
+          artifacts: [{
+            artifactKey: 'workspace',
+            moduleUrl: `/modules/workspace-${hash}.js`,
+            hash,
+          }],
+        });
+      },
+      async importModule(url) {
+        imports.push(url);
+        if (url.endsWith('-OLD.js')) {
+          throw new Error('404 during publication rollover');
+        }
+        return { default: contribution('workspace') };
+      },
+    });
+
+    const result = await resolver(new URL('https://waypoint.test/app/workspace'));
+
+    expect(resolution).toBe(2);
+    expect(imports).toEqual([
+      '/modules/workspace-OLD.js',
+      '/modules/workspace-NEW.js',
+    ]);
+    expect(result?.contributions[0]?.id).toBe('workspace');
+  });
+
+  it('does not retry deterministic malformed artifact exports', async () => {
+    let resolutions = 0;
+    const resolver = createServerNavigationResolver({
+      async fetch() {
+        resolutions += 1;
+        return response(200, {
+          version: 1,
+          artifactKey: 'workspace',
+          artifacts: [
+            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+          ],
+        });
+      },
+      importModule: async () => ({ default: [] }),
+    });
+
+    await expectAsync(resolver(new URL('https://waypoint.test/app/workspace')))
+      .toBeRejectedWithError(/did not export a route contribution/i);
+    expect(resolutions).toBe(1);
+  });
+});

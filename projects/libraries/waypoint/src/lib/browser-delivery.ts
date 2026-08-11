@@ -15,6 +15,7 @@ export type ServerNavigationFetch = (
   init: Readonly<{
     readonly credentials: 'same-origin';
     readonly headers: Readonly<Record<string, string>>;
+    readonly signal?: AbortSignal;
   }>,
 ) => Promise<ServerNavigationFetchResponse>;
 
@@ -32,6 +33,12 @@ export interface ServerNavigationResolverOptions {
   readonly fetch?: ServerNavigationFetch;
   /** Override dynamic ESM import, primarily for custom loaders and tests. */
   readonly importModule?: ServerNavigationModuleImporter;
+  /** Re-resolve once when an artifact URL becomes stale during publication. */
+  readonly artifactRefreshRetries?: number;
+}
+
+export interface ServerNavigationResolverContext {
+  readonly signal?: AbortSignal;
 }
 
 export interface ServerResolvedNavigationConfiguration {
@@ -40,6 +47,7 @@ export interface ServerResolvedNavigationConfiguration {
 
 export type ServerNavigationResolver = (
   url: URL,
+  context?: ServerNavigationResolverContext,
 ) => Promise<ServerResolvedNavigationConfiguration | null>;
 
 interface RouteModule {
@@ -60,6 +68,7 @@ export function createServerNavigationResolver(
   const endpoint = normalizeEndpoint(options.endpoint ?? '/api/navigation/resolve');
   const fetchNavigation = options.fetch ?? defaultFetch;
   const importModule = options.importModule ?? defaultImportModule;
+  const artifactRefreshRetries = normalizeRetryCount(options.artifactRefreshRetries ?? 1);
   const loadedArtifacts = new Map<
     string,
     Promise<RouteContributionDefinition>
@@ -80,7 +89,12 @@ export function createServerNavigationResolver(
     latestIdentityByArtifact.set(descriptor.artifactKey, identity);
 
     const pending = (async () => {
-      const loaded = await importModule(descriptor.moduleUrl) as RouteModule;
+      let loaded: RouteModule;
+      try {
+        loaded = await importModule(descriptor.moduleUrl) as RouteModule;
+      } catch (error) {
+        throw new ServerNavigationArtifactLoadError(descriptor, error);
+      }
       const contribution = loaded?.default;
 
       if (!isRouteContributionDefinition(contribution)) {
@@ -107,15 +121,22 @@ export function createServerNavigationResolver(
     }
   }
 
-  return async (url: URL): Promise<ServerResolvedNavigationConfiguration | null> => {
+  async function resolveOnce(
+    url: URL,
+    signal?: AbortSignal,
+  ): Promise<ServerResolvedNavigationConfiguration | null> {
+    throwIfAborted(signal);
     const path = `${url.pathname}${url.search}${url.hash}`;
     const response = await fetchNavigation(
       resolutionRequestUrl(endpoint, path),
       {
         credentials: 'same-origin',
         headers: Object.freeze({ Accept: 'application/json' }),
+        signal,
       },
     );
+
+    throwIfAborted(signal);
 
     // Hidden and unknown destinations are intentionally indistinguishable.
     if (response.status === 404) return null;
@@ -125,6 +146,7 @@ export function createServerNavigationResolver(
     }
 
     const payload = await response.json();
+    throwIfAborted(signal);
     if (!isServerNavigationResolution(payload)) {
       throw new Error(
         `Server returned an invalid Waypoint navigation resolution for "${path}".`,
@@ -133,12 +155,33 @@ export function createServerNavigationResolver(
 
     const contributions: RouteContributionDefinition[] = [];
     for (const artifact of payload.artifacts) {
+      throwIfAborted(signal);
       contributions.push(await importArtifact(artifact));
     }
+    throwIfAborted(signal);
 
     return Object.freeze({
       contributions: Object.freeze(contributions),
     });
+  }
+
+  return async (
+    url: URL,
+    context: ServerNavigationResolverContext = {},
+  ): Promise<ServerResolvedNavigationConfiguration | null> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await resolveOnce(url, context.signal);
+      } catch (error) {
+        if (
+          !(error instanceof ServerNavigationArtifactLoadError)
+          || attempt >= artifactRefreshRetries
+          || context.signal?.aborted
+        ) {
+          throw error;
+        }
+      }
+    }
   };
 }
 
@@ -152,6 +195,33 @@ export function isRouteContributionDefinition(
     && nonEmptyString(candidate.id)
     && nonEmptyString(candidate.slotId)
     && Array.isArray(candidate.entries);
+}
+
+class ServerNavigationArtifactLoadError extends Error {
+  constructor(
+    readonly descriptor: ServerArtifactDelivery,
+    readonly cause: unknown,
+  ) {
+    super(`Failed to load Waypoint artifact "${descriptor.artifactKey}" (${descriptor.hash}).`);
+    this.name = 'ServerNavigationArtifactLoadError';
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  if (typeof DOMException === 'function') {
+    throw new DOMException('The navigation resolution was aborted.', 'AbortError');
+  }
+  const error = new Error('The navigation resolution was aborted.');
+  error.name = 'AbortError';
+  throw error;
+}
+
+function normalizeRetryCount(value: number): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error('artifactRefreshRetries must be a non-negative integer.');
+  }
+  return value;
 }
 
 function deliveryIdentity(descriptor: ServerArtifactDelivery): string {
