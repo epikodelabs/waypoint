@@ -1,5 +1,6 @@
 import {
   createServerNavigationResolution,
+  ServerArtifactResolutionError,
   isServerArtifactChainAuthorized,
   isServerPolicyAllowed,
   requiredServerBranchIds,
@@ -118,10 +119,17 @@ export function createServerRouter<
       return null;
     }
 
-    const artifact = index.artifacts.find(
+    const artifacts = index.artifacts.filter(
       candidate => candidate.routeSetId === branch.routeSetId,
     );
-    if (!artifact) return null;
+    if (artifacts.length === 0) return null;
+    if (artifacts.length > 1) {
+      throw new ServerArtifactResolutionError(
+        'invalid',
+        `Route set "${branch.routeSetId}" maps to multiple server artifacts.`,
+      );
+    }
+    const artifact = artifacts[0]!;
 
     const chain = await authorizedChain(snapshot, artifact.artifactKey, principal);
     if (!chain) return null;

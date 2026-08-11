@@ -263,6 +263,31 @@ already installed navigation skeleton. This preserves ownership, inherited path
 context, layouts, providers, and policy provenance established by the authored
 navigation model.
 
+## Failure and race invariants
+
+Server-side routing must fail closed at authorization-boundary changes. If the
+browser revokes resolved contributions and reauthorization then fails because of
+a transport, import, or server error, the previously authorized contribution set
+must not remain active merely because the refresh failed.
+
+A failed resolution is also not equivalent to a negative authorization result.
+Only an explicit hidden/not-found response may be cached as unresolved; transient
+transport or artifact-loading failures remain retryable.
+
+Resolved navigation is committed transactionally. A malformed contribution, an
+unknown slot, a conflicting route definition, or a collision with an authored
+contribution identity must reject the candidate without leaving partial resolved
+state installed.
+
+Navigation ordering spans the server-resolution phase as well as the underlying
+router transition. If a newer navigation starts while an older navigation is
+still waiting for server resolution, the older request must not commit afterward.
+Revocation and router disposal similarly invalidate in-flight resolved navigation.
+
+Server artifact identity must be unambiguous. Duplicate artifact keys or multiple
+artifacts claiming the same route-set delivery unit are invalid compiler output
+and must fail resolution rather than selecting one by iteration order.
+
 ## Relationship to SSR
 
 Server Delivery Contract v1 does not define server-side rendering.

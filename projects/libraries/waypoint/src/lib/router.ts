@@ -625,6 +625,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   private resolvedRoutes: NavigationTree = Object.freeze([]);
   private readonly resolvedContributionsById = new Map<string, RouteContributionDefinition>();
   private resolutionGeneration = 0;
+  private navigationRequestId = 0;
   private engine: VanillaRouter | null = null;
   private currentState: RouterState = EMPTY_ROUTER_STATE;
   private readonly outlets = new Map<string, HTMLElement[]>();
@@ -848,6 +849,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     }
 
     this.resolutionGeneration++;
+    this.navigationRequestId++;
     this.resolvedRoutes = Object.freeze([]);
     this.resolvedContributionsById.clear();
     this.unresolvedRouteKeys.clear();
@@ -862,12 +864,25 @@ export class Router<TRoutes extends NavigationTree = any> {
       'navigate',
     );
 
-    if (
-      this.configuration.resolveRoutes
-      && url.origin === location.origin
-      && isPathInsideBase(url.pathname, this.baseHref)
-    ) {
-      await this.resolveRoutesForUrl(url, { force: true, install: false });
+    try {
+      if (
+        this.configuration.resolveRoutes
+        && url.origin === location.origin
+        && isPathInsideBase(url.pathname, this.baseHref)
+      ) {
+        await this.resolveRoutesForUrl(url, { force: true, install: false });
+      }
+    } catch (error) {
+      // Revocation is the fail-closed half of an authorization-boundary change.
+      // Even when reauthorization cannot be completed, the engine must stop
+      // using the previously delivered protected configuration.
+      try {
+        await this.installCurrentRegistry();
+      } catch {
+        // Preserve the resolution failure as the actionable error. The engine
+        // configuration was already replaced before its revalidation started.
+      }
+      throw error;
     }
 
     return this.installCurrentRegistry();
@@ -884,6 +899,9 @@ export class Router<TRoutes extends NavigationTree = any> {
   dispose(): void {
     const engine = this.engine;
 
+    this.resolutionGeneration++;
+    this.navigationRequestId++;
+    this.resolvingRouteKeys.clear();
     this.engine = null;
     this.outlets.clear();
 
@@ -942,6 +960,8 @@ export class Router<TRoutes extends NavigationTree = any> {
     target: NavigationTarget,
     options?: NavigationOptions,
   ): Promise<boolean> {
+    const requestId = ++this.navigationRequestId;
+    const resolutionGeneration = this.resolutionGeneration;
     const href = this.href(target);
 
     if (href === null) {
@@ -953,6 +973,13 @@ export class Router<TRoutes extends NavigationTree = any> {
 
     if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
       await this.resolveRoutesForUrl(url);
+    }
+
+    if (
+      requestId !== this.navigationRequestId
+      || resolutionGeneration !== this.resolutionGeneration
+    ) {
+      return false;
     }
 
     return this.requireEngine().navigate(href, options);
@@ -1036,9 +1063,9 @@ export class Router<TRoutes extends NavigationTree = any> {
         return true;
       })
       .catch((error) => {
-        if (generation === this.resolutionGeneration) {
-          this.unresolvedRouteKeys.add(key);
-        }
+        // A transport/import failure is not evidence that the route does not
+        // exist. Do not poison the negative-resolution cache; a later
+        // navigation should be allowed to retry without an authorization reset.
         throw error;
       })
       .finally(() => {
@@ -1064,25 +1091,57 @@ export class Router<TRoutes extends NavigationTree = any> {
       return false;
     }
 
-    if (routes.length > 0) {
-      this.resolvedRoutes = Object.freeze([
-        ...this.resolvedRoutes,
-        ...routes,
-      ]);
-    }
+    const nextRoutes = routes.length > 0
+      ? Object.freeze([
+          ...this.resolvedRoutes,
+          ...routes,
+        ]) as NavigationTree
+      : this.resolvedRoutes;
+    const nextContributions = new Map(this.resolvedContributionsById);
+    const authoredContributionIds = new Set(
+      (this.configuration.contributions ?? []).map(contribution => contribution.id),
+    );
 
     for (const contribution of incomingContributions) {
-      this.resolvedContributionsById.set(contribution.id, contribution);
+      if (authoredContributionIds.has(contribution.id)) {
+        throw new Error(
+          `Resolved route contribution "${contribution.id}" conflicts with an authored contribution.`,
+        );
+      }
+      nextContributions.set(contribution.id, contribution);
     }
 
-    this.rebuildResolvedRegistry();
+    // Build and validate the complete candidate registry before mutating any
+    // resolved state. Malformed or conflicting artifacts therefore cannot leave
+    // a half-installed dynamic configuration behind.
+    const nextRegistry = this.createResolvedRegistry(
+      nextRoutes,
+      nextContributions,
+    );
+
+    this.resolvedRoutes = nextRoutes;
+    this.resolvedContributionsById.clear();
+    for (const [id, contribution] of nextContributions) {
+      this.resolvedContributionsById.set(id, contribution);
+    }
+    this.registry = nextRegistry;
     return true;
   }
 
   private rebuildResolvedRegistry(): void {
+    this.registry = this.createResolvedRegistry(
+      this.resolvedRoutes,
+      this.resolvedContributionsById,
+    );
+  }
+
+  private createResolvedRegistry(
+    resolvedRoutes: NavigationTree,
+    resolvedContributions: ReadonlyMap<string, RouteContributionDefinition>,
+  ): ReturnType<typeof createRouteRegistry> {
     const routes = Object.freeze([
       ...this.configuration.routes,
-      ...this.resolvedRoutes,
+      ...resolvedRoutes,
     ]) as TRoutes;
     const contributionsById = new Map(
       (this.configuration.contributions ?? []).map(contribution => [
@@ -1091,11 +1150,11 @@ export class Router<TRoutes extends NavigationTree = any> {
       ] as const),
     );
 
-    for (const [id, contribution] of this.resolvedContributionsById) {
+    for (const [id, contribution] of resolvedContributions) {
       contributionsById.set(id, contribution);
     }
 
-    this.registry = createRouteRegistry(
+    return createRouteRegistry(
       routes,
       Object.freeze([...contributionsById.values()]),
     );

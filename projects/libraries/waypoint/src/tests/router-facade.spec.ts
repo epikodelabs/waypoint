@@ -461,6 +461,176 @@ describe('Router: flat routes and layouts', () => {
     expect(getOutletContent()).not.toContain('<h3>Settings</h3>');
   });
 
+  it('fails closed when reauthorization fails after resolved routes are revoked', async () => {
+    let fail = false;
+    const protectedRoutes = routesFor(
+      'application',
+      'protected-fail-closed',
+      [route('/admin', SettingsComponent, { name: 'admin' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
+      if (url.pathname !== '/admin') return null;
+      if (fail) throw new Error('authorization service unavailable');
+      return { contributions: [protectedRoutes] };
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    await navigate('/admin');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+
+    fail = true;
+    await expectAsync(
+      router.revalidate({ resetResolvedRoutes: true }),
+    ).toBeRejectedWithError(/authorization service unavailable/);
+
+    expect(router.href({ name: 'admin' })).toBeNull();
+    expect(getOutletContent()).not.toContain('<h3>Settings</h3>');
+  });
+
+  it('retries transient route-resolution failures instead of negative-caching them', async () => {
+    let attempts = 0;
+    const retryRoutes = routesFor(
+      'application',
+      'retry-routes',
+      [route('/retry', SettingsComponent, { name: 'retry' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
+      if (url.pathname !== '/retry') return null;
+      attempts++;
+      if (attempts === 1) throw new Error('temporary network failure');
+      return { contributions: [retryRoutes] };
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    await expectAsync(
+      router.navigate({ path: '/retry' }),
+    ).toBeRejectedWithError(/temporary network failure/);
+
+    expect(await router.navigate({ path: '/retry' })).toBeTrue();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(attempts).toBe(2);
+    expect(router.state.path).toBe('/retry');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+  });
+
+  it('does not let an older slow server resolution navigate after a newer request', async () => {
+    let releaseSlow!: () => void;
+    const slowGate = new Promise<void>(resolve => {
+      releaseSlow = resolve;
+    });
+    const slowRoutes = routesFor(
+      'application',
+      'slow-routes',
+      [route('/slow', ChildComponent, { name: 'slow' })],
+    );
+    const fastRoutes = routesFor(
+      'application',
+      'fast-routes',
+      [route('/fast', SettingsComponent, { name: 'fast' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
+      if (url.pathname === '/slow') {
+        await slowGate;
+        return { contributions: [slowRoutes] };
+      }
+      if (url.pathname === '/fast') {
+        return { contributions: [fastRoutes] };
+      }
+      return null;
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    const slowNavigation = router.navigate({ path: '/slow' });
+    await Promise.resolve();
+    const fastNavigation = router.navigate({ path: '/fast' });
+
+    expect(await fastNavigation).toBeTrue();
+    releaseSlow();
+    expect(await slowNavigation).toBeFalse();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(router.state.path).toBe('/fast');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+    expect(getOutletContent()).not.toContain('<h3>Child</h3>');
+  });
+
+  it('keeps resolved state transactional when a malformed contribution is rejected', async () => {
+    let attempt = 0;
+    const malformed = routesFor(
+      'missing-slot',
+      'malformed',
+      [route('/dynamic', ChildComponent)],
+    );
+    const valid = routesFor(
+      'application',
+      'valid-dynamic',
+      [route('/dynamic', SettingsComponent, { name: 'dynamic' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
+      if (url.pathname !== '/dynamic') return null;
+      attempt++;
+      return attempt === 1
+        ? { contributions: [malformed] }
+        : { contributions: [valid] };
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    await expectAsync(
+      router.navigate({ path: '/dynamic' }),
+    ).toBeRejectedWithError(/unknown route slot/i);
+
+    expect(await router.navigate({ path: '/dynamic' })).toBeTrue();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(router.href({ name: 'dynamic' })).toBe('/dynamic');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+  });
+
+  it('rejects resolved contributions that collide with authored contribution identity', async () => {
+    const authored = routesFor(
+      'application',
+      'authored-core',
+      [route('/static', ChildComponent, { name: 'static' })],
+    );
+    const conflicting = routesFor(
+      'application',
+      'authored-core',
+      [route('/dynamic', SettingsComponent, { name: 'dynamic' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.resolveTo({
+      contributions: [conflicting],
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes, contributions: [authored] },
+    );
+
+    await expectAsync(
+      router.navigate({ path: '/dynamic' }),
+    ).toBeRejectedWithError(/conflicts with an authored contribution/i);
+
+    expect(router.href({ name: 'static' })).toBe('/static');
+    expect(router.href({ name: 'dynamic' })).toBeNull();
+  });
+
   it('uses frame hooks as the route lifecycle API', async () => {
     const events: string[] = [];
 

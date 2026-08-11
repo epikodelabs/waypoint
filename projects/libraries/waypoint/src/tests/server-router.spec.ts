@@ -156,6 +156,17 @@ describe('server router', () => {
     });
   });
 
+  it('rejects ambiguous route-set to artifact mappings', async () => {
+    const { index, router } = fixture();
+    (index.artifacts as Artifact[]).push(
+      artifact('workspace-shadow', 'workspace-set', [], ['workspace-home']),
+    );
+
+    await expectAsync(
+      router.resolve('/app/workspace/101', principal),
+    ).toBeRejectedWithError(/maps to multiple server artifacts/i);
+  });
+
   it('does not resolve an unauthorized destination', async () => {
     const { router } = fixture();
 

@@ -39,7 +39,7 @@ export interface ServerArtifactIndex {
 
 export class ServerArtifactResolutionError extends Error {
   constructor(
-    public readonly code: 'missing' | 'unavailable' | 'cycle',
+    public readonly code: 'missing' | 'unavailable' | 'cycle' | 'invalid',
     message: string,
   ) {
     super(message);
@@ -52,9 +52,16 @@ export function resolveServerArtifactChain<T extends ServerArtifactRecord>(
   index: { readonly artifacts: readonly T[] },
   artifactKey: string,
 ): readonly T[] {
-  const byKey = new Map(
-    index.artifacts.map(artifact => [artifact.artifactKey, artifact] as const),
-  );
+  const byKey = new Map<string, T>();
+  for (const artifact of index.artifacts) {
+    if (byKey.has(artifact.artifactKey)) {
+      throw new ServerArtifactResolutionError(
+        'invalid',
+        `Duplicate artifact key "${artifact.artifactKey}" in the server index.`,
+      );
+    }
+    byKey.set(artifact.artifactKey, artifact);
+  }
   const ordered: T[] = [];
   const completed = new Set<string>();
   const active = new Set<string>();

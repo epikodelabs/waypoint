@@ -67,6 +67,19 @@ describe('server routing', () => {
     ]);
   });
 
+  it('rejects duplicate artifact keys instead of resolving an ambiguous index', () => {
+    const index: ServerArtifactIndex = {
+      artifacts: [
+        artifact('duplicate', [], ['first']),
+        artifact('duplicate', [], ['second']),
+      ],
+    };
+
+    expect(() => resolveServerArtifactChain(index, 'duplicate')).toThrowError(
+      /duplicate artifact key/i,
+    );
+  });
+
   it('rejects cyclic artifact graphs rather than exposing partial delivery', () => {
     const index: ServerArtifactIndex = {
       artifacts: [

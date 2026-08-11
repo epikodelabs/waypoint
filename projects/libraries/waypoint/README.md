@@ -414,6 +414,27 @@ represent the user's complete authorized route catalog, so Waypoint does not
 revoke unrelated contributions on every navigation. Revocation happens only when
 the application explicitly declares that authorization context has changed.
 
+### Hardening invariants
+
+Waypoint treats the server-resolution boundary as asynchronous and untrusted. The
+runtime therefore applies a few additional invariants:
+
+- revocation fails closed: if reauthorization fails, previously resolved routes
+  are still removed from the active engine configuration;
+- transport/import failures are retryable and are not cached as permanent
+  route-missing results;
+- a resolved configuration is validated as one candidate registry before any
+  dynamic route state is committed;
+- delivered contributions cannot replace authored contribution identities;
+- newer navigations supersede older navigations that are still waiting for server
+  resolution; and
+- revocation/disposal invalidates in-flight navigation attempts before they can
+  commit stale destinations.
+
+The compiler and server runtime also reject ambiguous artifact identity rather
+than choosing an arbitrary entry when malformed output contains duplicate
+artifact keys or more than one artifact for a route set.
+
 ---
 
 # Example applications
