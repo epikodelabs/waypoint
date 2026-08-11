@@ -220,6 +220,39 @@ A module request is valid only when:
 A stale hash, unknown artifact, or unauthorized artifact should normally be
 indistinguishable at the public HTTP boundary.
 
+
+## Revocation and delivered-route lifecycle
+
+A successful delivery authorizes an artifact for that request; it does not make
+its route contribution permanent for the lifetime of the application.
+
+Waypoint distinguishes downloaded module state from active navigation state:
+
+- downloaded artifact modules may remain cached by `artifactKey + hash`;
+- `routesFor()` contributions installed from those modules are revocable;
+- authored routes and authored contributions are not part of server-delivery
+  revocation;
+- an authorization-context change should reset resolved navigation and resolve
+  the current destination again.
+
+The Angular router exposes this boundary explicitly:
+
+```ts
+await router.revalidate({
+  resetResolvedRoutes: true,
+});
+```
+
+Resetting resolved routes increments the resolver generation. Results from older
+in-flight resolutions are ignored, preventing a slow response produced under a
+previous identity or tenant from reattaching revoked navigation.
+
+A target-scoped `ServerNavigationResolution` is not an authorized route catalog.
+Therefore ordinary navigation must not replace the entire delivered contribution
+set with the artifact chain for the latest target. Doing so would incorrectly
+revoke unrelated routes that remain authorized. Full revocation is instead tied
+to an explicit authorization-boundary change.
+
 ## Relationship to `routeSlot()` and `routesFor()`
 
 Compiler artifacts export actual `routesFor()` contributions. They are not

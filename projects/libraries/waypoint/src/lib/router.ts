@@ -87,6 +87,15 @@ export interface ResolvedNavigationConfiguration {
   readonly contributions?: readonly RouteContributionDefinition[];
 }
 
+export interface RouterRevalidationOptions {
+  /**
+   * Removes every route and contribution previously installed through
+   * `resolveRoutes`, then resolves the current URL again before revalidating.
+   * Authored routes and contributions are preserved.
+   */
+  readonly resetResolvedRoutes?: boolean;
+}
+
 export type RouteResolution =
   | NavigationTree
   | ResolvedNavigationConfiguration
@@ -613,6 +622,9 @@ export class Router<TRoutes extends NavigationTree = any> {
   private readonly namedRouteCatalog = new Map<string, NamedRouteDefinition>();
   private readonly resolvingRouteKeys = new Map<string, Promise<boolean>>();
   private readonly unresolvedRouteKeys = new Set<string>();
+  private resolvedRoutes: NavigationTree = Object.freeze([]);
+  private readonly resolvedContributionsById = new Map<string, RouteContributionDefinition>();
+  private resolutionGeneration = 0;
   private engine: VanillaRouter | null = null;
   private currentState: RouterState = EMPTY_ROUTER_STATE;
   private readonly outlets = new Map<string, HTMLElement[]>();
@@ -830,8 +842,35 @@ export class Router<TRoutes extends NavigationTree = any> {
     return null;
   }
 
-  revalidate(): Promise<boolean> {
-    return this.requireEngine().revalidate();
+  async revalidate(options: RouterRevalidationOptions = {}): Promise<boolean> {
+    if (!options.resetResolvedRoutes) {
+      return this.requireEngine().revalidate();
+    }
+
+    this.resolutionGeneration++;
+    this.resolvedRoutes = Object.freeze([]);
+    this.resolvedContributionsById.clear();
+    this.unresolvedRouteKeys.clear();
+    this.resolvingRouteKeys.clear();
+    this.rebuildResolvedRegistry();
+
+    const location = getRouterLocation(this.document);
+    const url = resolveRouterUrl(
+      `${location.pathname}${location.search}${location.hash}`,
+      this.baseHref,
+      location,
+      'navigate',
+    );
+
+    if (
+      this.configuration.resolveRoutes
+      && url.origin === location.origin
+      && isPathInsideBase(url.pathname, this.baseHref)
+    ) {
+      await this.resolveRoutesForUrl(url, { force: true, install: false });
+    }
+
+    return this.installCurrentRegistry();
   }
 
   updateHistoryState(state: unknown): void {
@@ -953,44 +992,59 @@ export class Router<TRoutes extends NavigationTree = any> {
     return this.registry.groups.some((group) => matchesCompiledPath(group.path, path));
   }
 
-  private async resolveRoutesForUrl(url: URL): Promise<boolean> {
+  private async resolveRoutesForUrl(
+    url: URL,
+    options: Readonly<{ force?: boolean; install?: boolean }> = {},
+  ): Promise<boolean> {
     if (!this.configuration.resolveRoutes) {
       return false;
     }
 
-    if (this.matchesRegisteredRoute(url)) {
+    if (!options.force && this.matchesRegisteredRoute(url)) {
       return false;
     }
 
     const key = stripBaseHref(url.pathname, this.baseHref);
 
-    if (this.unresolvedRouteKeys.has(key)) {
+    if (!options.force && this.unresolvedRouteKeys.has(key)) {
       return false;
     }
 
     const pending = this.resolvingRouteKeys.get(key);
 
-    if (pending) {
+    if (pending && !options.force) {
       return pending;
     }
 
-    const resolution = Promise.resolve(this.configuration.resolveRoutes(url))
+    const generation = this.resolutionGeneration;
+    let resolution!: Promise<boolean>;
+    resolution = Promise.resolve(this.configuration.resolveRoutes(url))
       .then(async (resolved) => {
+        if (generation !== this.resolutionGeneration) {
+          return false;
+        }
+
         if (!resolved || !this.mergeResolvedNavigation(resolved)) {
           this.unresolvedRouteKeys.add(key);
           return false;
         }
 
         this.unresolvedRouteKeys.delete(key);
-        await this.installCurrentRegistry();
+        if (options.install !== false) {
+          await this.installCurrentRegistry();
+        }
         return true;
       })
       .catch((error) => {
-        this.unresolvedRouteKeys.add(key);
+        if (generation === this.resolutionGeneration) {
+          this.unresolvedRouteKeys.add(key);
+        }
         throw error;
       })
       .finally(() => {
-        this.resolvingRouteKeys.delete(key);
+        if (this.resolvingRouteKeys.get(key) === resolution) {
+          this.resolvingRouteKeys.delete(key);
+        }
       });
 
     this.resolvingRouteKeys.set(key, resolution);
@@ -1010,9 +1064,25 @@ export class Router<TRoutes extends NavigationTree = any> {
       return false;
     }
 
-    const mergedRoutes = Object.freeze([
+    if (routes.length > 0) {
+      this.resolvedRoutes = Object.freeze([
+        ...this.resolvedRoutes,
+        ...routes,
+      ]);
+    }
+
+    for (const contribution of incomingContributions) {
+      this.resolvedContributionsById.set(contribution.id, contribution);
+    }
+
+    this.rebuildResolvedRegistry();
+    return true;
+  }
+
+  private rebuildResolvedRegistry(): void {
+    const routes = Object.freeze([
       ...this.configuration.routes,
-      ...routes,
+      ...this.resolvedRoutes,
     ]) as TRoutes;
     const contributionsById = new Map(
       (this.configuration.contributions ?? []).map(contribution => [
@@ -1021,28 +1091,21 @@ export class Router<TRoutes extends NavigationTree = any> {
       ] as const),
     );
 
-    for (const contribution of incomingContributions) {
-      contributionsById.set(contribution.id, contribution);
+    for (const [id, contribution] of this.resolvedContributionsById) {
+      contributionsById.set(id, contribution);
     }
 
-    this.configuration = {
-      ...this.configuration,
-      routes: mergedRoutes,
-      contributions: Object.freeze([...contributionsById.values()]),
-    };
     this.registry = createRouteRegistry(
-      this.configuration.routes,
-      this.configuration.contributions,
+      routes,
+      Object.freeze([...contributionsById.values()]),
     );
-
-    return true;
   }
 
-  private async installCurrentRegistry(): Promise<void> {
+  private async installCurrentRegistry(): Promise<boolean> {
     const engine = this.engine;
 
     if (!engine) {
-      return;
+      return false;
     }
 
     engine.replaceConfiguration({
@@ -1058,7 +1121,7 @@ export class Router<TRoutes extends NavigationTree = any> {
       ),
     });
 
-    await engine.revalidate();
+    return engine.revalidate();
   }
 
   private createEngine(): VanillaRouter {

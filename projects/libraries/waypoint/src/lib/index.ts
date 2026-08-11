@@ -51,6 +51,7 @@ export {
   Router,
   type NamedRouteDefinition,
   type ResolvedNavigationConfiguration,
+  type RouterRevalidationOptions,
   type RouteResolution,
   type RouterOptions,
 } from './router';

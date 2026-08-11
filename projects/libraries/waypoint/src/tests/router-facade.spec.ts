@@ -362,6 +362,105 @@ describe('Router: flat routes and layouts', () => {
     expect(router.state.path).toBe('/app/settings');
   });
 
+
+  it('revokes resolved contributions at an explicit authorization boundary', async () => {
+    let allowed = true;
+    const protectedRoutes = routesFor(
+      'application',
+      'protected',
+      [route('/admin', SettingsComponent, { name: 'admin' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
+      if (url.pathname !== '/admin' || !allowed) return null;
+      return { contributions: [protectedRoutes] };
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    await navigate('/admin');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+    expect(router.href({ name: 'admin' })).toBe('/admin');
+
+    allowed = false;
+    await router.revalidate({ resetResolvedRoutes: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(router.href({ name: 'admin' })).toBeNull();
+    expect(getOutletContent()).not.toContain('<h3>Settings</h3>');
+    expect(resolveRoutes.calls.count()).toBeGreaterThan(1);
+  });
+
+  it('restores a revoked contribution when the current destination becomes authorized again', async () => {
+    let allowed = true;
+    const protectedRoutes = routesFor(
+      'application',
+      'protected',
+      [route('/admin', SettingsComponent, { name: 'admin' })],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
+      if (url.pathname !== '/admin' || !allowed) return null;
+      return { contributions: [protectedRoutes] };
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    await navigate('/admin');
+    allowed = false;
+    await router.revalidate({ resetResolvedRoutes: true });
+
+    allowed = true;
+    await router.revalidate({ resetResolvedRoutes: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(router.href({ name: 'admin' })).toBe('/admin');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
+  });
+
+  it('discards stale resolver results that complete after revocation starts', async () => {
+    let release!: (value: ReturnType<typeof routesFor>) => void;
+    const stale = new Promise<ReturnType<typeof routesFor>>(resolve => {
+      release = resolve;
+    });
+    const staleContribution = routesFor(
+      'application',
+      'stale',
+      [route('/admin', SettingsComponent, { name: 'admin' })],
+    );
+    let first = true;
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) => {
+      if (url.pathname !== '/admin') return null;
+      if (first) {
+        first = false;
+        return { contributions: [await stale] };
+      }
+      return null;
+    });
+
+    bootstrap(
+      [route('/', HomeComponent), routeSlot('application')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    const navigation = router.navigate({ path: '/admin' });
+    await Promise.resolve();
+
+    const revocation = router.revalidate({ resetResolvedRoutes: true });
+    release(staleContribution);
+
+    await navigation;
+    await revocation;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(router.href({ name: 'admin' })).toBeNull();
+    expect(getOutletContent()).not.toContain('<h3>Settings</h3>');
+  });
+
   it('uses frame hooks as the route lifecycle API', async () => {
     const events: string[] = [];
 

@@ -375,6 +375,45 @@ lifecycle integration.
 The normative protocol details are documented in
 `docs/server-delivery-contract.md`.
 
+
+## Route revocation
+
+Server-delivered route contributions are active runtime configuration, not permanent
+membership in the application route graph. When identity, tenant, licensing, or
+permissions change, applications can explicitly cross an authorization boundary:
+
+```ts
+await router.revalidate({
+  resetResolvedRoutes: true,
+});
+```
+
+Waypoint then:
+
+1. removes routes and `routesFor()` contributions previously installed through
+   `resolveRoutes`;
+2. preserves authored routes and authored contributions;
+3. clears cached unresolved-route decisions;
+4. resolves the current URL against the server again;
+5. installs the resulting registry atomically; and
+6. revalidates the active destination.
+
+Downloaded JavaScript is not treated as revocable. The browser delivery resolver
+may retain content-addressed module caches, while the route contributions exported
+by those modules can leave and later re-enter the active navigation model.
+
+This distinction keeps the security boundary precise:
+
+```text
+artifact delivery  → whether code may enter the browser
+route revocation   → whether delivered code participates in navigation now
+```
+
+Ordinary navigation remains additive. A target-scoped server resolution does not
+represent the user's complete authorized route catalog, so Waypoint does not
+revoke unrelated contributions on every navigation. Revocation happens only when
+the application explicitly declares that authorization context has changed.
+
 ---
 
 # Example applications

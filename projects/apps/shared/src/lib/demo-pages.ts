@@ -420,6 +420,10 @@ export class IntroPage {
   protected async activateUser(userId: string): Promise<void> {
     this.session.loginAs(userId);
 
+    await this.router.revalidate({
+      resetResolvedRoutes: true,
+    });
+
     await this.router.navigate({
       name: 'admin',
     });
@@ -722,6 +726,10 @@ export class DemoShellComponent {
 
   protected async activateUser(userId: string): Promise<void> {
     this.session.loginAs(userId);
+
+    await this.router.revalidate({
+      resetResolvedRoutes: true,
+    });
 
     await this.router.navigate({
       name: 'admin',
