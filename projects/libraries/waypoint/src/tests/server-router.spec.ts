@@ -24,6 +24,12 @@ const principal: ServerPrincipal = {
   permissions: new Set(['read']),
 };
 
+const adminPrincipal: ServerPrincipal = {
+  subject: 'admin',
+  roles: new Set(['admin']),
+  permissions: new Set(['read', 'admin']),
+};
+
 function artifact(
   artifactKey: string,
   routeSetId: string,
@@ -171,6 +177,33 @@ describe('server router', () => {
     const { router } = fixture();
 
     expect(await router.resolve('/app/admin', principal)).toBeNull();
+  });
+
+  it('selects the first server-authorized landing target', async () => {
+    const { router } = fixture();
+
+    expect(await router.resolveLanding(
+      ['/app/admin', '/app/workspace/101?view=overview'],
+      principal,
+    )).toBe('/app/workspace/101?view=overview');
+  });
+
+  it('keeps the preferred landing when the new principal is authorized', async () => {
+    const { router } = fixture();
+
+    expect(await router.resolveLanding(
+      ['/app/admin', '/app/workspace/101?view=overview'],
+      adminPrincipal,
+    )).toBe('/app/admin');
+  });
+
+  it('does not return an external landing target', async () => {
+    const { router } = fixture();
+
+    expect(await router.resolveLanding(
+      ['https://example.com/app/workspace/101'],
+      principal,
+    )).toBeNull();
   });
 
   it('authorizes a module through its complete dependency chain', async () => {

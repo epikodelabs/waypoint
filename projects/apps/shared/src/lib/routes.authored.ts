@@ -5,6 +5,7 @@ import {
 
 export { publicRoutes } from './public.routes';
 export { applicationRoutes } from './application.routes';
+export { administrationRoutes } from './admin.route';
 
 export const routes = [
   routeSlot('public'),

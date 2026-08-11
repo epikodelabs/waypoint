@@ -21,7 +21,7 @@ import {
   type ArtifactDescriptor,
   type Branch,
 } from './compiler-output.js';
-import { readPrincipal } from './route-auth.js';
+import { demoPrincipalProfile, readPrincipal } from './route-auth.js';
 
 const browserDistFolder = path.join(import.meta.dirname, '../browser');
 const app = express();
@@ -50,7 +50,47 @@ const navigation = createExpressServerRouterHandlers<
   },
 });
 
+app.use(express.json({ limit: '16kb' }));
 app.use(readPrincipal);
+
+app.post('/api/session/principal', async (request, response, next) => {
+  try {
+    const profile = demoPrincipalProfile(request.body?.identity);
+    if (!profile) {
+      response.status(400).set({
+        'Cache-Control': 'private, no-store',
+        Vary: 'Authorization, Cookie',
+      }).json({ error: 'Unknown demo principal.' });
+      return;
+    }
+
+    const location = await serverRouter.resolveLanding(
+      profile.landingTargets,
+      profile.principal,
+    );
+    if (!location) {
+      response.status(403).set({
+        'Cache-Control': 'private, no-store',
+        Vary: 'Authorization, Cookie',
+      }).json({ error: 'No authorized landing route.' });
+      return;
+    }
+
+    response
+      .status(200)
+      .set({
+        'Cache-Control': 'private, no-store',
+        Vary: 'Authorization, Cookie',
+      })
+      .cookie('identity', profile.id, {
+        path: '/',
+        sameSite: 'lax',
+      })
+      .json({ location });
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get('/api/ping', (_request, response) => {
   response.json({

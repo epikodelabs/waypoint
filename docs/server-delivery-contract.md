@@ -288,6 +288,31 @@ Server artifact identity must be unambiguous. Duplicate artifact keys or multipl
 artifacts claiming the same route-set delivery unit are invalid compiler output
 and must fail resolution rather than selecting one by iteration order.
 
+
+## Principal replacement
+
+Delivered-route revocation and principal replacement are separate operations.
+Soft revocation may remove delivered contributions from the active routing
+configuration while leaving previously imported JavaScript modules cached in
+the current browser realm.
+
+When the authenticated security principal or tenant changes, applications
+should replace the browser realm with a full document navigation. The server
+establishes the new principal, selects an authorized landing route, and the
+browser navigates there as a new document before protected navigation is
+installed for that principal.
+
+`createServerRouter()` exposes `resolveLanding(candidates, principal)` for this
+server-side selection. It returns the first candidate that successfully resolves
+and authorizes under the same complete-chain rules as ordinary route delivery.
+It never turns the delivery protocol into an authorized-route catalog.
+Applications must also account for browser back/forward-cache restoration: a document created for one principal must not become interactive again after the current session identifies a different principal. Reload or replace that restored document before reusing Waypoint runtime state.
+
+Artifact boundaries must respect authorization boundaries as well. Since an
+artifact is an atomic delivery unit, a sensitive branch should live in a
+separate `routesFor()` artifact rather than sharing one artifact with routes
+that less-privileged principals must receive.
+
 ## Relationship to SSR
 
 Server Delivery Contract v1 does not define server-side rendering.

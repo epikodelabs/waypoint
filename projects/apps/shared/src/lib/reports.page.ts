@@ -43,7 +43,6 @@ import { RouterLink } from '@epikodelabs/waypoint';
         >
           Back to workspace
         </a>
-        <a [routerLink]="{ name: 'admin' }">Try guarded admin route</a>
       </div>
     </section>
   `,

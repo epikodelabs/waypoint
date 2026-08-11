@@ -379,8 +379,9 @@ The normative protocol details are documented in
 ## Route revocation
 
 Server-delivered route contributions are active runtime configuration, not permanent
-membership in the application route graph. When identity, tenant, licensing, or
-permissions change, applications can explicitly cross an authorization boundary:
+membership in the application route graph. When permissions, licensing, feature
+availability, or other authorization state changes for the same principal,
+applications can explicitly cross a soft authorization boundary:
 
 ```ts
 await router.revalidate({
@@ -434,6 +435,58 @@ runtime therefore applies a few additional invariants:
 The compiler and server runtime also reject ambiguous artifact identity rather
 than choosing an arbitrary entry when malformed output contains duplicate
 artifact keys or more than one artifact for a route set.
+
+
+## Principal boundaries
+
+Waypoint distinguishes authorization changes inside one security principal from
+replacing the security principal itself.
+
+A role, permission, feature, or licensing change for the same principal may use
+soft revocation:
+
+```ts
+await router.revalidate({
+  resetResolvedRoutes: true,
+});
+```
+
+This removes dynamically delivered route contributions from the active runtime
+and resolves the current destination again. Downloaded JavaScript modules may
+remain in the browser module cache; soft revocation is a navigation-lifecycle
+operation, not an attempt to erase previously downloaded bytes.
+
+A principal or tenant replacement is a stronger security boundary. Applications
+should establish the new server session and perform a full document navigation
+into a server-authorized landing route. The previous JavaScript realm is then
+discarded before navigation for the new principal is delivered.
+
+```text
+principal A runtime
+      ↓ session replacement
+server selects an authorized landing route for principal B
+      ↓ full document navigation
+fresh browser realm
+      ↓
+principal B route delivery
+```
+
+The practical invariant is:
+
+> Downloaded artifacts may be cached within one realm. Active contributions are
+> revocable. Replacing the principal replaces the realm.
+
+Waypoint's server router provides `resolveLanding(candidates, principal)` to
+select the first candidate that is actually server-authorized, including its
+complete artifact dependency chain. Authentication, cookie/session mutation,
+and the candidate policy remain application concerns.
+Applications should also ensure that browser back/forward-cache restoration cannot revive a realm created for a different principal. A restored document should compare its principal/session generation with the current session and reload before becoming interactive when they differ.
+
+Artifact boundaries should also follow authorization boundaries. Because a
+browser artifact is authorized atomically, routes intended for different
+principal classes should not be bundled into one `routesFor()` artifact. Use a
+nested `routeSlot()` plus a separately owned `routesFor()` contribution for
+sensitive areas such as administration.
 
 ---
 

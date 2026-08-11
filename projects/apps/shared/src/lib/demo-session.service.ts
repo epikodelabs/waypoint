@@ -12,26 +12,18 @@ export interface DemoUser {
   readonly favoriteDraftId: number;
   readonly preferredView: string;
   readonly focusFilters: readonly string[];
-  readonly canAccessAdmin: boolean;
   readonly prefersDraftGuard: boolean;
 }
 
 export interface WorkspaceSnapshot {
   readonly projectId: number;
   readonly loadOrder: number;
-  readonly canOpenAdmin: boolean;
   readonly activeUserName: string;
   readonly activeUserRole: string;
   readonly recommendedDraftId: number;
   readonly suggestedFilters: readonly string[];
 }
 
-export interface AdminAudit {
-  readonly accessGranted: boolean;
-  readonly reviewedBy: string;
-  readonly reviewerRole: string;
-  readonly workspaceLoads: number;
-}
 
 const demoUsers = Object.freeze([
   {
@@ -43,7 +35,6 @@ const demoUsers = Object.freeze([
     favoriteDraftId: 7,
     preferredView: 'overview',
     focusFilters: Object.freeze(['open', 'recent']),
-    canAccessAdmin: false,
     prefersDraftGuard: true,
   },
   {
@@ -55,24 +46,55 @@ const demoUsers = Object.freeze([
     favoriteDraftId: 21,
     preferredView: 'activity',
     focusFilters: Object.freeze(['assigned', 'flagged']),
-    canAccessAdmin: true,
     prefersDraftGuard: false,
   },
 ] satisfies readonly DemoUser[]);
+
+function readIdentityCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+
+  const identity = document.cookie
+    .split(';')
+    .map(value => value.trim())
+    .find(value => value.startsWith('identity='))
+    ?.slice('identity='.length);
+
+  if (!identity) return null;
+
+  try {
+    return decodeURIComponent(identity);
+  } catch {
+    return null;
+  }
+}
+
+function initialDemoUser(): DemoUser {
+  const identity = readIdentityCookie();
+  return demoUsers.find(user => user.id === identity) ?? demoUsers[0];
+}
 
 @Injectable({
   providedIn: 'root',
 })
 export class DemoSessionService {
   readonly users = demoUsers;
-  readonly currentUserId = signal(demoUsers[0].id);
-  readonly adminAccess = signal(
-    demoUsers[0].canAccessAdmin,
-  );
+  private readonly initialUser = initialDemoUser();
+  readonly currentUserId = signal(this.initialUser.id);
   readonly draftDirty = signal(
-    demoUsers[0].prefersDraftGuard,
+    this.initialUser.prefersDraftGuard,
   );
   readonly workspaceLoads = signal(0);
+  private readonly realmIdentity = readIdentityCookie();
+
+  constructor() {
+    if (typeof window === 'undefined') return;
+
+    window.addEventListener('pageshow', () => {
+      if (readIdentityCookie() !== this.realmIdentity) {
+        window.location.reload();
+      }
+    });
+  }
 
   currentUser(): DemoUser {
     return this.users.find(
@@ -80,29 +102,37 @@ export class DemoSessionService {
     ) ?? this.users[0];
   }
 
-  loginAs(userId: string): void {
-    const nextUser = this.users.find(
-      user => user.id === userId,
-    );
+  async switchPrincipal(userId: string): Promise<void> {
+    const response = await fetch('/api/session/principal', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ identity: userId }),
+    });
 
-    if (!nextUser) {
-      return;
+    if (!response.ok) {
+      throw new Error(
+        `Failed to switch principal "${userId}": ${response.status}.`,
+      );
     }
 
-    this.currentUserId.set(nextUser.id);
-
-    if (typeof document !== 'undefined') {
-      document.cookie =
-        `identity=${encodeURIComponent(nextUser.id)}; Path=/; SameSite=Lax`;
+    const payload: unknown = await response.json();
+    if (
+      !payload
+      || typeof payload !== 'object'
+      || typeof (payload as { location?: unknown }).location !== 'string'
+      || !(payload as { location: string }).location.startsWith('/')
+      || (payload as { location: string }).location.startsWith('//')
+    ) {
+      throw new Error('Server returned an invalid principal landing response.');
     }
 
-    this.adminAccess.set(nextUser.canAccessAdmin);
-    this.draftDirty.set(nextUser.prefersDraftGuard);
+    window.location.replace((payload as { location: string }).location);
   }
 
-  setAdminAccess(value: boolean): void {
-    this.adminAccess.set(value);
-  }
 
   setDraftDirty(value: boolean): void {
     this.draftDirty.set(value);
@@ -116,7 +146,6 @@ export class DemoSessionService {
     return {
       projectId,
       loadOrder,
-      canOpenAdmin: this.adminAccess(),
       activeUserName: activeUser.name,
       activeUserRole: activeUser.role,
       recommendedDraftId: activeUser.favoriteDraftId,
@@ -128,14 +157,4 @@ export class DemoSessionService {
     };
   }
 
-  createAdminAudit(): AdminAudit {
-    const activeUser = this.currentUser();
-
-    return {
-      accessGranted: this.adminAccess(),
-      reviewedBy: activeUser.email,
-      reviewerRole: activeUser.role,
-      workspaceLoads: this.workspaceLoads(),
-    };
-  }
 }

@@ -15,6 +15,12 @@ export type Lazy<T> = () => MaybePromise<T | { readonly default: T }>;
 export type NavigationProvider = Provider | EnvironmentProviders;
 export type NavigationProviders = readonly NavigationProvider[];
 
+export interface RoutePolicy {
+  readonly allowAnonymous?: boolean;
+  readonly roles?: readonly string[];
+  readonly permissions?: readonly string[];
+}
+
 export type RouteRedirect = {
   readonly redirectTo: string | URL;
   readonly replace?: boolean;
@@ -114,6 +120,8 @@ export interface RouteDefinitionBase<
   readonly name?: TName;
   readonly data?: Readonly<Record<string, unknown>>;
   readonly providers?: NavigationProviders;
+  /** Server authorization metadata consumed by the Waypoint compiler. */
+  readonly policy?: RoutePolicy;
 }
 
 export interface RenderableRouteDefinitionBase<
@@ -184,6 +192,8 @@ export interface LayoutDefinitionBase<
   readonly path: TPath;
   readonly entries: TEntries;
   readonly providers?: NavigationProviders;
+  /** Server authorization metadata inherited by descendant navigation. */
+  readonly policy?: RoutePolicy;
 }
 
 export type LayoutOptions = Omit<

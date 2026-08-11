@@ -11,7 +11,6 @@ import {
 
 import {
   type DemoUser,
-  type AdminAudit,
   type WorkspaceSnapshot,
   DemoSessionService,
 } from './demo-session.service';
@@ -177,8 +176,7 @@ const sidebarStyles = `
             <span>{{ currentUser().role }} В· {{ currentUser().email }}</span>
           </div>
           <p>
-            Home workspace {{ currentUser().homeProjectId }} В·
-            admin {{ currentUser().canAccessAdmin ? 'enabled' : 'disabled' }}
+            Home workspace {{ currentUser().homeProjectId }}
           </p>
         </div>
         <div class="user-toggle-row">
@@ -410,7 +408,6 @@ const sidebarStyles = `
 })
 export class IntroPage {
   private readonly session = inject(DemoSessionService);
-  private readonly router = inject(Router);
   protected readonly users = this.session.users;
 
   protected currentUser(): DemoUser {
@@ -418,15 +415,7 @@ export class IntroPage {
   }
 
   protected async activateUser(userId: string): Promise<void> {
-    this.session.loginAs(userId);
-
-    await this.router.revalidate({
-      resetResolvedRoutes: true,
-    });
-
-    await this.router.navigate({
-      name: 'admin',
-    });
+    await this.session.switchPrincipal(userId);
   }
 
   protected openWorkspace(
@@ -495,24 +484,6 @@ export class IntroPage {
             </a>
           }
         </nav>
-
-        <div class="control-card">
-          <label class="toggle">
-            <input
-              type="checkbox"
-              [checked]="session.adminAccess()"
-              (change)="setAdminAccess($event)"
-            />
-            Allow <code>/app/admin</code>
-          </label>
-          <p>
-            @if (session.adminAccess()) {
-              The <code>beforeEnter</code> frame hook will allow the admin route.
-            } @else {
-              The <code>beforeEnter</code> frame hook redirects to access settings.
-            }
-          </p>
-        </div>
 
         <div class="control-card">
           <label class="toggle">
@@ -666,7 +637,6 @@ export class IntroPage {
 })
 export class DemoShellComponent {
   protected readonly session = inject(DemoSessionService);
-  private readonly router = inject(Router);
   protected readonly users = this.session.users;
 
   protected currentUser(): DemoUser {
@@ -714,30 +684,11 @@ export class DemoShellComponent {
           name: 'reports',
         },
       },
-      {
-        label: 'Admin',
-        description: 'Guarded route that redirects until access is enabled',
-        target: {
-          name: 'admin',
-        },
-      },
     ] as const;
   }
 
   protected async activateUser(userId: string): Promise<void> {
-    this.session.loginAs(userId);
-
-    await this.router.revalidate({
-      resetResolvedRoutes: true,
-    });
-
-    await this.router.navigate({
-      name: 'admin',
-    });
-  }
-
-  protected setAdminAccess(event: Event): void {
-    this.session.setAdminAccess(this.readChecked(event));
+    await this.session.switchPrincipal(userId);
   }
 
   protected setDraftDirty(event: Event): void {
@@ -807,16 +758,8 @@ export class DemoShellComponent {
             <strong>{{ snapshot()?.suggestedFilters?.join(', ') || 'none' }}</strong>
           </p>
           <p>
-            Admin route available:
-            <strong>{{ snapshot()?.canOpenAdmin ? 'yes' : 'no' }}</strong>
-          </p>
-          <p>
             Recommended draft:
             <strong>#{{ snapshot()?.recommendedDraftId ?? 0 }}</strong>
-          </p>
-          <p>
-            Switching the signed-in demo user attempts the admin route.
-            Nora is redirected to access settings, while Lev enters admin.
           </p>
         </article>
       </div>
@@ -1128,59 +1071,7 @@ export class EditorPage {
 })
 export class EditorSidebarComponent {}
 
-@Component({
-  standalone: true,
-  template: `
-    <section class="page">
-      <header class="page-header">
-        <div>
-          <p class="eyebrow">beforeEnter + prepare frame hooks</p>
-          <h1>Admin console</h1>
-        </div>
-        <span class="status-pill">guard passed</span>
-      </header>
 
-      <div class="page-grid">
-        <article class="panel">
-          <h3>Guard result</h3>
-          <p>
-            Access is controlled by the shell checkbox. Disable it and try the
-            route again to confirm the redirect.
-          </p>
-        </article>
-        <article class="panel">
-          <h3>Prepared audit</h3>
-          <p>reviewedBy: <strong>{{ audit()?.reviewedBy }}</strong></p>
-          <p>reviewerRole: <strong>{{ audit()?.reviewerRole }}</strong></p>
-          <p>workspaceLoads: <strong>{{ audit()?.workspaceLoads ?? 0 }}</strong></p>
-        </article>
-      </div>
-    </section>
-  `,
-  styles: [pageStyles],
-})
-export class AdminPage {
-  protected readonly data = input<DataInput>({});
-
-  protected audit(): AdminAudit | null {
-    return (this.data()['audit'] as AdminAudit | undefined) ?? null;
-  }
-}
-
-@Component({
-  standalone: true,
-  template: `
-    <section class="sidebar-card">
-      <h3>Admin sidebar</h3>
-      <p>
-        This route is useful for checking that a successful guard still commits
-        both outlets together.
-      </p>
-    </section>
-  `,
-  styles: [sidebarStyles],
-})
-export class AdminSidebarComponent {}
 
 @Component({
   standalone: true,

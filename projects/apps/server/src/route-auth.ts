@@ -9,28 +9,64 @@ declare global {
   }
 }
 
-const demoPrincipals: Readonly<Record<string, ServerPrincipal>> = {
+export interface DemoPrincipalProfile {
+  readonly id: string;
+  readonly principal: ServerPrincipal;
+  readonly landingTargets: readonly string[];
+}
+
+const demoProfiles: Readonly<Record<string, DemoPrincipalProfile>> = {
   nora: {
-    subject: 'nora',
-    roles: new Set(['user']),
-    permissions: new Set([
-      'project:read',
-      'draft:write',
-      'reports:read',
-    ]),
+    id: 'nora',
+    principal: {
+      subject: 'nora',
+      roles: new Set(['user']),
+      permissions: new Set([
+        'project:read',
+        'draft:write',
+        'reports:read',
+      ]),
+    },
+    landingTargets: [
+      '/app/settings?section=access',
+      '/',
+    ],
   },
   lev: {
-    subject: 'lev',
-    roles: new Set(['admin']),
-    permissions: new Set([
-      'project:read',
-      'settings:write',
-      'draft:write',
-      'reports:read',
-      'admin:read',
-    ]),
+    id: 'lev',
+    principal: {
+      subject: 'lev',
+      roles: new Set(['admin']),
+      permissions: new Set([
+        'project:read',
+        'settings:write',
+        'draft:write',
+        'reports:read',
+        'admin:read',
+      ]),
+    },
+    landingTargets: [
+      '/app/admin',
+      '/app/settings?section=access',
+      '/',
+    ],
   },
 };
+
+export function demoPrincipalProfile(
+  identity: unknown,
+): DemoPrincipalProfile | undefined {
+  if (typeof identity !== 'string') return undefined;
+  return demoProfiles[identity.trim()];
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return '';
+  }
+}
 
 export const readPrincipal: RequestHandler = (
   request: Request,
@@ -45,7 +81,7 @@ export const readPrincipal: RequestHandler = (
       ?.slice('identity='.length);
 
   request.principal = token
-    ? demoPrincipals[decodeURIComponent(token)]
+    ? demoPrincipalProfile(safeDecodeURIComponent(token))?.principal
     : undefined;
   next();
 };

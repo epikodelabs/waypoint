@@ -68,6 +68,10 @@ export interface ServerRouter<
     target: string | URL,
     principal?: ServerPrincipal,
   ): Promise<ServerNavigationResolution | null>;
+  resolveLanding(
+    targets: readonly (string | URL)[],
+    principal?: ServerPrincipal,
+  ): Promise<string | null>;
   resolveArtifact(
     artifactKey: string,
     principal?: ServerPrincipal,
@@ -139,6 +143,24 @@ export function createServerRouter<
       chain,
       candidate => options.moduleUrlFor(candidate),
     );
+  }
+
+  async function resolveLanding(
+    targets: readonly (string | URL)[],
+    principal?: ServerPrincipal,
+  ): Promise<string | null> {
+    for (const target of targets) {
+      const resolution = await resolve(target, principal);
+      if (!resolution) continue;
+
+      const pathname = pathnameOf(target);
+      if (pathname === null) continue;
+      return typeof target === 'string'
+        ? relativeTargetOf(target)
+        : `${target.pathname}${target.search}${target.hash}`;
+    }
+
+    return null;
   }
 
   async function resolveArtifact(
@@ -221,6 +243,7 @@ export function createServerRouter<
   return Object.freeze({
     match,
     resolve,
+    resolveLanding,
     resolveArtifact,
     resolveModule,
   });
@@ -263,6 +286,12 @@ export function isPathPrefix(prefix: string, pathname: string): boolean {
   return normalizedPrefix === '/'
     || normalizedPathname === normalizedPrefix
     || normalizedPathname.startsWith(`${normalizedPrefix}/`);
+}
+
+
+function relativeTargetOf(target: string): string {
+  const url = new URL(target, 'http://waypoint.local');
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function pathnameOf(target: string | URL): string | null {

@@ -1,11 +1,11 @@
 import {
   layout,
+  routeSlot,
   routesFor,
   type NavigationTree,
 } from '@epikodelabs/waypoint';
 
 import { DemoShellComponent } from './demo-pages';
-import { adminBranchRoutes } from './admin.route';
 import { appHomeBranchRoutes } from './app-home.route';
 import { editorBranchRoutes } from './editor.route';
 import { reportsBranchRoutes } from './reports.route';
@@ -22,7 +22,7 @@ const entries = [
       ...settingsBranchRoutes,
       ...editorBranchRoutes,
       ...reportsBranchRoutes,
-      ...adminBranchRoutes,
+      routeSlot('administration'),
     ],
   ),
 ] as const satisfies NavigationTree;

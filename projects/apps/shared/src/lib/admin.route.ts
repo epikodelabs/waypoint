@@ -2,35 +2,36 @@ import { inject } from '@angular/core';
 import {
   frame,
   route,
+  routesFor,
 } from '@epikodelabs/waypoint';
 
-import { AdminPage, AdminSidebarComponent } from './demo-pages';
+import { AdminPage, AdminSidebarComponent } from './admin-pages';
 import { DemoSessionService } from './demo-session.service';
 
 export const adminRoute = route(
   '/admin',
   frame(AdminPage, {
-    beforeEnter: [
+    prepare: [
       () => {
         const session = inject(DemoSessionService);
+        const user = session.currentUser();
 
-        return session.adminAccess()
-          || {
-            redirectTo: '/app/settings?section=access',
-            replace: true,
-          };
+        return {
+          audit: {
+            reviewedBy: user.email,
+            reviewerRole: user.role,
+            workspaceLoads: session.workspaceLoads(),
+          },
+        };
       },
-    ],
-    prepare: [
-      () => ({
-        audit:
-          inject(DemoSessionService)
-            .createAdminAudit(),
-      }),
     ],
   }),
   {
     name: 'admin',
+    policy: {
+      roles: ['admin'],
+      permissions: ['admin:read'],
+    },
   },
 );
 
@@ -46,3 +47,8 @@ export const adminBranchRoutes = [
   adminRoute,
   adminSidebarRoute,
 ] as const;
+export const administrationRoutes = routesFor(
+  'administration',
+  'administration-core',
+  adminBranchRoutes,
+);

@@ -64,4 +64,21 @@ describe('route compiler parameter validation', () => {
 
     expect(() => createRouteRegistry(routes)).not.toThrow();
   });
+  it('preserves server policy metadata without changing runtime compilation', () => {
+    const protectedRoute = route('/admin', TestPage, {
+      policy: {
+        roles: ['admin'],
+        permissions: ['admin:read'],
+      },
+    });
+
+    const registry = createRouteRegistry([protectedRoute]);
+
+    expect(protectedRoute.policy).toEqual({
+      roles: ['admin'],
+      permissions: ['admin:read'],
+    });
+    expect(registry.groups[0]?.primary.route).toBe(protectedRoute);
+  });
+
 });
