@@ -636,6 +636,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   private engine: VanillaRouter | null = null;
   private currentState: RouterState = EMPTY_ROUTER_STATE;
   private readonly outlets = new Map<string, HTMLElement[]>();
+  private readonly notFoundRecoveryTasks = new Map<string, Promise<void>>();
   private tickQueued = false;
 
   public readonly navigateTo: TypedNavigate<TRoutes>;
@@ -760,7 +761,7 @@ export class Router<TRoutes extends NavigationTree = any> {
         replaceChildNodes(target, heading);
 
         if (this.shouldResolveNotFoundUrl(url)) {
-          void this.resolveRoutesForUrl(url).catch(() => undefined);
+          this.scheduleNotFoundRecovery(url);
         }
       },
 
@@ -919,6 +920,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     this.navigationRequestId++;
     this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
+    this.notFoundRecoveryTasks.clear();
     this.engine = null;
     this.outlets.clear();
 
@@ -1259,6 +1261,36 @@ export class Router<TRoutes extends NavigationTree = any> {
     return engine.revalidate();
   }
 
+  private scheduleNotFoundRecovery(url: URL): void {
+    const key = url.href;
+
+    if (this.notFoundRecoveryTasks.has(key)) {
+      return;
+    }
+
+    let task!: Promise<void>;
+    task = Promise.resolve()
+      .then(async () => {
+        const resolved = await this.resolveRoutesForUrl(url, { install: false });
+
+        if (!resolved) {
+          return;
+        }
+
+        await this.installCurrentRegistry();
+      })
+      .catch((error) => {
+        this.recordNavigationError(error);
+      })
+      .finally(() => {
+        if (this.notFoundRecoveryTasks.get(key) === task) {
+          this.notFoundRecoveryTasks.delete(key);
+        }
+      });
+
+    this.notFoundRecoveryTasks.set(key, task);
+  }
+
   private createEngine(): VanillaRouter {
     return createRouter({
       routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
@@ -1322,7 +1354,7 @@ export class Router<TRoutes extends NavigationTree = any> {
         replaceChildNodes(target, heading);
 
         if (this.shouldResolveNotFoundUrl(url)) {
-          void this.resolveRoutesForUrl(url).catch(() => undefined);
+          this.scheduleNotFoundRecovery(url);
         }
       },
 

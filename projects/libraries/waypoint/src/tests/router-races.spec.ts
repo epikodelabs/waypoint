@@ -95,14 +95,13 @@ idescribe('Router mutation races', () => {
       ]),
     ).toBeTrue();
 
-    await expectAsync(navigation)
-      .toBeResolvedTo(false);
-
     loading.resolve({
       component: () =>
         document.createTextNode('Slow'),
     });
 
+    await expectAsync(navigation)
+      .toBeResolvedTo(false);
     await delay();
 
     expect(router.state.current).toBeNull();
@@ -131,18 +130,19 @@ idescribe('Router mutation races', () => {
 
     const second = router.navigate('/fast');
 
-    await expectAsync(first)
-      .toBeResolvedTo(false);
     await expectAsync(second)
       .toBeResolvedTo(true);
-
-    expect(router.state.current?.config).toBe(fast);
-    expect(outlet.textContent).toBe('Fast');
 
     loading.resolve({
       component: () =>
         document.createTextNode('Slow'),
     });
+
+    await expectAsync(first)
+      .toBeResolvedTo(false);
+
+    expect(router.state.current?.config).toBe(fast);
+    expect(outlet.textContent).toBe('Fast');
 
     await delay();
 

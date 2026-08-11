@@ -14,6 +14,13 @@ function delay(ms: number): Promise<void> {
 function createComponent(text: string): () => Node {
     return () => document.createTextNode(text);
 }
+function completeViewTransition(
+    callback: () => void | PromiseLike<void>
+): { finished: Promise<void> } {
+    return {
+        finished: Promise.resolve(callback()).then(() => undefined)
+    };
+}
 function dispatchAnchorClick(target: HTMLAnchorElement, init: MouseEventInit = {}): boolean {
     const event = new MouseEvent('click', {
         bubbles: true,
@@ -1169,8 +1176,7 @@ idescribe('Router', () => {
             const original = transitionDocument.startViewTransition;
             const startViewTransition = jasmine.createSpy('startViewTransition')
                 .and.callFake((callback: () => void | PromiseLike<void>) => {
-                void callback();
-                return { finished: Promise.resolve() };
+                return completeViewTransition(callback);
             });
             transitionDocument.startViewTransition = startViewTransition;
             try {
@@ -1197,8 +1203,7 @@ idescribe('Router', () => {
             const original = transitionDocument.startViewTransition;
             const startViewTransition = jasmine.createSpy('startViewTransition')
                 .and.callFake((callback: () => void | PromiseLike<void>) => {
-                void callback();
-                return { finished: Promise.resolve() };
+                return completeViewTransition(callback);
             });
             transitionDocument.startViewTransition = startViewTransition;
             try {
@@ -1232,8 +1237,7 @@ idescribe('Router', () => {
             const original = transitionDocument.startViewTransition;
             const startViewTransition = jasmine.createSpy('startViewTransition')
                 .and.callFake((callback: () => void | PromiseLike<void>) => {
-                void callback();
-                return { finished: Promise.resolve() };
+                return completeViewTransition(callback);
             });
             transitionDocument.startViewTransition = startViewTransition;
             try {
@@ -1268,8 +1272,7 @@ idescribe('Router', () => {
             const original = transitionDocument.startViewTransition;
             const startViewTransition = jasmine.createSpy('startViewTransition')
                 .and.callFake((callback: () => void | PromiseLike<void>) => {
-                void callback();
-                return { finished: Promise.resolve() };
+                return completeViewTransition(callback);
             });
             const predicate = jasmine.createSpy('predicate')
                 .and.callFake((context: {
@@ -2401,8 +2404,7 @@ idescribe('Router', () => {
             const original = transitionDocument.startViewTransition;
             const startViewTransition = jasmine.createSpy('startViewTransition')
                 .and.callFake((callback: () => void | PromiseLike<void>) => {
-                void callback();
-                return { finished: Promise.resolve() };
+                return completeViewTransition(callback);
             });
             transitionDocument.startViewTransition = startViewTransition;
 

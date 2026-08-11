@@ -19,6 +19,12 @@ type ParamsInput = Record<string, unknown>;
 type QueryInput = Record<string, unknown>;
 type DataInput = Record<string, unknown>;
 
+function handleNavigation(navigation: Promise<boolean>): void {
+  navigation.catch(error => {
+    console.error(error);
+  });
+}
+
 const pageStyles = `
   .page {
     display: grid;
@@ -424,7 +430,7 @@ export class IntroPage {
   ): void {
     const activeUser = this.currentUser();
 
-    void this.router.navigate(
+    handleNavigation(this.router.navigate(
       {
         name: 'workspace',
         params: { projectId },
@@ -442,7 +448,7 @@ export class IntroPage {
           userId: activeUser.id,
         },
       },
-    );
+    ));
   }
 }
 
@@ -821,11 +827,11 @@ export class WorkspacePage {
   protected openEditor(): void {
     const activeUser = this.session.currentUser();
 
-    void this.router.navigate({
+    handleNavigation(this.router.navigate({
       name: 'editor',
       params: { draftId: activeUser.favoriteDraftId },
       query: { mode: 'review' },
-    });
+    }));
   }
 
   protected updateHistory(): void {
@@ -1052,7 +1058,7 @@ export class EditorPage {
   }
 
   protected goReports(): void {
-    void this.router.navigate({ name: 'reports' });
+    handleNavigation(this.router.navigate({ name: 'reports' }));
   }
 }
 

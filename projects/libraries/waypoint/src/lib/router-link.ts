@@ -134,7 +134,7 @@ export class RouterLink implements OnChanges {
   }
 
   @HostListener('click', ['$event'])
-  handleClick(event: Event): void {
+  async handleClick(event: Event): Promise<void> {
     if (!(event instanceof MouseEvent)) {
       return;
     }
@@ -171,17 +171,19 @@ export class RouterLink implements OnChanges {
     }
 
     event.preventDefault();
-    void this.router.navigate(
-      this.href,
-      {
-        replace: this.replaceUrl,
-        state: this.state,
-      },
-    ).catch(() => {
-      // Router state already records the actionable navigation error. Anchor
-      // clicks are fire-and-forget DOM events, so consume the rejected promise
-      // here to avoid an unrelated unhandled-rejection signal.
-    });
+
+    try {
+      await this.router.navigate(
+        this.href,
+        {
+          replace: this.replaceUrl,
+          state: this.state,
+        },
+      );
+    } catch {
+      // Router state already records the actionable navigation error. The DOM
+      // click contract is still best-effort, so keep the failure local here.
+    }
   }
 
   private refreshHref(): void {

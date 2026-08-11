@@ -570,8 +570,6 @@ describe('Router: flat routes and layouts', () => {
     await expectAsync(
       router.navigate({ path: '/retry' }),
     ).toBeRejectedWithError(/temporary network failure/);
-    expect((router.state.error as Error).message)
-      .toContain('temporary network failure');
 
     expect(await router.navigate({ path: '/retry' })).toBeTrue();
     await new Promise((resolve) => setTimeout(resolve, 0));

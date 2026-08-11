@@ -10,6 +10,8 @@ import type {
   InferRoutePreparedData,
 } from '../lib/navigation-definitions';
 
+function expectType<T>(_value: T): void {}
+
 class ProjectPage {}
 
 interface Project {
@@ -68,18 +70,15 @@ const projectFrame = frame(ProjectPage as Type<unknown>, {
   ],
 
   afterEnter: [activated => {
-    const name: string = activated.data.project.name;
-    const permission: 'read' | 'write' = activated.data.permissions[0];
-    void name;
-    void permission;
+    expectType<string>(activated.data.project.name);
+    expectType<'read' | 'write'>(activated.data.permissions[0]);
 
     // @ts-expect-error prepare did not provide a customer value
     activated.data.customer;
   }],
 
   beforeLeave: [active => {
-    const id: number = active.data.project.id;
-    void id;
+    expectType<number>(active.data.project.id);
     return true;
   }],
 });
@@ -97,4 +96,4 @@ const frameData: ProjectFrameData = {
 };
 
 const routeData: ProjectRouteData = frameData;
-void routeData;
+expectType<ProjectRouteData>(routeData);

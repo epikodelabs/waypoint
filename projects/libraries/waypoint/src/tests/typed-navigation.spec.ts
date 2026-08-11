@@ -37,12 +37,14 @@ const routes = [
   ]),
 ] as const satisfies NavigationTree;
 
-function assertNamedNavigation(router: Router<typeof routes>): void {
-  void router.navigateTo.dashboard({
-    params: { projectId: 123 },
-  });
+function expectType<T>(_value: T): void {}
 
-  void router.navigateTo.dashboard({
+function assertNamedNavigation(router: Router<typeof routes>): void {
+  expectType<Promise<boolean>>(router.navigateTo.dashboard({
+    params: { projectId: 123 },
+  }));
+
+  expectType<Promise<boolean>>(router.navigateTo.dashboard({
     params: { projectId: 123 },
     query: {
       tab: 'settings',
@@ -50,22 +52,21 @@ function assertNamedNavigation(router: Router<typeof routes>): void {
       filters: ['a', 'b'],
       draft: true,
     },
-  });
+  }));
 
-  void router.navigateTo.settings({
+  expectType<Promise<boolean>>(router.navigateTo.settings({
     query: { section: 'billing' },
-  });
+  }));
 
   const href = router.hrefTo.dashboard({
     params: { projectId: 123 },
     query: { tab: 'overview' },
   });
 
-  const typedHref: string | null = href;
-  void typedHref;
+  expectType<string | null>(href);
 
   // @ts-expect-error route name must exist in the configured layout tree
-  void router.navigateTo.missing();
+  expectType<Promise<boolean>>(router.navigateTo.missing());
 }
 
 describe('typed routes typings', () => {

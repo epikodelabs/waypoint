@@ -95,9 +95,11 @@ export function createServerRouterSnapshotSource<
     });
     pending = attempt;
 
-    void attempt.finally(() => {
+    const clearPending = () => {
       if (pending === attempt) pending = undefined;
-    }).catch(() => undefined);
+    };
+
+    attempt.then(clearPending, clearPending);
 
     return attempt;
   }

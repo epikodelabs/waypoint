@@ -11,6 +11,14 @@ let running = false;
 let queued = false;
 let timer;
 
+function reportCompileError(error) {
+  console.error(
+    error instanceof Error
+      ? error.message
+      : String(error),
+  );
+}
+
 async function compile() {
   if (running) {
     queued = true;
@@ -52,5 +60,7 @@ console.log(`Watching ${directory}`);
 
 watch(directory, { recursive: true }, () => {
   clearTimeout(timer);
-  timer = setTimeout(() => void compile(), 100);
+  timer = setTimeout(() => {
+    compile().catch(reportCompileError);
+  }, 100);
 });
