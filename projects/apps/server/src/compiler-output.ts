@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import type {
-  ServerArtifactIndex,
+  ServerRouterIndex,
+  ServerRouterShard,
   ServerArtifactRecord,
   ServerRouteBranch,
   ServerRoutePolicy,
@@ -20,7 +21,7 @@ export interface Branch extends ServerRouteBranch {
 
 export interface ArtifactDescriptor extends ServerArtifactRecord {}
 
-export interface ServerIndex extends ServerArtifactIndex {
+export interface ServerIndex extends ServerRouterIndex<ArtifactDescriptor> {
   readonly version: 1;
   readonly shards: readonly {
     readonly prefix: string;
@@ -29,7 +30,7 @@ export interface ServerIndex extends ServerArtifactIndex {
   readonly artifacts: readonly ArtifactDescriptor[];
 }
 
-export interface ServerShard {
+export interface ServerShard extends ServerRouterShard<Branch> {
   readonly version: 1;
   readonly branches: readonly Branch[];
 }

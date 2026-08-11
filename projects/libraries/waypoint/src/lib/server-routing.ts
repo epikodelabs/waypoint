@@ -146,10 +146,10 @@ export function isServerArtifactChainAuthorized(
  * No route, slot, policy, branch, source-file, or dependency metadata crosses
  * this boundary.
  */
-export function createServerNavigationResolution(
+export function createServerNavigationResolution<T extends ServerArtifactRecord>(
   artifactKey: string,
-  artifacts: readonly ServerArtifactRecord[],
-  moduleUrlFor: (artifact: ServerArtifactRecord) => string,
+  artifacts: readonly T[],
+  moduleUrlFor: (artifact: T) => string,
 ): ServerNavigationResolution {
   if (artifacts.length === 0 || artifacts.at(-1)?.artifactKey !== artifactKey) {
     throw new ServerArtifactResolutionError(

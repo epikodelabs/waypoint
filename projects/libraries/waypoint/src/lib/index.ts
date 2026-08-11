@@ -6,6 +6,7 @@ export * from './route-builders';
 export * from './route-slots';
 export * from './server-delivery';
 export * from './server-routing';
+export * from './server-router';
 export { RouterLink } from './router-link';
 export * from './navigation-definitions';
 export * from './router-events';

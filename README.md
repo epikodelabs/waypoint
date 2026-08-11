@@ -266,8 +266,28 @@ loads the already-authorized artifact plan in order, installs the resulting
 `routesFor()` contributions, and revalidates the current URL.
 
 This contract is independent of Express and SSR. Applications can implement the
-HTTP transport differently while reusing Waypoint's public contract types and
-server routing helpers.
+HTTP transport differently while reusing Waypoint's framework-neutral server
+router:
+
+```ts
+const serverRouter = createServerRouter({
+  loadIndex,
+  loadShard,
+  moduleUrlFor: artifact =>
+    `/api/navigation/modules/${artifact.artifactKey}/${artifact.hash}`,
+});
+
+const resolution = await serverRouter.resolve(requestedPath, principal);
+```
+
+`createServerRouter()` owns path matching, shard selection, route-set lookup,
+dependency ordering, complete-chain authorization, and construction of the
+browser delivery plan. An Express, Fastify, Node, or other server adapter only
+maps HTTP requests and responses around that API.
+
+Artifact module requests are resolved by `artifactKey + hash`, not emitted
+filenames. The server authorizes the complete dependency chain again before it
+returns the artifact file to the transport adapter.
 
 The normative protocol details are documented in
 `projects/libraries/waypoint/SERVER-DELIVERY-CONTRACT.md`.

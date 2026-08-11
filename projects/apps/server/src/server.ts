@@ -11,12 +11,7 @@ import express, {
 } from 'express';
 import path from 'node:path';
 import {
-  createServerNavigationResolution,
-  isServerArtifactAuthorized,
-  isServerArtifactChainAuthorized,
-  isServerPolicyAllowed,
-  requiredServerBranchIds,
-  resolveServerArtifactChain,
+  createServerRouter,
   ServerArtifactResolutionError,
 } from '@epikodelabs/waypoint';
 
@@ -35,120 +30,15 @@ const angularApp = new AngularNodeAppEngine({
   allowedHosts: ['localhost', '127.0.0.1'],
 });
 
+const serverRouter = createServerRouter<ArtifactDescriptor, Branch>({
+  loadIndex: loadServerIndex,
+  loadShard,
+  moduleUrlFor: artifact =>
+    `/api/navigation/modules/${encodeURIComponent(artifact.artifactKey)}`
+    + `/${encodeURIComponent(artifact.hash ?? '')}`,
+});
+
 app.use(readPrincipal);
-
-function requestedUrl(value: unknown): URL | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-
-  try {
-    const url = new URL(value, 'http://waypoint.local');
-    return url.origin === 'http://waypoint.local' ? url : null;
-  } catch {
-    return null;
-  }
-}
-
-function matches(pattern: string, pathname: string): boolean {
-  const expected = pattern.split('/').filter(Boolean);
-  const actual = pathname.split('/').filter(Boolean);
-
-  return expected.length === actual.length
-    && expected.every(
-      (part, index) => part.startsWith(':') || part === actual[index],
-    );
-}
-
-async function findBranch(pathname: string): Promise<Branch | undefined> {
-  const index = await loadServerIndex();
-
-  const candidates = [...index.shards]
-    .sort((left, right) => right.prefix.length - left.prefix.length)
-    .filter(shard => pathname.startsWith(shard.prefix));
-
-  for (const descriptor of candidates) {
-    const shard = await loadShard(descriptor.file);
-    const found = shard.branches.find(branch =>
-      matches(branch.path, pathname),
-    );
-
-    if (found) return found;
-  }
-
-  return undefined;
-}
-
-function allowed(branch: Branch, request: Request): boolean {
-  return branch.policies.every(policy =>
-    isServerPolicyAllowed(policy, request.principal),
-  );
-}
-
-async function loadBranches(
-  branchIds: ReadonlySet<string>,
-): Promise<ReadonlyMap<string, Branch>> {
-  const remaining = new Set(branchIds);
-  const result = new Map<string, Branch>();
-  if (remaining.size === 0) return result;
-
-  const index = await loadServerIndex();
-
-  for (const descriptor of index.shards) {
-    const shard = await loadShard(descriptor.file);
-
-    for (const branch of shard.branches) {
-      if (!remaining.has(branch.id)) continue;
-      result.set(branch.id, branch);
-      remaining.delete(branch.id);
-    }
-
-    if (remaining.size === 0) break;
-  }
-
-  return result;
-}
-
-function artifactForRouteSet(
-  artifacts: readonly ArtifactDescriptor[],
-  routeSetId: string,
-): ArtifactDescriptor | undefined {
-  return artifacts.find(artifact => artifact.routeSetId === routeSetId);
-}
-
-function moduleUrlFor(artifact: ArtifactDescriptor): string {
-  if (!artifact.file) return '';
-
-  return '/api/navigation/modules/'
-    + encodeURIComponent(path.basename(artifact.file));
-}
-
-async function authorizedArtifactChain(
-  artifactKey: string,
-  request: Request,
-): Promise<readonly ArtifactDescriptor[] | null> {
-  const index = await loadServerIndex();
-  const chain = resolveServerArtifactChain(index, artifactKey);
-  const branches = await loadBranches(requiredServerBranchIds(chain));
-
-  return isServerArtifactChainAuthorized(
-    chain,
-    branches,
-    request.principal,
-  )
-    ? chain
-    : null;
-}
-
-async function authorizedArtifact(
-  artifact: ArtifactDescriptor,
-  request: Request,
-): Promise<boolean> {
-  const branches = await loadBranches(new Set(artifact.branchIds));
-  return isServerArtifactAuthorized(
-    artifact,
-    branches,
-    request.principal,
-  );
-}
 
 function hideRoute(response: Response): void {
   response
@@ -158,6 +48,16 @@ function hideRoute(response: Response): void {
       Vary: 'Authorization, Cookie',
     })
     .json({ error: 'Route not found.' });
+}
+
+function unavailable(response: Response): void {
+  response
+    .status(503)
+    .set({
+      'Cache-Control': 'private, no-store',
+      Vary: 'Authorization, Cookie',
+    })
+    .json({ error: 'Navigation artifact unavailable.' });
 }
 
 app.get('/api/ping', (_request, response) => {
@@ -170,36 +70,18 @@ app.get('/api/ping', (_request, response) => {
 
 app.get('/api/navigation/resolve', async (request, response, next) => {
   try {
-    const url = requestedUrl(request.query['path']);
+    const target = request.query['path'];
 
-    if (!url) {
+    if (typeof target !== 'string' || !target.trim()) {
       response.status(400).json({ error: 'Invalid path.' });
       return;
     }
 
-    const branch = await findBranch(url.pathname);
+    const resolution = await serverRouter.resolve(target, request.principal);
 
     // Unknown and unauthorized destinations intentionally have the same public
     // response. Authorization must not become a route-discovery oracle.
-    if (!branch?.routeSetId || !allowed(branch, request)) {
-      hideRoute(response);
-      return;
-    }
-
-    const index = await loadServerIndex();
-    const targetArtifact = artifactForRouteSet(index.artifacts, branch.routeSetId);
-
-    if (!targetArtifact) {
-      response.status(503).json({ error: 'Navigation artifact unavailable.' });
-      return;
-    }
-
-    const chain = await authorizedArtifactChain(
-      targetArtifact.artifactKey,
-      request,
-    );
-
-    if (!chain) {
+    if (!resolution) {
       hideRoute(response);
       return;
     }
@@ -209,14 +91,10 @@ app.get('/api/navigation/resolve', async (request, response, next) => {
         'Cache-Control': 'private, no-store',
         Vary: 'Authorization, Cookie',
       })
-      .json(createServerNavigationResolution(
-        targetArtifact.artifactKey,
-        chain,
-        artifact => moduleUrlFor(artifact),
-      ));
+      .json(resolution);
   } catch (error) {
     if (error instanceof ServerArtifactResolutionError) {
-      response.status(503).json({ error: 'Navigation artifact unavailable.' });
+      unavailable(response);
       return;
     }
 
@@ -225,64 +103,42 @@ app.get('/api/navigation/resolve', async (request, response, next) => {
 });
 
 app.get(
-  '/api/navigation/modules/:module',
-  async (
-    request,
-    response,
-    next,
-  ) => {
+  '/api/navigation/modules/:artifactKey/:hash',
+  async (request, response, next) => {
     try {
-      const requestedFile =
-        decodeURIComponent(
-          request.params['module'],
-        );
+      const artifactKey = request.params['artifactKey'] ?? '';
+      const hash = request.params['hash'] ?? '';
+      const descriptor = await serverRouter.resolveModule(
+        artifactKey,
+        hash,
+        request.principal,
+      );
 
-      const index =
-        await loadServerIndex();
-
-      const descriptor =
-        index.artifacts.find(
-          artifact =>
-            artifact.file
-            && path.basename(
-              artifact.file,
-            ) === requestedFile,
-        );
-
-      // Do not reveal whether a guessed or stale protected artifact exists.
-      if (
-        !descriptor?.file
-        || !await authorizedArtifact(descriptor, request)
-      ) {
+      // Do not reveal whether a guessed, stale, or unauthorized artifact exists.
+      if (!descriptor?.file) {
         response.status(404).end();
         return;
       }
 
       response.set({
-        'Cache-Control':
-          'private, no-store',
-        'Content-Type':
-          'text/javascript; charset=utf-8',
-        Vary:
-          'Authorization, Cookie',
-        'X-Content-Type-Options':
-          'nosniff',
+        'Cache-Control': 'private, no-store',
+        'Content-Type': 'text/javascript; charset=utf-8',
+        Vary: 'Authorization, Cookie',
+        'X-Content-Type-Options': 'nosniff',
       });
 
       response.sendFile(
-        resolveOutputPath(
-          descriptor.file,
-        ),
+        resolveOutputPath(descriptor.file),
         error => {
-          if (
-            error
-            && !response.headersSent
-          ) {
-            next(error);
-          }
+          if (error && !response.headersSent) next(error);
         },
       );
     } catch (error) {
+      if (error instanceof ServerArtifactResolutionError) {
+        response.status(404).end();
+        return;
+      }
+
       next(error);
     }
   },
@@ -317,10 +173,7 @@ app.use(
   },
 );
 
-if (
-  isMainModule(import.meta.url)
-  || process.env['pm_id']
-) {
+if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const port = process.env['PORT'] || 4000;
 
   app.listen(port, error => {

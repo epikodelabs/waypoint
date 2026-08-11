@@ -140,6 +140,64 @@ A conforming browser integration:
 
 The browser does not need the server index or manifest to perform these steps.
 
+
+## Server Router API v1
+
+Waypoint provides a framework-neutral server router around the compiler's
+server index and shards:
+
+```ts
+const serverRouter = createServerRouter({
+  loadIndex,
+  loadShard,
+  moduleUrlFor,
+});
+```
+
+The server router owns:
+
+- parsing and normalizing requested navigation targets;
+- selecting candidate shards by segment-aware path prefix;
+- exact route-pattern matching, including dynamic parameters;
+- mapping a matched branch to its route-set artifact;
+- resolving transitive artifact dependencies in dependency-first order;
+- loading the branch provenance required to authorize those artifacts;
+- authorizing the complete artifact chain;
+- constructing `ServerNavigationResolution v1`;
+- authorizing direct module delivery by `artifactKey + hash`.
+
+The transport adapter owns only transport concerns such as authentication input,
+HTTP status codes, response headers, and sending the already-authorized file.
+
+```text
+HTTP adapter
+    ↓ target + principal
+createServerRouter()
+    ↓ authorized resolution / artifact
+HTTP adapter
+    ↓ JSON or JavaScript response
+browser
+```
+
+`createServerRouter()` deliberately does not depend on Express, Angular SSR,
+filesystem layout, or a particular compiler-output directory. Applications
+provide `loadIndex()`, `loadShard()`, and `moduleUrlFor()`.
+
+### Module identity
+
+Browser module URLs should identify an artifact by its stable `artifactKey` and
+its exact content `hash`. Emitted filenames are compiler/storage details and are
+not part of the server delivery protocol.
+
+A module request is valid only when:
+
+1. the artifact key exists;
+2. the requested hash equals the currently published artifact hash;
+3. the artifact and every dependency are authorized for the current principal.
+
+A stale hash, unknown artifact, or unauthorized artifact should normally be
+indistinguishable at the public HTTP boundary.
+
 ## Relationship to `routeSlot()` and `routesFor()`
 
 Compiler artifacts export actual `routesFor()` contributions. They are not
