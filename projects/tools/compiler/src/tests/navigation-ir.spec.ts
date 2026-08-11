@@ -34,6 +34,7 @@ const program: SemanticNavigationProgram = {
   }],
   routeSets: [{
     kind: 'routes-for',
+    id: 'workspace-core',
     slotId: 'workspace',
     source: { filePath: '/features/workspace.routes.ts', exportName: 'workspaceRoutes' },
     entries: [{

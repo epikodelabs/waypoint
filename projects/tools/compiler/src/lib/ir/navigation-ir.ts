@@ -81,7 +81,7 @@ export type NavigationIrEntryRecord =
   | NavigationIrSlotRecord;
 
 export interface NavigationIrRouteSetRecord {
-  readonly id?: IrStringRef;
+  readonly id: IrStringRef;
   readonly slotId: IrStringRef;
   readonly source: IrSourceRef;
   readonly firstEntry: number;

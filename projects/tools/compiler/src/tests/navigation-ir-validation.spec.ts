@@ -16,6 +16,7 @@ test('rejects routesFor targeting an unknown slot before expansion', () => {
     routes: [],
     routeSets: [{
       kind: 'routes-for',
+      id: 'workspace-core',
       slotId: 'workspace',
       source: { filePath: '/workspace.routes.ts', exportName: 'workspaceRoutes' },
       entries: [],
@@ -29,8 +30,8 @@ test('rejects multiple routesFor owners for one slot', () => {
     entry: source.filePath,
     routes: [{ kind: 'slot', id: 'workspace', source }],
     routeSets: [
-      { kind: 'routes-for', slotId: 'workspace', source: { filePath: '/a.ts', exportName: 'a' }, entries: [] },
-      { kind: 'routes-for', slotId: 'workspace', source: { filePath: '/b.ts', exportName: 'b' }, entries: [] },
+      { kind: 'routes-for', id: 'a-core', slotId: 'workspace', source: { filePath: '/a.ts', exportName: 'a' }, entries: [] },
+      { kind: 'routes-for', id: 'b-core', slotId: 'workspace', source: { filePath: '/b.ts', exportName: 'b' }, entries: [] },
     ],
   });
   assert.ok(diagnostics.some(item => item.code === 'NAV1502'));

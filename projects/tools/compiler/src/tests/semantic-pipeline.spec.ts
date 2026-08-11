@@ -20,6 +20,7 @@ const graph: SemanticNavigationProgram = {
   }],
   routeSets: [{
     kind: 'routes-for',
+    id: 'workspace-core',
     slotId: 'workspace',
     source: { filePath: '/features/workspace.routes.ts', exportName: 'workspaceRoutes' },
     entries: [{
@@ -37,6 +38,8 @@ test('keeps AST concerns out of expansion and artifact planning', () => {
   const ir = buildNavigationIr(graph);
   const model = expandNavigation(ir).model;
   const planned: PlannedCompilerOutputs = {
+    cwd: '/',
+    artifactTsConfig: '/app/tsconfig.json',
     entry: '/app/routes.ts',
     serverOutput: '/dist/server.json',
     entriesOutput: '/dist/entries',

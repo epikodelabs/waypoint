@@ -6,6 +6,8 @@ import type { PlannedCompilerOutputs } from '../lib/compiler/contracts.js';
 import type { ExpandedNavigationModel } from '../lib/ir/model.js';
 
 const planned: PlannedCompilerOutputs = {
+  cwd: '/',
+  artifactTsConfig: '/app/tsconfig.json',
   entry: '/app/routes.ts',
   serverOutput: '/dist/server.json',
   entriesOutput: '/dist/entries',

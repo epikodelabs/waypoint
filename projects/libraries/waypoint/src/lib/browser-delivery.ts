@@ -1,5 +1,9 @@
 import type { RouteContributionDefinition } from './navigation-definitions';
 import {
+  registerServerNavigationHostModules,
+  type ServerNavigationHostModules,
+} from './server-host-runtime';
+import {
   isServerNavigationResolution,
   type ServerArtifactDelivery,
 } from './server-delivery';
@@ -35,6 +39,12 @@ export interface ServerNavigationResolverOptions {
   readonly importModule?: ServerNavigationModuleImporter;
   /** Re-resolve once when an artifact URL becomes stale during publication. */
   readonly artifactRefreshRetries?: number;
+  /**
+   * Module namespaces shared with independently delivered artifacts. At
+   * minimum, Angular packages used by protected code and
+   * `@epikodelabs/waypoint` must point at the host application's identities.
+   */
+  readonly hostModules?: ServerNavigationHostModules;
 }
 
 export interface ServerNavigationResolverContext {
@@ -65,6 +75,25 @@ interface RouteModule {
 export function createServerNavigationResolver(
   options: ServerNavigationResolverOptions = {},
 ): ServerNavigationResolver {
+  if (!options.importModule && !options.hostModules) {
+    throw new Error(
+      'Native server navigation imports require hostModules so delivered Angular artifacts share the host application runtime.',
+    );
+  }
+
+  if (
+    !options.importModule
+    && !options.hostModules?.['@epikodelabs/waypoint']
+  ) {
+    throw new Error(
+      'Native server navigation imports require hostModules["@epikodelabs/waypoint"] to share the active Waypoint runtime identity.',
+    );
+  }
+
+  if (options.hostModules) {
+    registerServerNavigationHostModules(options.hostModules);
+  }
+
   const endpoint = normalizeEndpoint(options.endpoint ?? '/api/navigation/resolve');
   const fetchNavigation = options.fetch ?? defaultFetch;
   const importModule = options.importModule ?? defaultImportModule;
@@ -124,6 +153,7 @@ export function createServerNavigationResolver(
   async function resolveOnce(
     url: URL,
     signal?: AbortSignal,
+    retryingArtifact?: ServerNavigationArtifactLoadError,
   ): Promise<ServerResolvedNavigationConfiguration | null> {
     throwIfAborted(signal);
     const path = `${url.pathname}${url.search}${url.hash}`;
@@ -153,6 +183,18 @@ export function createServerNavigationResolver(
       );
     }
 
+    if (retryingArtifact) {
+      const candidate = payload.artifacts.find(artifact =>
+        artifact.artifactKey === retryingArtifact.descriptor.artifactKey,
+      );
+      if (
+        candidate
+        && deliveryIdentity(candidate) === deliveryIdentity(retryingArtifact.descriptor)
+      ) {
+        throw unwrapArtifactLoadError(retryingArtifact);
+      }
+    }
+
     const contributions: RouteContributionDefinition[] = [];
     for (const artifact of payload.artifacts) {
       throwIfAborted(signal);
@@ -169,17 +211,19 @@ export function createServerNavigationResolver(
     url: URL,
     context: ServerNavigationResolverContext = {},
   ): Promise<ServerResolvedNavigationConfiguration | null> => {
+    let retryingArtifact: ServerNavigationArtifactLoadError | undefined;
     for (let attempt = 0; ; attempt++) {
       try {
-        return await resolveOnce(url, context.signal);
+        return await resolveOnce(url, context.signal, retryingArtifact);
       } catch (error) {
         if (
           !(error instanceof ServerNavigationArtifactLoadError)
           || attempt >= artifactRefreshRetries
           || context.signal?.aborted
         ) {
-          throw error;
+          throw unwrapArtifactLoadError(error);
         }
+        retryingArtifact = error;
       }
     }
   };
@@ -200,11 +244,21 @@ export function isRouteContributionDefinition(
 class ServerNavigationArtifactLoadError extends Error {
   constructor(
     readonly descriptor: ServerArtifactDelivery,
-    readonly cause: unknown,
+    override readonly cause: unknown,
   ) {
     super(`Failed to load Waypoint artifact "${descriptor.artifactKey}" (${descriptor.hash}).`);
     this.name = 'ServerNavigationArtifactLoadError';
   }
+}
+
+function unwrapArtifactLoadError(error: unknown): unknown {
+  if (
+    error instanceof ServerNavigationArtifactLoadError
+    && error.cause instanceof Error
+  ) {
+    return error.cause;
+  }
+  return error;
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

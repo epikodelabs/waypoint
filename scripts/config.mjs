@@ -21,6 +21,11 @@ export const routeEntry = resolvePath(
   'projects/apps/shared/src/public-api.ts',
 );
 
+export const routeArtifactTsConfig = resolvePath(
+  workspaceRoot,
+  'projects/apps/shared/tsconfig.artifacts.json',
+);
+
 export const developmentOutputRoot = resolvePath(
   workspaceRoot,
   'dist/waypoint-generated/server',

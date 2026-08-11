@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { compileRoutes } from './compiler/compile.js';
+import { compile } from './compiler/compile.js';
 import type {
   RouteCompilerDiagnostic,
   RouteCompilerOptions,
@@ -12,11 +12,16 @@ const BOOLEAN_FLAGS = new Set([
 
 const VALUE_FLAGS = new Set([
   'entry',
+  'artifact-tsconfig',
   'server-output',
   'entries-output',
   'manifest-output',
   'artifacts-output',
   'routes-export',
+]);
+
+const MULTI_VALUE_FLAGS = new Set([
+  'host-module',
 ]);
 
 async function main(): Promise<void> {
@@ -33,7 +38,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const result = await compileRoutes(
+  const result = await compile(
     readCompileOptions(process.argv.slice(3)),
   );
 
@@ -44,6 +49,8 @@ async function main(): Promise<void> {
   process.stdout.write([
     `success: ${result.success}`,
     `entry: ${result.planned.entry}`,
+    `artifactTsConfig: ${result.planned.artifactTsConfig}`,
+    `hostModules: ${(result.planned.hostModules ?? []).join(', ') || '(default only)'}`,
     `serverOutput: ${result.planned.serverOutput}`,
     `entriesOutput: ${result.planned.entriesOutput}`,
     `manifestOutput: ${result.planned.manifestOutput}`,
@@ -71,6 +78,7 @@ export function readCompileOptions(
   args: readonly string[],
 ): RouteCompilerOptions {
   const flags = new Map<string, string>();
+  const multiFlags = new Map<string, string[]>();
   const booleans = new Set<string>();
 
   for (let index = 0; index < args.length; index++) {
@@ -97,12 +105,8 @@ export function readCompileOptions(
       continue;
     }
 
-    if (!VALUE_FLAGS.has(name)) {
+    if (!VALUE_FLAGS.has(name) && !MULTI_VALUE_FLAGS.has(name)) {
       throw new Error(`Unknown compiler flag --${name}.`);
-    }
-
-    if (flags.has(name)) {
-      throw new Error(`Duplicate compiler flag --${name}.`);
     }
 
     const value = args[++index];
@@ -110,11 +114,23 @@ export function readCompileOptions(
       throw new Error(`Missing value for --${name}.`);
     }
 
+    if (MULTI_VALUE_FLAGS.has(name)) {
+      const values = multiFlags.get(name) ?? [];
+      values.push(value);
+      multiFlags.set(name, values);
+      continue;
+    }
+
+    if (flags.has(name)) {
+      throw new Error(`Duplicate compiler flag --${name}.`);
+    }
+
     flags.set(name, value);
   }
 
   const required = [
     'entry',
+    'artifact-tsconfig',
     'server-output',
     'entries-output',
     'manifest-output',
@@ -129,6 +145,8 @@ export function readCompileOptions(
 
   return {
     entry: flags.get('entry')!,
+    artifactTsConfig: flags.get('artifact-tsconfig')!,
+    hostModules: multiFlags.get('host-module'),
     serverOutput: flags.get('server-output')!,
     entriesOutput: flags.get('entries-output')!,
     manifestOutput: flags.get('manifest-output')!,
@@ -163,6 +181,8 @@ function printUsage(): void {
     'Usage:\n' +
       '  route-compiler compile ' +
       '--entry <file> ' +
+      '--artifact-tsconfig <file> ' +
+      '[--host-module <specifier>]... ' +
       '--server-output <file> ' +
       '--entries-output <dir> ' +
       '--manifest-output <file> ' +

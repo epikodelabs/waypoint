@@ -6,7 +6,10 @@ export function normalizeCompilerOptions(options: RouteCompilerOptions): Planned
   const manifestOutput = path.resolve(cwd, options.manifestOutput);
 
   return {
+    cwd,
     entry: path.resolve(cwd, options.entry),
+    artifactTsConfig: path.resolve(cwd, options.artifactTsConfig),
+    hostModules: normalizeHostModules(options.hostModules),
     serverOutput: path.resolve(cwd, options.serverOutput),
     entriesOutput: path.resolve(cwd, options.entriesOutput),
     manifestOutput,
@@ -19,4 +22,17 @@ export function normalizeCompilerOptions(options: RouteCompilerOptions): Planned
     inspect: options.inspect === true,
     profile: options.profile === true,
   };
+}
+function normalizeHostModules(values: readonly string[] | undefined): readonly string[] {
+  if (!values) return Object.freeze([]);
+
+  const result = new Set<string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized) {
+      throw new Error('Compiler host module specifiers must not be empty.');
+    }
+    result.add(normalized);
+  }
+  return Object.freeze([...result].sort());
 }

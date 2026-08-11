@@ -47,11 +47,8 @@ export interface ServerRouterSource<
   TArtifact extends ServerArtifactRecord = ServerArtifactRecord,
   TBranch extends ServerRoutableBranch = ServerRoutableBranch,
 > {
-  /** Preferred source contract: one immutable compiler-output generation. */
-  loadSnapshot?(): Promise<ServerRouterSnapshot<TArtifact, TBranch>>;
-  /** Legacy loaders remain supported for custom sources. */
-  loadIndex?(): Promise<ServerRouterIndex<TArtifact>>;
-  loadShard?(file: string): Promise<ServerRouterShard<TBranch>>;
+  /** Loads one immutable compiler-output generation for the complete operation. */
+  loadSnapshot(): Promise<ServerRouterSnapshot<TArtifact, TBranch>>;
 }
 
 export interface ServerRouterOptions<
@@ -105,7 +102,7 @@ export function createServerRouter<
     const pathname = pathnameOf(target);
     if (pathname === null) return undefined;
 
-    const snapshot = await loadSnapshot(options);
+    const snapshot = await options.loadSnapshot();
     return (await findBranchMatch(snapshot, pathname))?.branch;
   }
 
@@ -116,7 +113,7 @@ export function createServerRouter<
     const pathname = pathnameOf(target);
     if (pathname === null) return null;
 
-    const snapshot = await loadSnapshot(options);
+    const snapshot = await options.loadSnapshot();
     const resolution = await resolveNavigationChain(
       snapshot,
       target,
@@ -228,7 +225,7 @@ export function createServerRouter<
     artifactKey: string,
     principal?: ServerPrincipal,
   ): Promise<TArtifact | null> {
-    const snapshot = await loadSnapshot(options);
+    const snapshot = await options.loadSnapshot();
     const chain = await authorizedChain(snapshot, artifactKey, principal);
     return chain?.at(-1) ?? null;
   }
@@ -308,26 +305,6 @@ export function createServerRouter<
     resolveLanding,
     resolveArtifact,
     resolveModule,
-  });
-}
-
-async function loadSnapshot<
-  TArtifact extends ServerArtifactRecord,
-  TBranch extends ServerRoutableBranch,
->(
-  source: ServerRouterSource<TArtifact, TBranch>,
-): Promise<ServerRouterSnapshot<TArtifact, TBranch>> {
-  if (source.loadSnapshot) return source.loadSnapshot();
-  if (!source.loadIndex || !source.loadShard) {
-    throw new Error(
-      'Server router source must provide loadSnapshot() or both loadIndex() and loadShard().',
-    );
-  }
-
-  const index = await source.loadIndex();
-  return Object.freeze({
-    index,
-    loadShard: (file: string) => source.loadShard!(file),
   });
 }
 

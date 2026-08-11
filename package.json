@@ -3,10 +3,10 @@
   "version": "1.0.1",
   "scripts": {
     "ng": "ng",
-    "start": "ng build --watch --configuration development",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "compiler:build": "tsc -p projects/tools/compiler/tsconfig.json",
+    "start": "ng serve client",
+    "build": "ng build waypoint",
+    "watch": "ng build waypoint --watch --configuration development",
+    "compiler:build": "node scripts/build-compiler.mjs --force",
     "compiler:check": "tsc -p projects/tools/compiler/tsconfig.json --noEmit",
     "compiler:compile": "npm run compiler:build && node scripts/compile-routes.mjs",
     "compiler:compile:clean": "node scripts/clean-routes.mjs && npm run compiler:compile",
@@ -15,10 +15,14 @@
     "test": "testify --headless --browser chrome",
     "test:watch": "testify",
     "test:node": "testify --browser node",
-    "test:coverage": "testify --headless --browser chrome --coverage"
+    "test:coverage": "testify --headless --browser chrome --coverage",
+    "start:server": "npm run compiler:build && node scripts/serve-server.mjs",
+    "build:server": "npm run compiler:build && node scripts/build-server.mjs",
+    "compiler:test": "npm run compiler:build && npm --prefix projects/tools/compiler test",
+    "verify": "npm run build && npm run compiler:test && npm run compiler:compile:check && ng build client --configuration development && ng build server --configuration development && npm test"
   },
   "private": true,
-  "type": "module",  
+  "type": "module",
   "packageManager": "npm@12.0.2",
   "dependencies": {
     "@angular/common": "22.1.0",
@@ -43,6 +47,7 @@
     "@types/node": "24.3.0",
     "ng-packagr": "22.1.0",
     "prettier": "^3.9.6",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "esbuild": "^0.28.2"
   }
 }

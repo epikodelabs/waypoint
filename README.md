@@ -244,9 +244,8 @@ the complete protected route catalog to the client.
 # Server Delivery Contract v1
 
 The browser/server boundary is a small, versioned Waypoint protocol. A server
-resolution returns the artifact containing the requested destination and the
-dependency-first list of authorized browser modules needed to complete that
-navigation, including internal redirect targets when necessary.
+resolution returns only the target artifact and the dependency-first list of
+authorized browser modules needed to install it.
 
 ```ts
 interface ServerNavigationResolution {
@@ -282,10 +281,8 @@ const resolution = await serverRouter.resolve(requestedPath, principal);
 ```
 
 `createServerRouter()` owns path matching, shard selection, route-set lookup,
-internal redirect-chain resolution, dependency ordering, complete-chain
-authorization, and construction of the browser delivery plan. Internal redirects
-that cross artifact boundaries are followed on the server; every hop and the final
-destination must be authorized before any plan is returned.
+dependency ordering, complete-chain authorization, and construction of the
+browser delivery plan.
 
 Waypoint also provides a transport-neutral HTTP layer and an Express adapter:
 
@@ -336,11 +333,7 @@ contract, loads artifacts in dependency-first order, validates each module as a
 installation. Artifact imports are deduplicated by `artifactKey + hash`; when a
 new hash is published for a stable artifact key, Waypoint drops its own cache
 reference to the older delivery identity. Failed imports are evicted so a later
-navigation can retry. Superseded route resolutions receive an `AbortSignal`;
-Waypoint stops obsolete fetch/import pipelines from returning route contributions
-after a newer navigation, revocation, or router disposal. If an artifact URL goes
-stale during an atomic compiler publication, the resolver re-resolves the
-destination once so it can pick up the newly published content hash.
+navigation can retry.
 
 Applications can override the resolution endpoint, fetch implementation, or
 module importer without changing the routing runtime:
@@ -420,30 +413,6 @@ Ordinary navigation remains additive. A target-scoped server resolution does not
 represent the user's complete authorized route catalog, so Waypoint does not
 revoke unrelated contributions on every navigation. Revocation happens only when
 the application explicitly declares that authorization context has changed.
-
-## Principal replacement
-
-A change of security principal or tenant is a stronger boundary than an ordinary
-permission refresh. Waypoint's recommended model is to establish the new principal
-on the server, select an authorized landing destination with `resolveLanding()`,
-and perform a full document navigation. The new document starts from the public
-route-slot skeleton and receives only artifacts authorized for the new principal.
-
-```text
-same principal + permissions changed
-    → revoke + revalidate
-
-principal / tenant changed
-    → server session switch
-    → authorized landing
-    → full document replace
-    → fresh JavaScript realm
-```
-
-Downloaded code is not claimed to be erasable from browser caches, but it does not
-remain installed in the new application's JavaScript realm. Authorization
-boundaries should therefore align with independently deliverable `routesFor()`
-artifact boundaries.
 
 ---
 

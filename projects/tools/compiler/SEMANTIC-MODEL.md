@@ -30,6 +30,7 @@ The following decisions are frozen for Semantic Model v1:
 - `routesFor()` targets exactly one existing slot.
 - One owner per slot is supported in v1.
 - Slot IDs and route names are globally unique in one navigation program.
+- Route-set IDs are explicit, required, and globally unique in one navigation program.
 - Paths compose segment-by-segment through layouts and slot contexts.
 - Optional path segments and optional path-parameter schemas are not supported.
 - `paramsSchema` refines path parameters but never changes path shape.
@@ -331,7 +332,7 @@ outlet       selects a rendered view target
 Example:
 
 ```ts
-export const workspaceRoutes = routesFor('workspace', [
+export const workspaceRoutes = routesFor('workspace', 'workspace-core', [
   route('/dashboard', DashboardPage),
   route('/projects', ProjectsPage),
 ]);
@@ -342,6 +343,7 @@ Conceptually:
 ```ts
 interface SemanticRoutesFor {
   readonly kind: 'routes-for';
+  readonly id: string;
   readonly slotId: string;
   readonly entries: readonly NavigationEntry[];
   readonly source: SemanticExportSource;
@@ -360,7 +362,7 @@ A `routesFor()` declaration:
 - does not erase or replace the target slot;
 - remains semantically distinct from its expanded routes.
 
-The exported source declaration may provide deterministic ownership identity.
+The authored route-set ID is the stable ownership identity used by expansion and artifact planning. Source provenance remains separate metadata.
 
 Artifact names, hashes, and files are not part of the semantic model.
 
@@ -375,7 +377,7 @@ Ownership is represented by the relationship:
 ```text
 routeSlot(id)
     ← targeted by
-routesFor(id, entries)
+routesFor(slotId, routeSetId, entries)
 ```
 
 The semantic model keeps these identities separate:
@@ -449,7 +451,7 @@ layout('/app', AppLayout, [
 ```
 
 ```ts
-routesFor('workspace', [
+routesFor('workspace', 'workspace-core', [
   route('/dashboard', DashboardPage),
 ]);
 ```
@@ -947,6 +949,7 @@ export const routes = [
 ```ts
 export const administrationRoutes = routesFor(
   'administration',
+  'administration-core',
   [
     route(
       '/users/:userId',

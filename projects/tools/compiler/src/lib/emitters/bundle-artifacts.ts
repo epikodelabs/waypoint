@@ -3,6 +3,12 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { build, type BuildResult, type Metafile, type OutputFile } from 'esbuild';
 import { diagnostic } from '../compiler/diagnostics.js';
+import { compileArtifactSources } from './compile-artifact-sources.js';
+import {
+  collectHostModuleExports,
+  createHostModulePredicate,
+  createHostRuntimePlugin,
+} from './host-runtime-plugin.js';
 import type {
   ArtifactBundleResult,
   BundledArtifact,
@@ -29,41 +35,64 @@ export async function bundleArtifacts(
   planned: PlannedCompilerOutputs,
   plan: RouteArtifactPlan,
 ): Promise<ArtifactBundleResult> {
-  if (planned.dryRun) {
-    return {
-      artifacts: Object.freeze([]),
-      diagnostics: [diagnostic(
-        'WPT4000',
-        'info',
-        `Planned ${plan.artifacts.length} isolated browser artifact(s) for ${planned.artifactsOutput}.`,
-      )],
-      emitted: Object.freeze([]),
-      replaced: Object.freeze([]),
-      removed: Object.freeze([]),
-    };
-  }
-
   const diagnostics: RouteCompilerDiagnostic[] = [];
   const prepared: PreparedBundle[] = [];
+  let compiledSources: Awaited<ReturnType<typeof compileArtifactSources>> | undefined;
 
-  for (const artifact of plan.artifacts) {
-    try {
-      prepared.push(await buildArtifact(artifact));
-    } catch (error) {
-      diagnostics.push(diagnostic(
-        'WPT4001',
-        'error',
-        `Failed to bundle route artifact "${artifact.artifactKey}": ${formatBuildError(error)}`,
-        {
-          filePath: artifact.source.file,
-          exportName: artifact.source.exportName,
-        },
-      ));
+  try {
+    compiledSources = await compileArtifactSources(planned, plan);
+    const hostExports = await collectHostModuleExports(
+      compiledSources.outputRoot,
+      createHostModulePredicate(planned.hostModules),
+    );
+
+    for (const artifact of plan.artifacts) {
+      try {
+        const entryPoint = await compiledSources.entryFor(artifact);
+        prepared.push(await buildArtifact(artifact, entryPoint, hostExports));
+      } catch (error) {
+        diagnostics.push(diagnostic(
+          'WPT4001',
+          'error',
+          `Failed to bundle route artifact "${artifact.artifactKey}": ${formatBuildError(error)}`,
+          {
+            filePath: artifact.source.file,
+            exportName: artifact.source.exportName,
+          },
+        ));
+      }
     }
+  } catch (error) {
+    diagnostics.push(diagnostic(
+      'WPT4003',
+      'error',
+      `Failed to AOT-compile route artifact sources: ${formatBuildError(error)}`,
+    ));
+  } finally {
+    await compiledSources?.dispose();
   }
 
   if (diagnostics.some(item => item.level === 'error')) {
     return emptyFailure(diagnostics);
+  }
+
+  const artifacts = Object.freeze(prepared
+    .map(item => item.artifact)
+    .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)));
+
+  if (planned.dryRun) {
+    diagnostics.push(diagnostic(
+      'WPT4000',
+      'info',
+      `Verified ${artifacts.length} AOT-compiled isolated browser artifact(s) without publishing.`,
+    ));
+    return {
+      artifacts,
+      diagnostics: Object.freeze(diagnostics),
+      emitted: Object.freeze([]),
+      replaced: Object.freeze([]),
+      removed: Object.freeze([]),
+    };
   }
 
   let publication: PublicationChanges;
@@ -80,10 +109,6 @@ export async function bundleArtifacts(
     ));
     return emptyFailure(diagnostics);
   }
-
-  const artifacts = Object.freeze(prepared
-    .map(item => item.artifact)
-    .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)));
 
   diagnostics.push(diagnostic(
     'WPT4000',
@@ -165,18 +190,21 @@ function extractFileNameHash(
 
 async function buildArtifact(
   artifact: PlannedRouteArtifact,
+  entryPoint: string,
+  hostExports: Awaited<ReturnType<typeof collectHostModuleExports>>,
 ): Promise<PreparedBundle> {
   const entryName = stripJsExtension(artifact.bundle.fileNameTemplate);
   const result = await build({
-    entryPoints: [artifact.entry.outputPath],
-    absWorkingDir: path.dirname(artifact.entry.outputPath),
+    entryPoints: [entryPoint],
+    absWorkingDir: path.dirname(entryPoint),
     outdir: artifact.bundle.outputDirectory,
     entryNames: entryName,
     bundle: true,
     format: artifact.bundle.format,
     platform: artifact.bundle.platform,
     splitting: false,
-    packages: 'external',
+    packages: 'bundle',
+    plugins: [createHostRuntimePlugin(hostExports)],
     metafile: true,
     write: false,
     logLevel: 'silent',
@@ -190,6 +218,13 @@ async function buildArtifact(
     throw new Error(`esbuild did not return metadata for "${artifact.artifactKey}".`);
   }
   const outputMeta = readOutputMetadata(result.metafile, artifact);
+  const externalImports = outputMeta.imports.filter(item => item.external);
+  if (externalImports.length > 0) {
+    throw new Error(
+      `Artifact ${JSON.stringify(artifact.artifactKey)} retained external browser imports: ` +
+      externalImports.map(item => JSON.stringify(item.path)).join(', '),
+    );
+  }
   const outputPath =
   path.resolve(outputFile.path);
 

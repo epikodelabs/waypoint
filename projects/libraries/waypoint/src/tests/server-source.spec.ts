@@ -134,6 +134,33 @@ describe('server router snapshot source', () => {
     expect(indexLoads).toBe(2);
   });
 
+  it('does not let callers after invalidation join an older in-flight publication', async () => {
+    let generation = 'A';
+    let releaseFirst!: () => void;
+    let indexLoads = 0;
+    const firstGate = new Promise<void>(resolve => { releaseFirst = resolve; });
+    const source = createSource<Artifact, Branch>({
+      async loadIndex() {
+        indexLoads++;
+        const captured = generation;
+        if (indexLoads === 1) await firstGate;
+        return index(captured);
+      },
+      async loadShard() { return shard(); },
+    });
+
+    const stale = source.loadSnapshot();
+    generation = 'B';
+    source.invalidate();
+    const fresh = source.loadSnapshot();
+    releaseFirst();
+
+    expect((await fresh).index.artifacts[0]?.hash).toBe('B');
+    expect((await stale).index.artifacts[0]?.hash).toBe('A');
+    expect((await source.loadSnapshot()).index.artifacts[0]?.hash).toBe('B');
+    expect(indexLoads).toBe(2);
+  });
+
   it('invalidates the cached generation explicitly', async () => {
     let generation = 'A';
     const source = createSource<Artifact, Branch>({

@@ -24,6 +24,7 @@ test('keeps route slots and routesFor ownership as distinct semantic entities', 
   };
   const owned: SemanticRoutesFor = {
     kind: 'routes-for',
+    id: 'workspace-core',
     slotId: 'workspace',
     source: { ...source, exportName: 'workspaceRoutes' },
     entries: [],

@@ -271,9 +271,14 @@ HTTP transport differently while reusing Waypoint's framework-neutral server
 router:
 
 ```ts
-const serverRouter = createServerRouter({
+const source = createServerRouterSnapshotSource({
   loadIndex,
   loadShard,
+  revision: readPublishedRevision,
+});
+
+const serverRouter = createServerRouter({
+  loadSnapshot: source.loadSnapshot,
   moduleUrlFor: artifact =>
     `/api/navigation/modules/${artifact.artifactKey}/${artifact.hash}`,
 });
@@ -319,16 +324,41 @@ returns the artifact file to the transport adapter.
 ### Browser delivery resolver
 
 `createServerNavigationResolver()` is the browser counterpart to the server
-router. It implements Server Delivery Contract v1 directly as a
-`RouterOptions.resolveRoutes` function:
+router. Independently delivered Angular artifacts are fully AOT-compiled, but
+they must still share the exact Angular and Waypoint runtime identities already
+running in the host application. Register those module namespaces when the
+resolver is created:
 
 ```ts
-const resolveRoutes = createServerNavigationResolver();
+import * as angularCore from '@angular/core';
+import * as waypoint from '@epikodelabs/waypoint';
+
+const resolveRoutes = waypoint.createServerNavigationResolver({
+  hostModules: {
+    '@angular/core': angularCore,
+    '@epikodelabs/waypoint': waypoint,
+  },
+});
 
 provideRouter(routes, {
   resolveRoutes,
 });
 ```
+
+The compiler rewrites host-shared imports in protected artifacts to a small
+runtime bridge. This prevents a second Angular runtime, duplicate Waypoint DI
+tokens, or duplicate identity-sensitive application services from being bundled
+into independently delivered route artifacts. Native artifact imports therefore
+require `hostModules`; custom importers may provide their own module-loading
+strategy instead.
+
+Application modules whose identity or state must be shared across multiple route
+artifacts can use the same mechanism. Give the module a stable bare specifier,
+configure that specifier as a compiler host module, include it in the initial host
+bundle, and register the exact namespace with the browser resolver. Do **not**
+mark protected route/page modules as host modules: host modules are part of the
+already-available client runtime and therefore are not protected delivery
+boundaries.
 
 The resolver requests one server-authorized delivery plan, validates the wire
 contract, loads artifacts in dependency-first order, validates each module as a

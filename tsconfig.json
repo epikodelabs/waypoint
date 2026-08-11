@@ -4,6 +4,9 @@
     "paths": {
       "@epikodelabs/waypoint": [
         "./projects/libraries/waypoint/src/public-api.ts"
+      ],
+      "@waypoint-demo/runtime": [
+        "./projects/apps/shared/src/lib/demo-runtime.ts"
       ]
     },
     "noImplicitOverride": true,
@@ -16,7 +19,9 @@
     "importHelpers": true,
     "target": "ES2022",
     "module": "preserve",
-    "types": ["jasmine"]
+    "types": [
+      "jasmine"
+    ]
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
@@ -38,7 +43,7 @@
       "path": "./projects/apps/server/tsconfig.app.json"
     },
     {
-      "path": "./projects/apps/shared/tsconfig.app.json"
+      "path": "./projects/apps/shared/tsconfig.artifacts.json"
     },
     {
       "path": "./projects/tools/compiler/tsconfig.json"

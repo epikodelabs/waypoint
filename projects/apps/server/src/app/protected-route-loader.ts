@@ -1,4 +1,12 @@
-import { createServerNavigationResolver } from '@epikodelabs/waypoint';
+import * as demoRuntime from '@waypoint-demo/runtime';
+import * as angularCore from '@angular/core';
+import * as waypoint from '@epikodelabs/waypoint';
 
-/** Server-authorized route delivery for the SSR-capable playground. */
-export const loadProtectedRouteBranch = createServerNavigationResolver();
+export const loadProtectedRouteBranch =
+  waypoint.createServerNavigationResolver({
+    hostModules: {
+      '@angular/core': angularCore,
+      '@epikodelabs/waypoint': waypoint,
+      '@waypoint-demo/runtime': demoRuntime,
+    },
+  });

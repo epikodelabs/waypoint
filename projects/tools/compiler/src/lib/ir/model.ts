@@ -70,7 +70,7 @@ export type SemanticEntry = SemanticLayout | SemanticRoute | SemanticRedirect | 
 export interface SemanticRoutesFor {
   readonly kind: 'routes-for';
   /** Stable authored identity supplied as the second routesFor() argument. */
-  readonly id?: string;
+  readonly id: string;
   readonly slotId: string;
   readonly entries: readonly SemanticEntry[];
   readonly source: SourceReference;

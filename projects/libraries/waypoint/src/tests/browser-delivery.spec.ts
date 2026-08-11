@@ -216,6 +216,18 @@ describe('browser server delivery', () => {
       .toBeRejectedWithError(/did not export a route contribution/i);
   });
 
+  it('requires host module identities when using native artifact imports', () => {
+    expect(() => createServerNavigationResolver()).toThrowError(/hostModules/i);
+  });
+
+  it('requires the active Waypoint identity for native artifact imports', () => {
+    expect(() => createServerNavigationResolver({
+      hostModules: {
+        '@angular/core': {},
+      },
+    })).toThrowError(/@epikodelabs\/waypoint/i);
+  });
+
   it('supports a custom resolution endpoint', async () => {
     let request = '';
     const resolve = createServerNavigationResolver({
@@ -224,6 +236,7 @@ describe('browser server delivery', () => {
         request = input;
         return response(404, null);
       },
+      importModule: async () => ({ default: contribution('unused') }),
     });
 
     await resolve(new URL('https://waypoint.test/app'));

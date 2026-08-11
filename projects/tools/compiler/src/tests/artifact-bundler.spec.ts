@@ -10,6 +10,8 @@ import type {
 } from '../lib/compiler/contracts.js';
 
 const plannedOutputs = (cwd: string, dryRun = false): PlannedCompilerOutputs => ({
+  cwd,
+  artifactTsConfig: path.join(cwd, 'tsconfig.json'),
   entry: path.join(cwd, 'routes.ts'),
   serverOutput: path.join(cwd, 'out/server.json'),
   entriesOutput: path.join(cwd, 'out/entries'),
@@ -27,6 +29,16 @@ async function createPlan(cwd: string): Promise<RouteArtifactPlan> {
     'export const alphaRoutes = [{ path: "/alpha", secret: "alpha-only" }];',
     'export const betaRoutes = [{ path: "/beta", secret: "beta-only" }];',
   ].join('\n'));
+  await fs.writeFile(path.join(cwd, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: {
+      module: 'ES2022',
+      moduleResolution: 'Bundler',
+      target: 'ES2022',
+      strict: true,
+      skipLibCheck: true,
+    },
+    include: ['feature.ts'],
+  }));
 
   const artifacts = ['alpha', 'beta'].map(name => {
     const outputPath = path.join(entriesOutput, `route-set-${name}.ts`);
@@ -124,14 +136,14 @@ test('bundles route-set artifacts independently with content hashes', async () =
   }
 });
 
-test('does not invoke esbuild or write artifacts during dry run', async () => {
+test('AOT-compiles and bundles in memory without publishing during dry run', async () => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'waypoint-bundler-dry-'));
   try {
     const plan = await createPlan(cwd);
-    await fs.rm(path.join(cwd, 'out/entries'), { recursive: true, force: true });
 
     const result = await bundleArtifacts(plannedOutputs(cwd, true), plan);
-    assert.deepEqual(result.artifacts, []);
+    assert.equal(result.diagnostics.some(item => item.level === 'error'), false);
+    assert.equal(result.artifacts.length, 2);
     assert.deepEqual(result.emitted, []);
     await assert.rejects(fs.access(path.join(cwd, 'out/artifacts')));
   } finally {
@@ -143,10 +155,10 @@ test('does not publish any bundle when one planned entry fails', async () => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'waypoint-bundler-fail-'));
   try {
     const plan = await createPlan(cwd);
-    await fs.rm(plan.artifacts[1]!.entry.outputPath);
+    await fs.rm(path.join(cwd, 'feature.ts'));
 
     const result = await bundleArtifacts(plannedOutputs(cwd), plan);
-    assert.equal(result.diagnostics.some(item => item.code === 'WPT4001'), true);
+    assert.equal(result.diagnostics.some(item => item.code === 'WPT4003'), true);
     assert.deepEqual(result.artifacts, []);
     assert.deepEqual(result.emitted, []);
     await assert.rejects(fs.access(path.join(cwd, 'out/artifacts')));
@@ -185,12 +197,53 @@ test('preserves the previous successful artifact set when a later build fails', 
     const previous = new Map<string, string>();
     for (const file of first.emitted) previous.set(file, await fs.readFile(file, 'utf8'));
 
-    await fs.rm(plan.artifacts[1]!.entry.outputPath);
+    await fs.rm(path.join(cwd, 'feature.ts'));
     const failed = await bundleArtifacts(plannedOutputs(cwd), plan);
 
-    assert.equal(failed.diagnostics.some(item => item.code === 'WPT4001'), true);
+    assert.equal(failed.diagnostics.some(item => item.code === 'WPT4003'), true);
     for (const [file, contents] of previous) {
       assert.equal(await fs.readFile(file, 'utf8'), contents);
+    }
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('bridges configured application runtime modules instead of duplicating their code', async () => {
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'waypoint-bundler-host-runtime-'));
+  try {
+    const plan = await createPlan(cwd);
+    await fs.writeFile(path.join(cwd, 'runtime.ts'), `
+      export const sharedToken = { marker: 'HOST-RUNTIME-SHOULD-NOT-BE-BUNDLED' };
+    `);
+    await fs.writeFile(path.join(cwd, 'feature.ts'), `
+      import { sharedToken } from '@test/runtime';
+      export const alphaRoutes = [{ path: '/alpha', token: sharedToken }];
+      export const betaRoutes = [{ path: '/beta', token: sharedToken }];
+    `);
+    await fs.writeFile(path.join(cwd, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: {
+        module: 'ES2022',
+        moduleResolution: 'Bundler',
+        target: 'ES2022',
+        strict: true,
+        skipLibCheck: true,
+        paths: { '@test/runtime': ['./runtime.ts'] },
+      },
+      include: ['feature.ts', 'runtime.ts'],
+    }));
+
+    const result = await bundleArtifacts({
+      ...plannedOutputs(cwd),
+      hostModules: ['@test/runtime'],
+    }, plan);
+
+    assert.equal(result.diagnostics.some(item => item.level === 'error'), false);
+    for (const artifact of result.artifacts) {
+      const code = await fs.readFile(artifact.outputPath, 'utf8');
+      assert.doesNotMatch(code, /HOST-RUNTIME-SHOULD-NOT-BE-BUNDLED/);
+      assert.match(code, /@test\/runtime/);
+      assert.match(code, /server-navigation-host-runtime\/v1/);
     }
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });

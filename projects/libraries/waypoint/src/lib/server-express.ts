@@ -7,7 +7,7 @@ import {
 
 export interface ExpressLikeRequest {
   readonly query: Readonly<Record<string, unknown>>;
-  readonly params: Readonly<Record<string, string | undefined>>;
+  readonly params: Readonly<Record<string, string | readonly string[] | undefined>>;
 }
 
 export interface ExpressLikeResponse {

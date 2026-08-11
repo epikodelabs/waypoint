@@ -20,6 +20,7 @@ test('compiles routesFor entries relative to the retained slot context', () => {
     }],
     routeSets: [{
       kind: 'routes-for',
+      id: 'workspace-core',
       slotId: 'workspace',
       source: { filePath: '/features/workspace.routes.ts', exportName: 'workspaceRoutes' },
       entries: [{
@@ -47,6 +48,7 @@ test('reports routesFor declarations targeting unknown slots', () => {
     routes: [],
     routeSets: [{
       kind: 'routes-for',
+      id: 'missing-core',
       slotId: 'missing',
       source: { filePath: '/features/missing.routes.ts', exportName: 'missingRoutes' },
       entries: [],
@@ -70,6 +72,7 @@ test('validates duplicate inherited path parameter names', () => {
     }],
     routeSets: [{
       kind: 'routes-for',
+      id: 'boards-core',
       slotId: 'boards',
       source: { filePath: '/features/boards.routes.ts', exportName: 'boardRoutes' },
       entries: [{

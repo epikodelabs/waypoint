@@ -319,15 +319,10 @@ function discoverRoutesFor(
       length: declaration.getWidth(sourceFile),
     };
 
-    const hasExplicitRouteSetId = resolved.arguments.length >= 3;
-    const routeSetIdArgument = hasExplicitRouteSetId
-      ? resolved.arguments[1]
-      : undefined;
-    const entriesArgument = resolved.arguments[
-      hasExplicitRouteSetId ? 2 : 1
-    ];
+    const routeSetIdArgument = resolved.arguments[1];
+    const entriesArgument = resolved.arguments[2];
 
-    if (!entriesArgument) {
+    if (!routeSetIdArgument || !entriesArgument) {
       throw new Error(
         'routesFor() requires slotId, routeSetId, and entries.',
       );
@@ -335,9 +330,7 @@ function discoverRoutesFor(
 
     output.push({
       kind: 'routes-for',
-      id: routeSetIdArgument
-        ? readStringLiteral(routeSetIdArgument)
-        : undefined,
+      id: readStringLiteral(routeSetIdArgument),
       slotId: readStringLiteral(resolved.arguments[0]),
       entries: parseRouteArray(
         context,

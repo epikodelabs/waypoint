@@ -13,7 +13,7 @@ import {
   type DemoUser,
   type WorkspaceSnapshot,
   DemoSessionService,
-} from './demo-session.service';
+} from '@waypoint-demo/runtime';
 
 type ParamsInput = Record<string, unknown>;
 type QueryInput = Record<string, unknown>;
@@ -408,6 +408,7 @@ const sidebarStyles = `
 })
 export class IntroPage {
   private readonly session = inject(DemoSessionService);
+  private readonly router = inject(Router);
   protected readonly users = this.session.users;
 
   protected currentUser(): DemoUser {

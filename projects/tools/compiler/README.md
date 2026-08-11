@@ -12,6 +12,7 @@ TypeScript source
 → expansion
 → validation
 → artifact planning
+→ Angular full AOT compilation
 → isolated artifact bundling
 → delivery finalization
 → emitters
@@ -63,7 +64,9 @@ Authorization and HTTP delivery remain server-integration concerns; the compiler
 - deterministic route-set and branch identity;
 - server index and shard planning;
 - focused browser-entry emission;
+- Angular full-AOT compilation of independently delivered route code;
 - isolated esbuild bundles per exported `routesFor()`;
+- host-runtime bridging for Angular, Waypoint, and explicitly configured identity-sensitive application modules;
 - content-hashed artifact filenames and esbuild metadata;
 - finalized server and browser delivery manifests;
 - dry-run compilation.
@@ -99,6 +102,25 @@ IR validation checks structural references, ranges, schemas, slots, and `routesF
 ## Artifact Plan v1
 
 The compiler produces a versioned `RouteArtifactPlan` before emission. The plan is the sole contract for server emitters, browser-entry emitters, and artifact bundling. It records hierarchical artifact dependencies, generated entries, isolated browser bundle requirements, server shards, and manifest/index documents. See `ARTIFACT-PLAN-V1.md`.
+## Angular AOT and host runtime sharing
+
+Protected route artifacts are application code. Before bundling, the compiler
+runs the authored route project through Angular's full AOT compiler using the
+explicit `artifactTsConfig`. The resulting executable Angular JavaScript is then
+bundled independently for each `routesFor()` artifact.
+
+Angular packages and `@epikodelabs/waypoint` are host-shared by default.
+Additional identity-sensitive application modules can be declared with repeated
+`--host-module <specifier>` CLI options (or `hostModules` in the compiler API).
+The artifact bundler rewrites imports of those specifiers to Waypoint's host
+runtime bridge instead of bundling duplicate module identities.
+
+A configured host module must also be part of the browser host bundle and its
+exact module namespace must be registered through
+`createServerNavigationResolver({ hostModules: ... })`. Host modules are not
+protected artifacts, so sensitive route/page modules must not be placed behind
+this bridge.
+
 ## Atomic publication
 
 Artifact Bundler v1 publishes through a staging directory and one directory
@@ -113,7 +135,8 @@ partially updated delivery set.
 
 ## Compiler Contracts v1
 
-The stable library entry point is `compile(options)`. `compileRoutes` remains an alias.
+The library entry point is `compile(options)`.
 Set `profile: true` to collect immutable per-stage timings and `inspect: true` to retain the semantic model, Navigation IR, expanded model, Artifact Plan, bundle result, and finalized delivery documents in `result.inspection`.
 
 Artifact Plan v1 is validated before emission. Finalized delivery metadata is validated against actual bundle outputs before transactional publication.
+`--dry-run` performs semantic validation, Angular full-AOT compilation, in-memory artifact bundling, delivery finalization, and finalized-delivery validation, but publishes no browser artifacts or server delivery documents. This makes `compiler:compile:check` a real executable-pipeline verification rather than a planning-only check.

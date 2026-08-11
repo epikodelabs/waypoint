@@ -21,6 +21,10 @@ export interface RouteCompilerOutputs {
 
 export interface RouteCompilerOptions extends RouteCompilerOutputs {
   readonly entry: string;
+  /** Angular tsconfig used to AOT-compile independently delivered route code. */
+  readonly artifactTsConfig: string;
+  /** Additional bare module specifiers supplied by the browser host runtime. */
+  readonly hostModules?: readonly string[];
   readonly cwd?: string;
   readonly dryRun?: boolean;
   readonly routesExport?: string;
@@ -65,7 +69,10 @@ export interface RouteCompilerDiagnostic {
 }
 
 export interface PlannedCompilerOutputs {
+  readonly cwd: string;
   readonly entry: string;
+  readonly artifactTsConfig: string;
+  readonly hostModules?: readonly string[];
   readonly serverOutput: string;
   readonly entriesOutput: string;
   readonly manifestOutput: string;

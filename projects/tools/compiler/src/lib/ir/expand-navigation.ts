@@ -418,18 +418,11 @@ function compileRedirect(parentPath: string, redirectTo: string): string {
 }
 
 function createRouteSetId(ir: NavigationIr, routeSet: NavigationIrRouteSetRecord): string {
-  const explicitId = readIrString(ir, routeSet.id ?? NO_IR_REF);
-  if (explicitId) {
-    return explicitId;
+  const id = readIrString(ir, routeSet.id);
+  if (!id) {
+    throw new Error('Navigation IR route set is missing its required id.');
   }
-
-  // Compatibility with Navigation IR produced from the former two-argument
-  // routesFor(slotId, entries) authoring form.
-  const slotId = readIrString(ir, routeSet.slotId) ?? 'slot';
-  const source = sourceFromIr(ir, routeSet.source);
-  const exportName = source?.exportName ?? source?.localName ?? 'routes';
-  const hash = shortHash(`${slotId}\u0000${source?.filePath ?? ''}\u0000${exportName}`);
-  return `${safeStem(slotId)}__${safeStem(exportName)}__${hash}`;
+  return id;
 }
 
 function createBranchId(
@@ -451,12 +444,6 @@ function shortHash(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 12);
 }
 
-function safeStem(value: string): string {
-  return value.replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase() || 'routes';
-}
 
 function compareBranches(left: ExpandedRouteBranch, right: ExpandedRouteBranch): number {
   return left.path.localeCompare(right.path) || left.id.localeCompare(right.id);

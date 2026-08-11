@@ -78,12 +78,12 @@ export function validateNavigationIr(
   for (let index = 0; index < ir.routeSets.length; index++) {
     const routeSet = ir.routeSets[index]!;
     validateRange(routeSet.firstEntry, routeSet.entryCount, ir.entryRefs.length, `route set ${index} entry`, diagnostics);
-    validateStringRef(ir, routeSet.id ?? NO_IR_REF, `route set ${index} id`, diagnostics, true);
+    validateStringRef(ir, routeSet.id, `route set ${index} id`, diagnostics, false);
     validateSourceRef(ir, routeSet.source, `route set ${index} source`, diagnostics, false);
     const slotId = readRequiredString(ir, routeSet.slotId, `route set ${index} slotId`, diagnostics);
     if (!slotId) continue;
     const source = decodeIrSource(ir, routeSet.source);
-    const routeSetId = readIrString(ir, routeSet.id ?? NO_IR_REF);
+    const routeSetId = readIrString(ir, routeSet.id);
     if (routeSetId) {
       if (routeSetIds.has(routeSetId)) {
         diagnostics.push(diagnostic(

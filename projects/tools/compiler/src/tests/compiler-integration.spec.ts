@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { compileRoutes } from '../lib/compiler/compile.js';
+import { compile } from '../lib/compiler/compile.js';
 
 test('discovers routeSlot and exported routesFor declarations end to end', async () => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'waypoint-compiler-'));
@@ -47,9 +47,10 @@ test('discovers routeSlot and exported routesFor declarations end to end', async
   }));
 
   try {
-    const result = await compileRoutes({
+    const result = await compile({
       cwd,
       entry: 'routes.ts',
+      artifactTsConfig: 'tsconfig.json',
       serverOutput: 'out/server.json',
       entriesOutput: 'out/entries',
       manifestOutput: 'out/manifest.json',
@@ -112,9 +113,10 @@ test('resolves routes through public-api export-star barrels', async () => {
   }));
 
   try {
-    const result = await compileRoutes({
+    const result = await compile({
       cwd,
       entry: 'public-api.ts',
+      artifactTsConfig: 'tsconfig.json',
       serverOutput: 'out/server.json',
       entriesOutput: 'out/entries',
       manifestOutput: 'out/manifest.json',
@@ -169,9 +171,10 @@ test('restores the previous entry directory when artifact bundling fails', async
   await fs.writeFile(previous, 'previous');
 
   try {
-    const result = await compileRoutes({
+    const result = await compile({
       cwd,
       entry: 'routes.ts',
+      artifactTsConfig: 'tsconfig.json',
       serverOutput: 'out/server.json',
       entriesOutput: 'out/entries',
       manifestOutput: 'out/manifest.json',

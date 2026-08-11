@@ -5,6 +5,7 @@ import {
   compilerOutputsFor,
   developmentOutputRoot,
   resolveCompilerCli,
+  routeArtifactTsConfig,
   routeEntry,
   workspaceRoot,
 } from './config.mjs';
@@ -37,6 +38,10 @@ const args = [
   'compile',
   '--entry',
   routeEntry,
+  '--artifact-tsconfig',
+  routeArtifactTsConfig,
+  '--host-module',
+  '@waypoint-demo/runtime',
   '--server-output',
   compilerOutputs.serverOutput,
   '--entries-output',
@@ -51,6 +56,9 @@ const args = [
 
 if (process.argv.includes('--dry-run')) {
   args.push('--dry-run');
+}
+if (process.argv.includes('--profile')) {
+  args.push('--profile');
 }
 
 process.exitCode = await run(

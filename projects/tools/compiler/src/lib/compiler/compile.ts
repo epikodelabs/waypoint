@@ -170,17 +170,12 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
   emitted.push(...bundles.emitted);
 
   try {
-    delivery = await run('finalize', () => planned.dryRun
-      ? {
-          serverIndex: artifactPlan!.serverIndex,
-          manifest: artifactPlan!.manifest,
-        }
-      : finalizeDeliveryDocuments(
-          artifactPlan!,
-          bundles!,
-          planned.serverOutput,
-          planned.manifestOutput,
-        ));
+    delivery = await run('finalize', () => finalizeDeliveryDocuments(
+      artifactPlan!,
+      bundles!,
+      planned.serverOutput,
+      planned.manifestOutput,
+    ));
   } catch (error) {
     await restoreSnapshots(entrySnapshot, artifactSnapshot);
     diagnostics.push(diagnostic(
@@ -194,13 +189,11 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
     return finish(false);
   }
 
-  if (!planned.dryRun) {
-    const validatedDelivery = await run(
-      'validate-delivery',
-      () => validateFinalizedDelivery(artifactPlan!, bundles!, delivery!),
-    );
-    diagnostics.push(...validatedDelivery.diagnostics);
-  }
+  const validatedDelivery = await run(
+    'validate-delivery',
+    () => validateFinalizedDelivery(artifactPlan!, bundles!, delivery!),
+  );
+  diagnostics.push(...validatedDelivery.diagnostics);
 
   if (hasErrors(diagnostics)) {
     await restoreSnapshots(entrySnapshot, artifactSnapshot);
@@ -232,8 +225,6 @@ export async function compile(options: RouteCompilerOptions): Promise<RouteCompi
   return finish(true);
 }
 
-/** Compatibility name retained for existing integrations. */
-export const compileRoutes = compile;
 
 function stopDiagnostic(
   planned: PlannedCompilerOutputs,

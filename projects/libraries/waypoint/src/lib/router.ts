@@ -626,6 +626,8 @@ export class Router<TRoutes extends NavigationTree = any> {
   private readonly namedRouteCatalog = new Map<string, NamedRouteDefinition>();
   private readonly resolvingRouteKeys = new Map<string, Promise<boolean>>();
   private readonly resolvingRouteControllers = new Map<string, AbortController>();
+  private readonly preResolvedNavigationKeys = new Set<string>();
+  private preResolvingNavigationCount = 0;
   private readonly unresolvedRouteKeys = new Set<string>();
   private resolvedRoutes: NavigationTree = Object.freeze([]);
   private readonly resolvedContributionsById = new Map<string, RouteContributionDefinition>();
@@ -757,7 +759,9 @@ export class Router<TRoutes extends NavigationTree = any> {
 
         replaceChildNodes(target, heading);
 
-        void this.resolveRoutesForUrl(url);
+        if (this.shouldResolveNotFoundUrl(url)) {
+          void this.resolveRoutesForUrl(url);
+        }
       },
 
       renderError: (targetName, _error, _router) => {
@@ -967,6 +971,8 @@ export class Router<TRoutes extends NavigationTree = any> {
     target: NavigationTarget,
     options?: NavigationOptions,
   ): Promise<boolean> {
+    this.preResolvingNavigationCount++;
+    try {
     const requestId = ++this.navigationRequestId;
     const resolutionGeneration = this.resolutionGeneration;
     const href = this.href(target);
@@ -977,10 +983,15 @@ export class Router<TRoutes extends NavigationTree = any> {
 
     const location = getRouterLocation(this.document);
     const url = resolveRouterUrl(href, this.baseHref, location, 'navigate');
+    const key = stripBaseHref(url.pathname, this.baseHref);
 
     if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
-      this.abortResolvedRouteRequests(stripBaseHref(url.pathname, this.baseHref));
-      await this.resolveRoutesForUrl(url);
+      this.abortResolvedRouteRequests(key);
+      const resolved = await this.resolveRoutesForUrl(url, { install: false });
+      if (resolved) {
+        await this.installCurrentRegistry({ revalidate: false });
+        this.preResolvedNavigationKeys.add(key);
+      }
     }
 
     if (
@@ -990,7 +1001,14 @@ export class Router<TRoutes extends NavigationTree = any> {
       return false;
     }
 
-    return this.requireEngine().navigate(href, options);
+      try {
+        return await this.requireEngine().navigate(href, options);
+      } finally {
+        this.preResolvedNavigationKeys.delete(key);
+      }
+    } finally {
+      this.preResolvingNavigationCount--;
+    }
   }
 
   private readNamedRouteRecord(name: string):
@@ -1191,7 +1209,9 @@ export class Router<TRoutes extends NavigationTree = any> {
     );
   }
 
-  private async installCurrentRegistry(): Promise<boolean> {
+  private async installCurrentRegistry(
+    options: Readonly<{ revalidate?: boolean }> = {},
+  ): Promise<boolean> {
     const engine = this.engine;
 
     if (!engine) {
@@ -1210,6 +1230,10 @@ export class Router<TRoutes extends NavigationTree = any> {
         this.injector,
       ),
     });
+
+    if (options.revalidate === false) {
+      return true;
+    }
 
     return engine.revalidate();
   }
@@ -1276,7 +1300,9 @@ export class Router<TRoutes extends NavigationTree = any> {
 
         replaceChildNodes(target, heading);
 
-        void this.resolveRoutesForUrl(url);
+        if (this.shouldResolveNotFoundUrl(url)) {
+          void this.resolveRoutesForUrl(url);
+        }
       },
 
       renderError: (targetName, _error, _router) => {
@@ -1358,6 +1384,20 @@ export class Router<TRoutes extends NavigationTree = any> {
 
       this.appRef.tick();
     });
+  }
+
+  private shouldResolveNotFoundUrl(url: URL): boolean {
+    if (this.preResolvingNavigationCount > 0) {
+      return false;
+    }
+    if (this.preResolvedNavigationKeys.size > 0) {
+      return false;
+    }
+    const path = stripBaseHref(url.pathname, this.baseHref);
+    return this.navigationRequestId > 0
+      || path !== '/'
+      || url.search.length > 0
+      || url.hash.length > 0;
   }
 }
 

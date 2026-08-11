@@ -27,6 +27,7 @@ test('expands nested routesFor ownership through layouts and retained slots', ()
     }],
     routeSets: [{
       kind: 'routes-for',
+      id: 'administration-core',
       slotId: 'administration',
       source: routeSetSource('administration'),
       entries: [{
@@ -53,6 +54,7 @@ test('expands nested routesFor ownership through layouts and retained slots', ()
       }],
     }, {
       kind: 'routes-for',
+      id: 'user-extensions',
       slotId: 'administration.users.extensions',
       source: routeSetSource('userExtensions'),
       entries: [{
@@ -102,11 +104,13 @@ test('rejects cyclic hierarchical ownership', () => {
     routes: [],
     routeSets: [{
       kind: 'routes-for',
+      id: 'a-core',
       slotId: 'a',
       source: routeSetSource('a'),
       entries: [{ kind: 'slot', id: 'b', source: routeSetSource('a') }],
     }, {
       kind: 'routes-for',
+      id: 'b-core',
       slotId: 'b',
       source: routeSetSource('b'),
       entries: [{ kind: 'slot', id: 'a', source: routeSetSource('b') }],

@@ -11,6 +11,8 @@ import type {
 
 function outputs(cwd: string): PlannedCompilerOutputs {
   return {
+    cwd,
+    artifactTsConfig: path.join(cwd, 'tsconfig.json'),
     entry: path.join(cwd, 'routes.ts'),
     serverOutput: path.join(cwd, 'out/server.json'),
     entriesOutput: path.join(cwd, 'out/entries'),

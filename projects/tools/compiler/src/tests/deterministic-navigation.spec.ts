@@ -9,6 +9,7 @@ const graph: SemanticNavigationProgram = {
   routes: [{ kind: 'slot', id: 'root', source: { filePath: '/app/routes.ts' } }],
   routeSets: [{
     kind: 'routes-for',
+    id: 'root-core',
     slotId: 'root',
     source: { filePath: '/features/root.routes.ts', exportName: 'rootRoutes' },
     entries: [{

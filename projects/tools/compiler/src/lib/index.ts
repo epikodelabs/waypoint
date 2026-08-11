@@ -5,7 +5,7 @@ export {
   SERVER_ROUTE_SHARD_VERSION,
   ROUTE_ARTIFACT_MANIFEST_VERSION,
 } from './compiler/contracts.js';
-export { compile, compileRoutes } from './compiler/compile.js';
+export { compile } from './compiler/compile.js';
 export { normalizeCompilerOptions } from './compiler/config.js';
 export { diagnostic, hasErrors, toSourceSpan } from './compiler/diagnostics.js';
 

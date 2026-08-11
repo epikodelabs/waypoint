@@ -80,6 +80,19 @@ function redirectBranch(
   };
 }
 
+
+function snapshot(
+  index: ServerRouterIndex<Artifact>,
+  loadShard: (file: string) => ServerRouterShard<Branch>,
+) {
+  return async () => ({
+    index,
+    async loadShard(file: string) {
+      return loadShard(file);
+    },
+  });
+}
+
 function fixture() {
   const index: ServerRouterIndex<Artifact> = {
     shards: [
@@ -111,14 +124,11 @@ function fixture() {
   ]);
 
   const router = createServerRouter<Artifact, Branch>({
-    async loadIndex() {
-      return index;
-    },
-    async loadShard(file) {
+    loadSnapshot: snapshot(index, file => {
       const shard = shards.get(file);
       if (!shard) throw new Error(`Missing shard ${file}`);
       return shard;
-    },
+    }),
     moduleUrlFor(item) {
       return `/modules/${item.artifactKey}/${item.hash}`;
     },
@@ -202,8 +212,7 @@ describe('server router', () => {
       ],
     };
     const router = createServerRouter<Artifact, Branch>({
-      async loadIndex() { return index; },
-      async loadShard() { return shard; },
+      loadSnapshot: snapshot(index, () => shard),
       moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
     });
 
@@ -240,8 +249,7 @@ describe('server router', () => {
       ],
     };
     const router = createServerRouter<Artifact, Branch>({
-      async loadIndex() { return index; },
-      async loadShard() { return shard; },
+      loadSnapshot: snapshot(index, () => shard),
       moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
     });
 
@@ -263,8 +271,7 @@ describe('server router', () => {
       ],
     };
     const router = createServerRouter<Artifact, Branch>({
-      async loadIndex() { return index; },
-      async loadShard() { return shard; },
+      loadSnapshot: snapshot(index, () => shard),
       moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
       maxRedirects: 3,
     });
@@ -283,8 +290,7 @@ describe('server router', () => {
       ],
     };
     const router = createServerRouter<Artifact, Branch>({
-      async loadIndex() { return index; },
-      async loadShard() { return shard; },
+      loadSnapshot: snapshot(index, () => shard),
       moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
     });
 

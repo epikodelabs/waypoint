@@ -49,13 +49,17 @@ export function createServerRouterSnapshotSource<
     readonly revision?: string | number;
   }> {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const before = await options.revision?.();
+      const before = options.revision
+        ? await options.revision()
+        : undefined;
       const index = await options.loadIndex();
       const descriptors = uniqueShardFiles(index);
       const loaded = await Promise.all(
         descriptors.map(async file => [file, await options.loadShard(file)] as const),
       );
-      const after = await options.revision?.();
+      const after = options.revision
+        ? await options.revision()
+        : undefined;
 
       if (before !== undefined && after !== before) continue;
 
@@ -113,6 +117,9 @@ export function createServerRouterSnapshotSource<
       epoch++;
       current = undefined;
       currentRevision = undefined;
+      // A build that started before invalidation may still finish for its original
+      // caller, but subsequent callers must not join that stale publication.
+      pending = undefined;
     },
   });
 }

@@ -174,9 +174,14 @@ Waypoint provides a framework-neutral server router around the compiler's
 server index and shards:
 
 ```ts
-const serverRouter = createServerRouter({
+const source = createServerRouterSnapshotSource({
   loadIndex,
   loadShard,
+  revision: readPublishedRevision,
+});
+
+const serverRouter = createServerRouter({
+  loadSnapshot: source.loadSnapshot,
   moduleUrlFor,
 });
 ```
@@ -209,12 +214,50 @@ browser
 ```
 
 `createServerRouter()` deliberately does not depend on Express, Angular SSR,
-filesystem layout, or a particular compiler-output directory. Applications
-provide `loadIndex()`, `loadShard()`, and `moduleUrlFor()`.
+filesystem layout, or a particular compiler-output directory. It consumes one
+immutable `loadSnapshot()` source and a `moduleUrlFor()` mapping.
 
-### Compiler-output snapshots
+### Angular AOT and host-runtime identity
 
-`createServerRouterSnapshotSource()` can sit in front of those loaders. It caches
+Waypoint route artifacts are executable Angular application modules, not raw
+TypeScript decorator source. The route compiler performs Angular **full AOT**
+compilation before isolated artifact bundling. This matches Angular's application
+compilation model and avoids requiring JIT compilation in the browser.
+
+Independently bundled artifacts must not create second identities for Angular,
+Waypoint, or application services/tokens that are intentionally shared across
+artifacts. The compiler therefore rewrites configured host-shared imports to a
+small runtime bridge. Angular package specifiers and `@epikodelabs/waypoint` are
+shared by default; applications may explicitly add stable bare specifiers for
+additional shared runtime modules.
+
+The browser must register the exact module namespace objects used by the host
+application before native artifact imports occur:
+
+```ts
+import * as angularCore from '@angular/core';
+import * as waypoint from '@epikodelabs/waypoint';
+
+const resolveRoutes = waypoint.createServerNavigationResolver({
+  hostModules: {
+    '@angular/core': angularCore,
+    '@epikodelabs/waypoint': waypoint,
+  },
+});
+```
+
+Registering a different namespace for an already registered specifier is an
+error. This prevents accidentally mixing multiple Angular/Waypoint runtime
+identities in one document realm.
+
+Host modules are an **already-delivered runtime boundary**, not a privacy
+boundary. A route component, admin-only service, or other code that must remain
+undiscoverable to a principal must stay inside an authorized route artifact and
+must not be configured as a host module.
+
+## Compiler-output snapshots
+
+`createServerRouterSnapshotSource()` builds that source from compiler-output loaders. It caches
 one complete index + shard generation and exposes it through `loadSnapshot()`.
 The server router uses that snapshot for the entire match/authorization operation,
 so an index from one compiler publication cannot be combined with shards from a
