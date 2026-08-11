@@ -140,6 +140,15 @@ A conforming browser integration:
 
 The browser does not need the server index or manifest to perform these steps.
 
+Waypoint provides `createServerNavigationResolver()` as the default browser
+implementation of this contract. The returned function can be passed directly
+to `RouterOptions.resolveRoutes`. It validates the wire response before loading
+code, imports the dependency-first artifact list in order, verifies that each
+module exports a `routesFor()` contribution, and caches successful imports by
+`artifactKey + hash`. Failed imports are removed from the resolver cache so a
+later navigation can retry, and a newly published hash supersedes the resolver's
+cache reference for the previous hash of the same stable artifact key.
+
 
 ## Server Router API v1
 

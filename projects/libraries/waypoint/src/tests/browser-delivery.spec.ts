@@ -1,0 +1,232 @@
+import {
+  createServerNavigationResolver,
+  isRouteContributionDefinition,
+  type ServerNavigationFetch,
+} from '../lib/browser-delivery';
+import type { RouteContributionDefinition } from '../lib/navigation-definitions';
+
+function contribution(
+  id: string,
+  slotId = 'application',
+): RouteContributionDefinition {
+  return {
+    kind: 'route-contribution',
+    id,
+    slotId,
+    entries: [],
+  };
+}
+
+function response(
+  status: number,
+  body: unknown,
+): Awaited<ReturnType<ServerNavigationFetch>> {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      return body;
+    },
+  };
+}
+
+describe('browser server delivery', () => {
+  it('validates route contribution exports', () => {
+    expect(isRouteContributionDefinition(contribution('workspace'))).toBeTrue();
+    expect(isRouteContributionDefinition({
+      kind: 'route-contribution',
+      id: '',
+      slotId: 'application',
+      entries: [],
+    })).toBeFalse();
+    expect(isRouteContributionDefinition({
+      kind: 'route-contribution',
+      id: 'workspace',
+      slotId: 'application',
+      entries: {},
+    })).toBeFalse();
+  });
+
+  it('requests one server resolution and imports artifacts dependency-first', async () => {
+    const requests: string[] = [];
+    const imports: string[] = [];
+    const fetch: ServerNavigationFetch = async input => {
+      requests.push(input);
+      return response(200, {
+        version: 1,
+        artifactKey: 'workspace',
+        artifacts: [
+          { artifactKey: 'shell', moduleUrl: '/modules/shell.js', hash: 'SHELL' },
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'WORK' },
+        ],
+      });
+    };
+
+    const resolve = createServerNavigationResolver({
+      fetch,
+      async importModule(url) {
+        imports.push(url);
+        return {
+          default: contribution(url.includes('shell') ? 'shell' : 'workspace'),
+        };
+      },
+    });
+
+    const result = await resolve(new URL(
+      'https://waypoint.test/app/workspace/101?view=overview#details',
+    ));
+
+    expect(requests).toEqual([
+      '/api/navigation/resolve?path=%2Fapp%2Fworkspace%2F101%3Fview%3Doverview%23details',
+    ]);
+    expect(imports).toEqual(['/modules/shell.js', '/modules/workspace.js']);
+    expect(result?.contributions?.map(item => item.id)).toEqual([
+      'shell',
+      'workspace',
+    ]);
+  });
+
+  it('treats hidden and unknown destinations identically', async () => {
+    const resolve = createServerNavigationResolver({
+      fetch: async () => response(404, { error: 'Route not found.' }),
+      importModule: async () => {
+        throw new Error('must not import');
+      },
+    });
+
+    expect(await resolve(new URL('https://waypoint.test/hidden'))).toBeNull();
+  });
+
+  it('rejects malformed delivery responses before importing code', async () => {
+    let imports = 0;
+    const resolve = createServerNavigationResolver({
+      fetch: async () => response(200, {
+        version: 1,
+        artifactKey: 'workspace',
+        artifacts: [],
+      }),
+      importModule: async () => {
+        imports += 1;
+        return {};
+      },
+    });
+
+    await expectAsync(resolve(new URL('https://waypoint.test/app/workspace')))
+      .toBeRejectedWithError(/invalid Waypoint navigation resolution/i);
+    expect(imports).toBe(0);
+  });
+
+  it('deduplicates concurrent imports for the same content identity', async () => {
+    let imports = 0;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const fetch: ServerNavigationFetch = async () => response(200, {
+      version: 1,
+      artifactKey: 'workspace',
+      artifacts: [
+        { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+      ],
+    });
+    const resolver = createServerNavigationResolver({
+      fetch,
+      async importModule() {
+        imports += 1;
+        await gate;
+        return { default: contribution('workspace') };
+      },
+    });
+
+    const first = resolver(new URL('https://waypoint.test/app/workspace'));
+    const second = resolver(new URL('https://waypoint.test/app/workspace'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(imports).toBe(1);
+
+    release();
+    await Promise.all([first, second]);
+    expect(imports).toBe(1);
+  });
+
+  it('loads a new content hash under the same stable artifact key', async () => {
+    let hash = 'A';
+    const imports: string[] = [];
+    const resolve = createServerNavigationResolver({
+      fetch: async () => response(200, {
+        version: 1,
+        artifactKey: 'workspace',
+        artifacts: [{
+          artifactKey: 'workspace',
+          moduleUrl: `/modules/workspace-${hash}.js`,
+          hash,
+        }],
+      }),
+      async importModule(url) {
+        imports.push(url);
+        return { default: contribution(`workspace-${hash}`) };
+      },
+    });
+
+    await resolve(new URL('https://waypoint.test/app/workspace'));
+    hash = 'B';
+    await resolve(new URL('https://waypoint.test/app/workspace'));
+    await resolve(new URL('https://waypoint.test/app/workspace'));
+
+    expect(imports).toEqual([
+      '/modules/workspace-A.js',
+      '/modules/workspace-B.js',
+    ]);
+  });
+
+  it('evicts a failed artifact import so a later resolution can retry', async () => {
+    let attempts = 0;
+    const resolve = createServerNavigationResolver({
+      fetch: async () => response(200, {
+        version: 1,
+        artifactKey: 'workspace',
+        artifacts: [
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+        ],
+      }),
+      async importModule() {
+        attempts += 1;
+        if (attempts === 1) throw new Error('temporary import failure');
+        return { default: contribution('workspace') };
+      },
+    });
+
+    await expectAsync(resolve(new URL('https://waypoint.test/app/workspace')))
+      .toBeRejectedWithError(/temporary import failure/);
+    await expectAsync(resolve(new URL('https://waypoint.test/app/workspace')))
+      .toBeResolved();
+    expect(attempts).toBe(2);
+  });
+
+  it('rejects modules that do not export a routesFor contribution', async () => {
+    const resolve = createServerNavigationResolver({
+      fetch: async () => response(200, {
+        version: 1,
+        artifactKey: 'workspace',
+        artifacts: [
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+        ],
+      }),
+      importModule: async () => ({ default: [] }),
+    });
+
+    await expectAsync(resolve(new URL('https://waypoint.test/app/workspace')))
+      .toBeRejectedWithError(/did not export a route contribution/i);
+  });
+
+  it('supports a custom resolution endpoint', async () => {
+    let request = '';
+    const resolve = createServerNavigationResolver({
+      endpoint: '/internal/waypoint/resolve?',
+      fetch: async input => {
+        request = input;
+        return response(404, null);
+      },
+    });
+
+    await resolve(new URL('https://waypoint.test/app'));
+    expect(request).toBe('/internal/waypoint/resolve?path=%2Fapp');
+  });
+});

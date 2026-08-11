@@ -313,6 +313,39 @@ Artifact module requests are resolved by `artifactKey + hash`, not emitted
 filenames. The server authorizes the complete dependency chain again before it
 returns the artifact file to the transport adapter.
 
+### Browser delivery resolver
+
+`createServerNavigationResolver()` is the browser counterpart to the server
+router. It implements Server Delivery Contract v1 directly as a
+`RouterOptions.resolveRoutes` function:
+
+```ts
+const resolveRoutes = createServerNavigationResolver();
+
+provideRouter(routes, {
+  resolveRoutes,
+});
+```
+
+The resolver requests one server-authorized delivery plan, validates the wire
+contract, loads artifacts in dependency-first order, validates each module as a
+`routesFor()` contribution, and returns the contributions for atomic runtime
+installation. Artifact imports are deduplicated by `artifactKey + hash`; when a
+new hash is published for a stable artifact key, Waypoint drops its own cache
+reference to the older delivery identity. Failed imports are evicted so a later
+navigation can retry.
+
+Applications can override the resolution endpoint, fetch implementation, or
+module importer without changing the routing runtime:
+
+```ts
+const resolveRoutes = createServerNavigationResolver({
+  endpoint: '/internal/navigation/resolve',
+  fetch: customFetch,
+  importModule: loadModule,
+});
+```
+
 ### Compiler-output snapshots
 
 Production servers should not reread and reparse the server index and shards for
@@ -340,7 +373,7 @@ changes. `refresh()` and `invalidate()` are also available for explicit host
 lifecycle integration.
 
 The normative protocol details are documented in
-`projects/libraries/waypoint/SERVER-DELIVERY-CONTRACT.md`.
+`docs/server-delivery-contract.md`.
 
 ---
 

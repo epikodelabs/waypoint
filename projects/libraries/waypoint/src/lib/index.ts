@@ -4,6 +4,7 @@ export * from './query-schema';
 export * from './route-adapter';
 export * from './route-builders';
 export * from './route-slots';
+export * from './browser-delivery';
 export * from './server-delivery';
 export * from './server-http';
 export * from './server-express';
