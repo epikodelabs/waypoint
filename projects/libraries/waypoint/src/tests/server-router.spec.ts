@@ -1,6 +1,7 @@
 import {
   createServerRouter,
   isPathPrefix,
+  matchRoutePattern,
   matchesRoutePattern,
   type ServerArtifactRecord,
   type ServerRoutableBranch,
@@ -15,7 +16,7 @@ interface Artifact extends ServerArtifactRecord {
 }
 
 interface Branch extends ServerRoutableBranch {
-  readonly kind: 'route';
+  readonly kind: 'route' | 'redirect';
 }
 
 const principal: ServerPrincipal = {
@@ -57,6 +58,23 @@ function branch(
     id,
     kind: 'route',
     path,
+    routeSetId,
+    policies: [{ permissions }],
+  };
+}
+
+function redirectBranch(
+  id: string,
+  path: string,
+  redirectTo: string,
+  routeSetId: string,
+  permissions: readonly string[] = ['read'],
+): Branch {
+  return {
+    id,
+    kind: 'redirect',
+    path,
+    redirectTo,
     routeSetId,
     policies: [{ permissions }],
   };
@@ -121,6 +139,13 @@ describe('server router', () => {
     )).toBeFalse();
   });
 
+  it('extracts encoded dynamic segments for server redirect interpolation', () => {
+    expect(matchRoutePattern(
+      '/legacy/:projectId',
+      '/legacy/hello%20world',
+    )).toEqual({ projectId: 'hello%20world' });
+  });
+
   it('treats shard prefixes as path prefixes rather than string prefixes', () => {
     expect(isPathPrefix('/app', '/app')).toBeTrue();
     expect(isPathPrefix('/app', '/app/admin')).toBeTrue();
@@ -160,6 +185,110 @@ describe('server router', () => {
         },
       ],
     });
+  });
+
+  it('resolves internal redirects across separately delivered artifacts', async () => {
+    const index: ServerRouterIndex<Artifact> = {
+      shards: [{ prefix: '/', file: 'root.json' }],
+      artifacts: [
+        artifact('legacy', 'legacy-set', [], ['legacy']),
+        artifact('target', 'target-set', [], ['target']),
+      ],
+    };
+    const shard: ServerRouterShard<Branch> = {
+      branches: [
+        redirectBranch('legacy', '/legacy/:projectId', '/projects/:projectId', 'legacy-set'),
+        branch('target', '/projects/:projectId', 'target-set'),
+      ],
+    };
+    const router = createServerRouter<Artifact, Branch>({
+      async loadIndex() { return index; },
+      async loadShard() { return shard; },
+      moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
+    });
+
+    expect(await router.resolve('/legacy/hello%20world', principal)).toEqual({
+      version: 1,
+      artifactKey: 'legacy',
+      artifacts: [
+        {
+          artifactKey: 'legacy',
+          moduleUrl: '/modules/legacy/legacy-hash',
+          hash: 'legacy-hash',
+        },
+        {
+          artifactKey: 'target',
+          moduleUrl: '/modules/target/target-hash',
+          hash: 'target-hash',
+        },
+      ],
+    });
+  });
+
+  it('does not deliver a redirect source when its internal target is unauthorized', async () => {
+    const index: ServerRouterIndex<Artifact> = {
+      shards: [{ prefix: '/', file: 'root.json' }],
+      artifacts: [
+        artifact('legacy', 'legacy-set', [], ['legacy']),
+        artifact('admin', 'admin-set', [], ['admin']),
+      ],
+    };
+    const shard: ServerRouterShard<Branch> = {
+      branches: [
+        redirectBranch('legacy', '/legacy-admin', '/admin', 'legacy-set'),
+        branch('admin', '/admin', 'admin-set', ['admin']),
+      ],
+    };
+    const router = createServerRouter<Artifact, Branch>({
+      async loadIndex() { return index; },
+      async loadShard() { return shard; },
+      moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
+    });
+
+    expect(await router.resolve('/legacy-admin', principal)).toBeNull();
+  });
+
+  it('stops internal server redirect loops before returning a delivery plan', async () => {
+    const index: ServerRouterIndex<Artifact> = {
+      shards: [{ prefix: '/', file: 'root.json' }],
+      artifacts: [
+        artifact('a', 'a-set', [], ['a']),
+        artifact('b', 'b-set', [], ['b']),
+      ],
+    };
+    const shard: ServerRouterShard<Branch> = {
+      branches: [
+        redirectBranch('a', '/a', '/b', 'a-set'),
+        redirectBranch('b', '/b', '/a', 'b-set'),
+      ],
+    };
+    const router = createServerRouter<Artifact, Branch>({
+      async loadIndex() { return index; },
+      async loadShard() { return shard; },
+      moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
+      maxRedirects: 3,
+    });
+
+    expect(await router.resolve('/a', principal)).toBeNull();
+  });
+
+  it('keeps external redirects as one authorized source artifact', async () => {
+    const index: ServerRouterIndex<Artifact> = {
+      shards: [{ prefix: '/', file: 'root.json' }],
+      artifacts: [artifact('external', 'external-set', [], ['external'])],
+    };
+    const shard: ServerRouterShard<Branch> = {
+      branches: [
+        redirectBranch('external', '/external', 'https://example.com/docs', 'external-set'),
+      ],
+    };
+    const router = createServerRouter<Artifact, Branch>({
+      async loadIndex() { return index; },
+      async loadShard() { return shard; },
+      moduleUrlFor(item) { return `/modules/${item.artifactKey}/${item.hash}`; },
+    });
+
+    expect((await router.resolve('/external', principal))?.artifactKey).toBe('external');
   });
 
   it('rejects ambiguous route-set to artifact mappings', async () => {

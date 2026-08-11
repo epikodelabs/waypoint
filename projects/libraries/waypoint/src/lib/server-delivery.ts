@@ -11,8 +11,9 @@ export interface ServerArtifactDelivery {
 /**
  * Complete server-authorized delivery plan for one requested destination.
  *
- * Artifacts are dependency-first and the target artifact is always last. The
- * browser therefore consumes the plan without discovering the server's route,
+ * Artifacts are dependency-first. `artifactKey` identifies the artifact that
+ * contains the requested destination; redirect-followed artifacts may appear
+ * later in the same plan. The browser consumes the plan without discovering the server's route,
  * ownership, policy, or artifact graphs.
  */
 export interface ServerNavigationResolution {
@@ -45,8 +46,7 @@ export function isServerNavigationResolution(
     keys.add(artifact.artifactKey);
   }
 
-  return candidate.artifacts[candidate.artifacts.length - 1]?.artifactKey
-    === candidate.artifactKey;
+  return keys.has(candidate.artifactKey);
 }
 
 export function isServerArtifactDelivery(

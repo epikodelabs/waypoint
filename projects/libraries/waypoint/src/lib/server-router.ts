@@ -13,6 +13,8 @@ import type { ServerNavigationResolution } from './server-delivery';
 
 export interface ServerRoutableBranch extends ServerRouteBranch {
   readonly path: string;
+  readonly kind?: 'route' | 'redirect';
+  readonly redirectTo?: string;
 }
 
 export interface ServerRouteShardDescriptor {
@@ -57,6 +59,8 @@ export interface ServerRouterOptions<
   TBranch extends ServerRoutableBranch = ServerRoutableBranch,
 > extends ServerRouterSource<TArtifact, TBranch> {
   moduleUrlFor(artifact: TArtifact): string;
+  /** Maximum number of internal server-resolved redirect hops. Defaults to 16. */
+  readonly maxRedirects?: number;
 }
 
 export interface ServerRouter<
@@ -102,7 +106,7 @@ export function createServerRouter<
     if (pathname === null) return undefined;
 
     const snapshot = await loadSnapshot(options);
-    return findBranch(snapshot, pathname);
+    return (await findBranchMatch(snapshot, pathname))?.branch;
   }
 
   async function resolve(
@@ -113,36 +117,93 @@ export function createServerRouter<
     if (pathname === null) return null;
 
     const snapshot = await loadSnapshot(options);
-    const index = snapshot.index;
-    const branch = await findBranch(snapshot, pathname);
-
-    if (
-      !branch?.routeSetId
-      || !branch.policies.every(policy => isServerPolicyAllowed(policy, principal))
-    ) {
-      return null;
-    }
-
-    const artifacts = index.artifacts.filter(
-      candidate => candidate.routeSetId === branch.routeSetId,
+    const resolution = await resolveNavigationChain(
+      snapshot,
+      target,
+      principal,
+      options.maxRedirects ?? 16,
     );
-    if (artifacts.length === 0) return null;
-    if (artifacts.length > 1) {
-      throw new ServerArtifactResolutionError(
-        'invalid',
-        `Route set "${branch.routeSetId}" maps to multiple server artifacts.`,
-      );
-    }
-    const artifact = artifacts[0]!;
-
-    const chain = await authorizedChain(snapshot, artifact.artifactKey, principal);
-    if (!chain) return null;
+    if (!resolution) return null;
 
     return createServerNavigationResolution(
-      artifact.artifactKey,
-      chain,
+      resolution.artifactKey,
+      resolution.artifacts,
       candidate => options.moduleUrlFor(candidate),
     );
+  }
+
+  async function resolveNavigationChain(
+    snapshot: ServerRouterSnapshot<TArtifact, TBranch>,
+    target: string | URL,
+    principal: ServerPrincipal | undefined,
+    maxRedirects: number,
+  ): Promise<{ readonly artifactKey: string; readonly artifacts: readonly TArtifact[] } | null> {
+    const ordered: TArtifact[] = [];
+    const seenArtifacts = new Set<string>();
+    const visitedTargets = new Set<string>();
+    let current = relativeTargetOf(target);
+    let requestedArtifactKey: string | undefined;
+
+    for (let redirectCount = 0; ; redirectCount++) {
+      const pathname = pathnameOf(current);
+      if (pathname === null || visitedTargets.has(current)) return null;
+      visitedTargets.add(current);
+
+      const matched = await findBranchMatch(snapshot, pathname);
+      if (!matched) return null;
+      const { branch, params } = matched;
+
+      if (
+        !branch.routeSetId
+        || !branch.policies.every(policy => isServerPolicyAllowed(policy, principal))
+      ) {
+        return null;
+      }
+
+      const artifacts = snapshot.index.artifacts.filter(
+        candidate => candidate.routeSetId === branch.routeSetId,
+      );
+      if (artifacts.length === 0) return null;
+      if (artifacts.length > 1) {
+        throw new ServerArtifactResolutionError(
+          'invalid',
+          `Route set "${branch.routeSetId}" maps to multiple server artifacts.`,
+        );
+      }
+
+      const artifact = artifacts[0]!;
+      requestedArtifactKey ??= artifact.artifactKey;
+      const chain = await authorizedChain(snapshot, artifact.artifactKey, principal);
+      if (!chain) return null;
+      for (const item of chain) {
+        if (seenArtifacts.has(item.artifactKey)) continue;
+        seenArtifacts.add(item.artifactKey);
+        ordered.push(item);
+      }
+
+      if (branch.kind !== 'redirect' || !branch.redirectTo) {
+        return {
+          artifactKey: requestedArtifactKey!,
+          artifacts: Object.freeze([...ordered]),
+        };
+      }
+
+      if (redirectCount >= maxRedirects) {
+        throw new ServerArtifactResolutionError(
+          'invalid',
+          `Maximum server redirect count of ${maxRedirects} exceeded.`,
+        );
+      }
+
+      const redirected = interpolateServerRedirect(branch.redirectTo, params);
+      if (isExternalTarget(redirected)) {
+        return {
+          artifactKey: requestedArtifactKey!,
+          artifacts: Object.freeze([...ordered]),
+        };
+      }
+      current = redirected;
+    }
   }
 
   async function resolveLanding(
@@ -222,19 +283,20 @@ export function createServerRouter<
     return result;
   }
 
-  async function findBranch(
+  async function findBranchMatch(
     snapshot: ServerRouterSnapshot<TArtifact, TBranch>,
     pathname: string,
-  ): Promise<TBranch | undefined> {
+  ): Promise<{ readonly branch: TBranch; readonly params: Readonly<Record<string, string>> } | undefined> {
     const candidates = [...snapshot.index.shards]
       .filter(shard => isPathPrefix(shard.prefix, pathname))
       .sort((left, right) => right.prefix.length - left.prefix.length);
 
     for (const descriptor of candidates) {
       const shard = await snapshot.loadShard(descriptor.file);
-      const branch = shard.branches.find(candidate =>
-        matchesRoutePattern(candidate.path, pathname));
-      if (branch) return branch;
+      for (const branch of shard.branches) {
+        const params = matchRoutePattern(branch.path, pathname);
+        if (params) return { branch, params };
+      }
     }
 
     return undefined;
@@ -270,13 +332,28 @@ async function loadSnapshot<
 }
 
 export function matchesRoutePattern(pattern: string, pathname: string): boolean {
+  return matchRoutePattern(pattern, pathname) !== null;
+}
+
+export function matchRoutePattern(
+  pattern: string,
+  pathname: string,
+): Readonly<Record<string, string>> | null {
   const expected = routeSegments(pattern);
   const actual = routeSegments(pathname);
+  if (expected.length !== actual.length) return null;
 
-  return expected.length === actual.length
-    && expected.every(
-      (part, index) => part.startsWith(':') || part === actual[index],
-    );
+  const params: Record<string, string> = {};
+  for (let index = 0; index < expected.length; index++) {
+    const part = expected[index]!;
+    const value = actual[index]!;
+    if (part.startsWith(':')) {
+      params[part.slice(1)] = value;
+      continue;
+    }
+    if (part !== value) return null;
+  }
+  return Object.freeze(params);
 }
 
 export function isPathPrefix(prefix: string, pathname: string): boolean {
@@ -289,9 +366,29 @@ export function isPathPrefix(prefix: string, pathname: string): boolean {
 }
 
 
-function relativeTargetOf(target: string): string {
-  const url = new URL(target, 'http://waypoint.local');
+function relativeTargetOf(target: string | URL): string {
+  const url = target instanceof URL ? target : new URL(target, 'http://waypoint.local');
   return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function interpolateServerRedirect(
+  redirectTo: string,
+  params: Readonly<Record<string, string>>,
+): string {
+  return redirectTo.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, (_match, key: string) => {
+    const value = params[key];
+    if (value === undefined) {
+      throw new ServerArtifactResolutionError(
+        'invalid',
+        `Missing route parameter "${key}" for redirect "${redirectTo}".`,
+      );
+    }
+    return value;
+  });
+}
+
+function isExternalTarget(target: string): boolean {
+  return /^[A-Za-z][A-Za-z\d+.-]*:/.test(target) || target.startsWith('//');
 }
 
 function pathnameOf(target: string | URL): string | null {

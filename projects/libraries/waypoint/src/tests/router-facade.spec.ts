@@ -8,6 +8,7 @@ import {
   lazyLayout,
   lazyRoute,
   provideRouter,
+  redirectRoute,
   RouterOutlet,
   route,
   routeSlot,
@@ -357,6 +358,35 @@ describe('Router: flat routes and layouts', () => {
     expect(getOutletContent()).toContain('<h3>Settings</h3>');
     expect(router.state.path).toBe('/app/settings');
     expect(router.displayUrl).toBe('/app/settings');
+  });
+
+  it('follows a server-delivered redirect whose target is delivered in the same resolution', async () => {
+    const legacyRoutes = routesFor(
+      'legacy',
+      'legacy-core',
+      [redirectRoute('/legacy', '/target')],
+    );
+    const targetRoutes = routesFor(
+      'target',
+      'target-core',
+      [route('/target', SettingsComponent)],
+    );
+    const resolveRoutes = jasmine.createSpy('resolveRoutes').and.callFake(async (url: URL) =>
+      url.pathname === '/legacy'
+        ? { contributions: [legacyRoutes, targetRoutes] }
+        : null,
+    );
+
+    bootstrap(
+      [routeSlot('legacy'), routeSlot('target')] as const satisfies NavigationTree,
+      { resolveRoutes },
+    );
+
+    await navigate('/legacy');
+
+    expect(resolveRoutes).toHaveBeenCalledTimes(1);
+    expect(router.state.path).toBe('/target');
+    expect(getOutletContent()).toContain('<h3>Settings</h3>');
   });
 
   it('attaches server-resolved route contributions to existing route slots', async () => {

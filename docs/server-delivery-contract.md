@@ -55,13 +55,17 @@ understand.
 
 ### `artifactKey`
 
-Identifies the target artifact selected for the requested destination.
+Identifies the artifact that contains the originally requested destination.
 
-The final entry in `artifacts` must have this key.
+The artifact must be present in `artifacts`, but it is not required to be the final
+entry. Internal redirects may require additional authorized artifacts that appear
+later while `artifacts` remains dependency-first.
 
 ### `artifacts`
 
-Contains the complete authorized artifact chain in dependency-first order.
+Contains the complete authorized artifact plan in dependency-first order. For an
+internal redirect chain, the plan includes the artifacts required for every
+authorized redirect hop and the final destination.
 
 The browser must not discover dependencies by querying a global artifact graph.
 Each artifact key appears at most once.
@@ -126,6 +130,20 @@ public resolution behavior. The example server uses `404` for both.
 Direct artifact-module requests must be authorized independently as well. A
 client knowing or guessing an old artifact URL does not grant access to it.
 
+## Redirects across artifacts
+
+Internal redirects are resolved by the server before the delivery plan crosses
+the browser boundary. The server follows the redirect chain using compiler shard
+metadata, interpolates path parameters, authorizes every redirect hop and final
+destination, and returns the union of required artifacts in dependency-first
+order.
+
+If any internal redirect target is unknown or unauthorized, no partial delivery
+plan is returned. This prevents an otherwise authorized redirect artifact from
+becoming a route-discovery or authorization bypass. External redirects are not
+followed by the server; the authorized source redirect is delivered and the
+browser runtime delegates the external navigation normally.
+
 ## Browser behavior
 
 A conforming browser integration:
@@ -169,6 +187,8 @@ The server router owns:
 - selecting candidate shards by segment-aware path prefix;
 - exact route-pattern matching, including dynamic parameters;
 - mapping a matched branch to its route-set artifact;
+- following and authorizing internal redirects across route-set artifacts;
+- interpolating redirect path parameters without exposing the route graph;
 - resolving transitive artifact dependencies in dependency-first order;
 - loading the branch provenance required to authorize those artifacts;
 - authorizing the complete artifact chain;

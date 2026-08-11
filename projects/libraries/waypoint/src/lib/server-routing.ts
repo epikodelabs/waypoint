@@ -158,10 +158,10 @@ export function createServerNavigationResolution<T extends ServerArtifactRecord>
   artifacts: readonly T[],
   moduleUrlFor: (artifact: T) => string,
 ): ServerNavigationResolution {
-  if (artifacts.length === 0 || artifacts.at(-1)?.artifactKey !== artifactKey) {
+  if (artifacts.length === 0 || !artifacts.some(item => item.artifactKey === artifactKey)) {
     throw new ServerArtifactResolutionError(
       'missing',
-      `Artifact chain does not terminate at target "${artifactKey}".`,
+      `Artifact delivery plan does not contain requested artifact "${artifactKey}".`,
     );
   }
 

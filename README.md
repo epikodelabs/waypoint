@@ -244,8 +244,9 @@ the complete protected route catalog to the client.
 # Server Delivery Contract v1
 
 The browser/server boundary is a small, versioned Waypoint protocol. A server
-resolution returns only the target artifact and the dependency-first list of
-authorized browser modules needed to install it.
+resolution returns the artifact containing the requested destination and the
+dependency-first list of authorized browser modules needed to complete that
+navigation, including internal redirect targets when necessary.
 
 ```ts
 interface ServerNavigationResolution {
@@ -281,8 +282,10 @@ const resolution = await serverRouter.resolve(requestedPath, principal);
 ```
 
 `createServerRouter()` owns path matching, shard selection, route-set lookup,
-dependency ordering, complete-chain authorization, and construction of the
-browser delivery plan.
+internal redirect-chain resolution, dependency ordering, complete-chain
+authorization, and construction of the browser delivery plan. Internal redirects
+that cross artifact boundaries are followed on the server; every hop and the final
+destination must be authorized before any plan is returned.
 
 Waypoint also provides a transport-neutral HTTP layer and an Express adapter:
 

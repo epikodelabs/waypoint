@@ -30,10 +30,17 @@ describe('server delivery contract', () => {
     expect(isServerNavigationResolution({ ...valid, version: 2 })).toBeFalse();
   });
 
-  it('requires the target artifact to terminate the delivery plan', () => {
+  it('allows the requested artifact before redirect-followed artifacts', () => {
     expect(isServerNavigationResolution({
       ...valid,
       artifactKey: 'parent',
+    })).toBeTrue();
+  });
+
+  it('requires the requested artifact to be present in the delivery plan', () => {
+    expect(isServerNavigationResolution({
+      ...valid,
+      artifactKey: 'missing',
     })).toBeFalse();
   });
 
