@@ -35,7 +35,7 @@
         }
       }
     },
-    "app1": {
+    "client": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:class": {
@@ -63,23 +63,23 @@
           "skipTests": true
         }
       },
-      "root": "projects/apps/app1",
-      "sourceRoot": "projects/apps/app1/src",
+      "root": "projects/apps/client",
+      "sourceRoot": "projects/apps/client/src",
       "prefix": "app",
       "architect": {
         "build": {
           "builder": "@angular/build:application",
           "options": {
-            "outputPath": "dist/app1",
-            "browser": "projects/apps/app1/src/main.ts",
-            "tsConfig": "projects/apps/app1/tsconfig.app.json",
+            "outputPath": "dist/client",
+            "browser": "projects/apps/client/src/main.ts",
+            "tsConfig": "projects/apps/client/tsconfig.app.json",
             "assets": [
               {
                 "glob": "**/*",
-                "input": "projects/apps/app1/public"
+                "input": "projects/apps/client/public"
               }
             ],
-            "styles": ["projects/apps/app1/src/styles.css"]
+            "styles": ["projects/apps/client/src/styles.css"]
           },
           "configurations": {
             "production": {
@@ -109,21 +109,21 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "app1:build:production"
+              "buildTarget": "client:build:production"
             },
             "development": {
-              "buildTarget": "app1:build:development"
+              "buildTarget": "client:build:development"
             }
           },
           "defaultConfiguration": "development",
           "options": {
             "port": 4200,
-            "proxyConfig": "projects/apps/app1/proxy.conf.json"
+            "proxyConfig": "projects/apps/client/proxy.conf.json"
           }
         }
       }
     },
-    "app2": {
+    "server": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:class": {
@@ -151,23 +151,23 @@
           "skipTests": true
         }
       },
-      "root": "projects/apps/app2",
-      "sourceRoot": "projects/apps/app2/src",
+      "root": "projects/apps/server",
+      "sourceRoot": "projects/apps/server/src",
       "prefix": "app",
       "architect": {
         "build": {
           "builder": "@angular/build:application",
           "options": {
-            "browser": "projects/apps/app2/src/main.ts",
-            "tsConfig": "projects/apps/app2/tsconfig.app.json",
+            "browser": "projects/apps/server/src/main.ts",
+            "tsConfig": "projects/apps/server/tsconfig.app.json",
             "assets": [
               {
                 "glob": "**/*",
-                "input": "projects/apps/app2/public"
+                "input": "projects/apps/server/public"
               }
             ],
-            "styles": ["projects/apps/app2/src/styles.css"],
-            "server": "projects/apps/app2/src/main.server.ts",
+            "styles": ["projects/apps/server/src/styles.css"],
+            "server": "projects/apps/server/src/main.server.ts",
             "outputMode": "server",
             "security": {
               "allowedHosts": [
@@ -176,7 +176,7 @@
               ]
             },
             "ssr": {
-              "entry": "projects/apps/app2/src/server.ts"
+              "entry": "projects/apps/server/src/server.ts"
             }
           },
           "configurations": {
@@ -207,10 +207,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "app2:build:production"
+              "buildTarget": "server:build:production"
             },
             "development": {
-              "buildTarget": "app2:build:development"
+              "buildTarget": "server:build:development"
             }
           },
           "defaultConfiguration": "development",

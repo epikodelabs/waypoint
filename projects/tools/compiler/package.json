@@ -1,0 +1,12 @@
+{
+  "name": "@epikodelabs/route-compiler",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Deterministic navigation compiler for isolated browser artifacts and authorization-aware server delivery metadata.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test ../../../dist/tools/compiler/tests/*.spec.js"
+  }
+}

@@ -32,10 +32,10 @@
       "path": "./projects/libraries/waypoint/tsconfig.spec.json"
     },
     {
-      "path": "./projects/apps/app1/tsconfig.app.json"
+      "path": "./projects/apps/client/tsconfig.app.json"
     },
     {
-      "path": "./projects/apps/app2/tsconfig.app.json"
+      "path": "./projects/apps/server/tsconfig.app.json"
     },
     {
       "path": "./projects/apps/shared/tsconfig.app.json"

@@ -1,0 +1,24 @@
+<div class="app-frame">
+  <header class="masthead">
+    <a class="brand" [routerLink]="'/'">
+      <span class="brand-mark">WP</span>
+      <span>
+        <strong>Waypoint</strong>
+        <small>Server Route Playground</small>
+      </span>
+    </a>
+
+    <nav class="top-nav" aria-label="Primary navigation">
+      <a [routerLink]="'/'">Overview</a>
+      <a
+        [routerLink]="'/app/workspace/101?view=overview&page=1&filters=open'"
+      >
+        Workspace
+      </a>
+      <a [routerLink]="'/app/reports'">Lazy Reports</a>
+      <a [routerLink]="'/legacy'">Redirect</a>
+    </nav>
+  </header>
+
+  <router-outlet />
+</div>
