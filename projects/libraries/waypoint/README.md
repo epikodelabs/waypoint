@@ -313,6 +313,32 @@ Artifact module requests are resolved by `artifactKey + hash`, not emitted
 filenames. The server authorizes the complete dependency chain again before it
 returns the artifact file to the transport adapter.
 
+### Compiler-output snapshots
+
+Production servers should not reread and reparse the server index and shards for
+every navigation. `createServerRouterSnapshotSource()` turns compiler output into
+one immutable routing generation:
+
+```ts
+const source = createServerRouterSnapshotSource({
+  loadIndex,
+  loadShard,
+  revision: readPublishedRevision,
+});
+
+const serverRouter = createServerRouter({
+  loadSnapshot: source.loadSnapshot,
+  moduleUrlFor,
+});
+```
+
+A snapshot eagerly loads all shards referenced by its index before publication.
+Refresh is atomic: a failed or changing generation never replaces the last good
+snapshot. With an optional cheap `revision()` function, normal requests reuse the
+cached parsed generation and refresh automatically only after compiler output
+changes. `refresh()` and `invalidate()` are also available for explicit host
+lifecycle integration.
+
 The normative protocol details are documented in
 `projects/libraries/waypoint/SERVER-DELIVERY-CONTRACT.md`.
 

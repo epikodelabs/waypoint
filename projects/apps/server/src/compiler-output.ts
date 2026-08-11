@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { createServerRouterSnapshotSource } from '@epikodelabs/waypoint';
 import type {
   ServerRouterIndex,
   ServerRouterShard,
@@ -23,6 +24,7 @@ export interface ArtifactDescriptor extends ServerArtifactRecord {}
 
 export interface ServerIndex extends ServerRouterIndex<ArtifactDescriptor> {
   readonly version: 1;
+  readonly generatedAt: string;
   readonly shards: readonly {
     readonly prefix: string;
     readonly file: string;
@@ -62,6 +64,11 @@ export function loadServerIndex(): Promise<ServerIndex> {
   return readJson<ServerIndex>(indexPath);
 }
 
+export async function readServerOutputRevision(): Promise<string> {
+  const stat = await fs.stat(indexPath, { bigint: true });
+  return `${stat.mtimeNs}:${stat.size}`;
+}
+
 export function resolveOutputPath(relative: string): string {
   const root = path.resolve(path.dirname(indexPath));
   const absolute = path.resolve(root, relative);
@@ -83,6 +90,16 @@ export function resolveOutputPath(relative: string): string {
 export function loadShard(file: string): Promise<ServerShard> {
   return readJson<ServerShard>(resolveOutputPath(file));
 }
+
+/** Cached, atomically refreshable view of one published compiler generation. */
+export const compilerOutputSource = createServerRouterSnapshotSource<
+  ArtifactDescriptor,
+  Branch
+>({
+  loadIndex: loadServerIndex,
+  loadShard,
+  revision: readServerOutputRevision,
+});
 
 async function readJson<T>(file: string): Promise<T> {
   return JSON.parse(await fs.readFile(file, 'utf8')) as T;

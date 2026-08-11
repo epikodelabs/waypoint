@@ -32,12 +32,23 @@ export interface ServerRouterShard<
   readonly branches: readonly TBranch[];
 }
 
+export interface ServerRouterSnapshot<
+  TArtifact extends ServerArtifactRecord = ServerArtifactRecord,
+  TBranch extends ServerRoutableBranch = ServerRoutableBranch,
+> {
+  readonly index: ServerRouterIndex<TArtifact>;
+  loadShard(file: string): Promise<ServerRouterShard<TBranch>>;
+}
+
 export interface ServerRouterSource<
   TArtifact extends ServerArtifactRecord = ServerArtifactRecord,
   TBranch extends ServerRoutableBranch = ServerRoutableBranch,
 > {
-  loadIndex(): Promise<ServerRouterIndex<TArtifact>>;
-  loadShard(file: string): Promise<ServerRouterShard<TBranch>>;
+  /** Preferred source contract: one immutable compiler-output generation. */
+  loadSnapshot?(): Promise<ServerRouterSnapshot<TArtifact, TBranch>>;
+  /** Legacy loaders remain supported for custom sources. */
+  loadIndex?(): Promise<ServerRouterIndex<TArtifact>>;
+  loadShard?(file: string): Promise<ServerRouterShard<TBranch>>;
 }
 
 export interface ServerRouterOptions<
@@ -85,8 +96,8 @@ export function createServerRouter<
     const pathname = pathnameOf(target);
     if (pathname === null) return undefined;
 
-    const index = await options.loadIndex();
-    return findBranch(index, pathname);
+    const snapshot = await loadSnapshot(options);
+    return findBranch(snapshot, pathname);
   }
 
   async function resolve(
@@ -96,8 +107,9 @@ export function createServerRouter<
     const pathname = pathnameOf(target);
     if (pathname === null) return null;
 
-    const index = await options.loadIndex();
-    const branch = await findBranch(index, pathname);
+    const snapshot = await loadSnapshot(options);
+    const index = snapshot.index;
+    const branch = await findBranch(snapshot, pathname);
 
     if (
       !branch?.routeSetId
@@ -111,7 +123,7 @@ export function createServerRouter<
     );
     if (!artifact) return null;
 
-    const chain = await authorizedChain(index, artifact.artifactKey, principal);
+    const chain = await authorizedChain(snapshot, artifact.artifactKey, principal);
     if (!chain) return null;
 
     return createServerNavigationResolution(
@@ -125,8 +137,8 @@ export function createServerRouter<
     artifactKey: string,
     principal?: ServerPrincipal,
   ): Promise<TArtifact | null> {
-    const index = await options.loadIndex();
-    const chain = await authorizedChain(index, artifactKey, principal);
+    const snapshot = await loadSnapshot(options);
+    const chain = await authorizedChain(snapshot, artifactKey, principal);
     return chain?.at(-1) ?? null;
   }
 
@@ -142,13 +154,13 @@ export function createServerRouter<
   }
 
   async function authorizedChain(
-    index: ServerRouterIndex<TArtifact>,
+    snapshot: ServerRouterSnapshot<TArtifact, TBranch>,
     artifactKey: string,
     principal?: ServerPrincipal,
   ): Promise<readonly TArtifact[] | null> {
-    const chain = resolveServerArtifactChain(index, artifactKey);
+    const chain = resolveServerArtifactChain(snapshot.index, artifactKey);
     const branches = await loadBranches(
-      index,
+      snapshot,
       requiredServerBranchIds(chain),
     );
 
@@ -158,15 +170,15 @@ export function createServerRouter<
   }
 
   async function loadBranches(
-    index: ServerRouterIndex<TArtifact>,
+    snapshot: ServerRouterSnapshot<TArtifact, TBranch>,
     branchIds: ReadonlySet<string>,
   ): Promise<ReadonlyMap<string, TBranch>> {
     const remaining = new Set(branchIds);
     const result = new Map<string, TBranch>();
     if (remaining.size === 0) return result;
 
-    for (const descriptor of index.shards) {
-      const shard = await options.loadShard(descriptor.file);
+    for (const descriptor of snapshot.index.shards) {
+      const shard = await snapshot.loadShard(descriptor.file);
 
       for (const branch of shard.branches) {
         if (!remaining.has(branch.id)) continue;
@@ -181,15 +193,15 @@ export function createServerRouter<
   }
 
   async function findBranch(
-    index: ServerRouterIndex<TArtifact>,
+    snapshot: ServerRouterSnapshot<TArtifact, TBranch>,
     pathname: string,
   ): Promise<TBranch | undefined> {
-    const candidates = [...index.shards]
+    const candidates = [...snapshot.index.shards]
       .filter(shard => isPathPrefix(shard.prefix, pathname))
       .sort((left, right) => right.prefix.length - left.prefix.length);
 
     for (const descriptor of candidates) {
-      const shard = await options.loadShard(descriptor.file);
+      const shard = await snapshot.loadShard(descriptor.file);
       const branch = shard.branches.find(candidate =>
         matchesRoutePattern(candidate.path, pathname));
       if (branch) return branch;
@@ -203,6 +215,26 @@ export function createServerRouter<
     resolve,
     resolveArtifact,
     resolveModule,
+  });
+}
+
+async function loadSnapshot<
+  TArtifact extends ServerArtifactRecord,
+  TBranch extends ServerRoutableBranch,
+>(
+  source: ServerRouterSource<TArtifact, TBranch>,
+): Promise<ServerRouterSnapshot<TArtifact, TBranch>> {
+  if (source.loadSnapshot) return source.loadSnapshot();
+  if (!source.loadIndex || !source.loadShard) {
+    throw new Error(
+      'Server router source must provide loadSnapshot() or both loadIndex() and loadShard().',
+    );
+  }
+
+  const index = await source.loadIndex();
+  return Object.freeze({
+    index,
+    loadShard: (file: string) => source.loadShard!(file),
   });
 }
 

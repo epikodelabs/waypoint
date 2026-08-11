@@ -9,6 +9,7 @@ export * from './server-http';
 export * from './server-express';
 export * from './server-routing';
 export * from './server-router';
+export * from './server-source';
 export { RouterLink } from './router-link';
 export * from './navigation-definitions';
 export * from './router-events';

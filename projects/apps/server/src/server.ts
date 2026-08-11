@@ -16,8 +16,7 @@ import {
 } from '@epikodelabs/waypoint';
 
 import {
-  loadServerIndex,
-  loadShard,
+  compilerOutputSource,
   resolveOutputPath,
   type ArtifactDescriptor,
   type Branch,
@@ -31,8 +30,7 @@ const angularApp = new AngularNodeAppEngine({
 });
 
 const serverRouter = createServerRouter<ArtifactDescriptor, Branch>({
-  loadIndex: loadServerIndex,
-  loadShard,
+  loadSnapshot: compilerOutputSource.loadSnapshot,
   moduleUrlFor: artifact =>
     `/api/navigation/modules/${encodeURIComponent(artifact.artifactKey)}`
     + `/${encodeURIComponent(artifact.hash ?? '')}`,

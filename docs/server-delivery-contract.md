@@ -183,6 +183,19 @@ browser
 filesystem layout, or a particular compiler-output directory. Applications
 provide `loadIndex()`, `loadShard()`, and `moduleUrlFor()`.
 
+### Compiler-output snapshots
+
+`createServerRouterSnapshotSource()` can sit in front of those loaders. It caches
+one complete index + shard generation and exposes it through `loadSnapshot()`.
+The server router uses that snapshot for the entire match/authorization operation,
+so an index from one compiler publication cannot be combined with shards from a
+later publication.
+
+A refresh loads every referenced shard before swapping the active snapshot. If
+loading fails, the previous successful snapshot remains active. Hosts may provide
+a cheap `revision()` probe to detect a new publication without reparsing JSON on
+every request, or call `refresh()` / `invalidate()` explicitly.
+
 ### Module identity
 
 Browser module URLs should identify an artifact by its stable `artifactKey` and
