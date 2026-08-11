@@ -177,7 +177,11 @@ export class RouterLink implements OnChanges {
         replace: this.replaceUrl,
         state: this.state,
       },
-    );
+    ).catch(() => {
+      // Router state already records the actionable navigation error. Anchor
+      // clicks are fire-and-forget DOM events, so consume the rejected promise
+      // here to avoid an unrelated unhandled-rejection signal.
+    });
   }
 
   private refreshHref(): void {

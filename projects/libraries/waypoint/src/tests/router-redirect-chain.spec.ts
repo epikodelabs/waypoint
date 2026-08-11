@@ -187,8 +187,8 @@ idescribe('Router redirect chains', () => {
       route('users/:id', 'User'),
     ]);
 
-    expect(await router.navigate('/legacy'))
-      .toBeFalse();
+    await expectAsync(router.navigate('/legacy'))
+      .toBeRejectedWithError(/Missing route parameter "id"/);
 
     expect(router.state.current).toBeNull();
     expect(
@@ -216,8 +216,8 @@ idescribe('Router redirect chains', () => {
       },
     );
 
-    expect(await router.navigate('/a'))
-      .toBeFalse();
+    await expectAsync(router.navigate('/a'))
+      .toBeRejectedWithError(/Maximum redirect count of 3 exceeded/);
 
     expect(
       (router.state.error as Error).message,

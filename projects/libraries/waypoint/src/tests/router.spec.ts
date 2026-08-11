@@ -891,8 +891,8 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/a');
-            await delay(200);
+            await expectAsync(router.navigate('/a'))
+                .toBeRejectedWithError(/Maximum redirect count/);
             expect(router.state.phase).toBeNull();
             expect(router.state.error).toBeDefined();
             expect((router.state.error as Error).message).toContain('Maximum redirect count');
@@ -915,6 +915,20 @@ idescribe('Router', () => {
             router.navigate('/external');
             await delay(50);
             expect(navigateExternal).toHaveBeenCalledWith(new URL('https://example.com/'));
+        });
+        it('should reject when external navigation dispatch fails', async () => {
+            router = createRouter({
+                routes: [],
+                navigateExternal: () => {
+                    throw new Error('External navigation failed');
+                },
+            });
+
+            await expectAsync(router.navigate('https://example.com/'))
+                .toBeRejectedWithError('External navigation failed');
+            expect((router.state.error as Error).message)
+                .toBe('External navigation failed');
+            expect(router.state.pending).toBeFalse();
         });
     });
     describe('lazy loading', () => {
@@ -975,8 +989,8 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/error');
-            await delay(50);
+            await expectAsync(router.navigate('/error'))
+                .toBeRejectedWithError('Load failed');
             expect(router.state.phase).toBeNull();
             expect(router.state.error).toBeDefined();
             expect((router.state.error as Error).message).toBe('Load failed');
@@ -1354,8 +1368,8 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/broken');
-            await delay(50);
+            await expectAsync(router.navigate('/broken'))
+                .toBeRejected();
             expect(router.state.error).toBeDefined();
             router.navigate('/');
             await delay(50);
@@ -1598,8 +1612,8 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/error');
-            await delay(50);
+            await expectAsync(router.navigate('/error'))
+                .toBeRejectedWithError('Component failed');
             expect(router.state.error).toBeDefined();
             expect((router.state.error as Error).message).toBe('Component failed');
         });
@@ -1814,8 +1828,8 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/broken');
-            await delay(50);
+            await expectAsync(router.navigate('/broken'))
+                .toBeRejectedWithError(/no component/i);
             expect(router.state.phase).toBeNull();
             expect(router.state.error).toBeDefined();
             expect((router.state.error as Error).message).toContain('no component');
@@ -1836,10 +1850,25 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/broken');
-            await delay(50);
+            await expectAsync(router.navigate('/broken'))
+                .toBeRejected();
             expect(errorRendered).toBeTrue();
             expect(outlet.textContent).toContain('Custom Error');
+        });
+        it('should reject with the original navigation error when renderError also throws', async () => {
+            router = createRouter({
+                routes: [{ path: 'broken' }],
+                outlet,
+                renderError: () => {
+                    throw new Error('Error renderer failed');
+                },
+            });
+
+            await expectAsync(router.navigate('/broken'))
+                .toBeRejectedWithError(/no component/i);
+            expect((router.state.error as Error).message).toContain('no component');
+            expect(router.state.pending).toBeFalse();
+            expect(router.state.phase).toBeNull();
         });
         it('should synchronize state and outlet on navigation error', async () => {
             const config: VanillaRouterConfig = {
@@ -1859,8 +1888,8 @@ idescribe('Router', () => {
             await delay(50);
             expect(outlet.textContent).toBe('Home');
             // Try to navigate to broken route
-            router.navigate('/broken');
-            await delay(50);
+            await expectAsync(router.navigate('/broken'))
+                .toBeRejected();
             expect(outlet.textContent).toContain('Page failed to load');
             expect(router.state.current).toBeNull();
             expect(router.state.error).toBeDefined();
@@ -1920,8 +1949,8 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/error');
-            await delay(50);
+            await expectAsync(router.navigate('/error'))
+                .toBeRejectedWithError('Guard failed');
             expect(router.state.error).toBeDefined();
             expect((router.state.error as Error).message).toBe('Guard failed');
         });
@@ -1941,8 +1970,8 @@ idescribe('Router', () => {
             };
             router = createRouter(config);
             router.start();
-            router.navigate('/error');
-            await delay(50);
+            await expectAsync(router.navigate('/error'))
+                .toBeRejectedWithError('Prepare failed');
             expect(router.state.error).toBeDefined();
             expect((router.state.error as Error).message).toBe('Prepare failed');
         });
@@ -2272,7 +2301,8 @@ idescribe('Router', () => {
                 commit: () => undefined
             });
 
-            expect(await router.navigate('/project/42')).toBeFalse();
+            await expectAsync(router.navigate('/project/42'))
+                .toBeRejectedWithError(/cannot define parseParams or parseQuery/);
             expect((router.state.error as Error).message)
                 .toContain('cannot define parseParams or parseQuery');
         });
@@ -2324,7 +2354,8 @@ idescribe('Router', () => {
 
             expect(await router.navigate('/stable')).toBeTrue();
             expect(primary.textContent).toBe('Stable');
-            expect(await router.navigate('/broken')).toBeFalse();
+            await expectAsync(router.navigate('/broken'))
+                .toBeRejectedWithError('Sidebar failed');
             expect(router.state.current?.path).toBe('/stable');
             expect(primary.textContent).toBe('Stable');
             expect((router.state.error as Error).message).toBe('Sidebar failed');
@@ -2355,7 +2386,8 @@ idescribe('Router', () => {
                 commit: () => { throw new Error('Commit failed'); }
             });
 
-            expect(await router.navigate('/project')).toBeFalse();
+            await expectAsync(router.navigate('/project'))
+                .toBeRejectedWithError('Commit failed');
             expect(destroyed.length).toBe(2);
             expect((router.state.error as Error).message).toBe('Commit failed');
         });

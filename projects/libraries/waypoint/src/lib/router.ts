@@ -760,7 +760,7 @@ export class Router<TRoutes extends NavigationTree = any> {
         replaceChildNodes(target, heading);
 
         if (this.shouldResolveNotFoundUrl(url)) {
-          void this.resolveRoutesForUrl(url);
+          void this.resolveRoutesForUrl(url).catch(() => undefined);
         }
       },
 
@@ -854,7 +854,12 @@ export class Router<TRoutes extends NavigationTree = any> {
 
   async revalidate(options: RouterRevalidationOptions = {}): Promise<boolean> {
     if (!options.resetResolvedRoutes) {
-      return this.requireEngine().revalidate();
+      try {
+        return await this.requireEngine().revalidate();
+      } catch (error) {
+        this.recordNavigationError(error);
+        throw error;
+      }
     }
 
     this.resolutionGeneration++;
@@ -882,6 +887,8 @@ export class Router<TRoutes extends NavigationTree = any> {
       ) {
         await this.resolveRoutesForUrl(url, { force: true, install: false });
       }
+
+      return await this.installCurrentRegistry();
     } catch (error) {
       // Revocation is the fail-closed half of an authorization-boundary change.
       // Even when reauthorization cannot be completed, the engine must stop
@@ -889,13 +896,12 @@ export class Router<TRoutes extends NavigationTree = any> {
       try {
         await this.installCurrentRegistry();
       } catch {
-        // Preserve the resolution failure as the actionable error. The engine
+        // Preserve the first failure as the actionable error. The engine
         // configuration was already replaced before its revalidation started.
       }
+      this.recordNavigationError(error);
       throw error;
     }
-
-    return this.installCurrentRegistry();
   }
 
   updateHistoryState(state: unknown): void {
@@ -924,6 +930,18 @@ export class Router<TRoutes extends NavigationTree = any> {
 
   private get baseHref(): string {
     return this.configuration.baseHref ?? this.appBaseHref;
+  }
+
+  private recordNavigationError(error: unknown): void {
+    const state = this.engine
+      ? snapshotRouterState(this.engine.state)
+      : this.currentState;
+
+    this.currentState = Object.freeze({
+      ...state,
+      error,
+    });
+    this.requestTick();
   }
 
   private requireEngine(): VanillaRouter {
@@ -973,39 +991,42 @@ export class Router<TRoutes extends NavigationTree = any> {
   ): Promise<boolean> {
     this.preResolvingNavigationCount++;
     try {
-    const requestId = ++this.navigationRequestId;
-    const resolutionGeneration = this.resolutionGeneration;
-    const href = this.href(target);
+      const requestId = ++this.navigationRequestId;
+      const resolutionGeneration = this.resolutionGeneration;
+      const href = this.href(target);
 
-    if (href === null) {
-      return false;
-    }
-
-    const location = getRouterLocation(this.document);
-    const url = resolveRouterUrl(href, this.baseHref, location, 'navigate');
-    const key = stripBaseHref(url.pathname, this.baseHref);
-
-    if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
-      this.abortResolvedRouteRequests(key);
-      const resolved = await this.resolveRoutesForUrl(url, { install: false });
-      if (resolved) {
-        await this.installCurrentRegistry({ revalidate: false });
-        this.preResolvedNavigationKeys.add(key);
+      if (href === null) {
+        return false;
       }
-    }
 
-    if (
-      requestId !== this.navigationRequestId
-      || resolutionGeneration !== this.resolutionGeneration
-    ) {
-      return false;
-    }
+      const location = getRouterLocation(this.document);
+      const url = resolveRouterUrl(href, this.baseHref, location, 'navigate');
+      const key = stripBaseHref(url.pathname, this.baseHref);
+
+      if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
+        this.abortResolvedRouteRequests(key);
+        const resolved = await this.resolveRoutesForUrl(url, { install: false });
+        if (resolved) {
+          await this.installCurrentRegistry({ revalidate: false });
+          this.preResolvedNavigationKeys.add(key);
+        }
+      }
+
+      if (
+        requestId !== this.navigationRequestId
+        || resolutionGeneration !== this.resolutionGeneration
+      ) {
+        return false;
+      }
 
       try {
         return await this.requireEngine().navigate(href, options);
       } finally {
         this.preResolvedNavigationKeys.delete(key);
       }
+    } catch (error) {
+      this.recordNavigationError(error);
+      throw error;
     } finally {
       this.preResolvingNavigationCount--;
     }
@@ -1301,7 +1322,7 @@ export class Router<TRoutes extends NavigationTree = any> {
         replaceChildNodes(target, heading);
 
         if (this.shouldResolveNotFoundUrl(url)) {
-          void this.resolveRoutesForUrl(url);
+          void this.resolveRoutesForUrl(url).catch(() => undefined);
         }
       },
 

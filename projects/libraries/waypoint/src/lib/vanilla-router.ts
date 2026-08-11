@@ -231,6 +231,11 @@ export interface Router {
   start(): void;
   stop(): void;
   dispose(): void;
+  /**
+   * Resolves true after a committed navigation, false for expected negative
+   * outcomes (blocked, not found, cancelled, or ignored), and rejects when
+   * navigation execution itself fails.
+   */
   navigate(target: string | URL, options?: NavigationOptions): Promise<boolean>;
   replace(target: string | URL, state?: unknown): Promise<boolean>;
   revalidate(): Promise<boolean>;
@@ -322,6 +327,7 @@ function readHistoryStateEnvelope(
 interface NavigationCompletion {
   settled: boolean;
   resolve(success: boolean): void;
+  reject(error: unknown): void;
 }
 
 interface NavigationRequest {
@@ -1108,16 +1114,24 @@ export function createRouter(config: RouterConfig): Router {
 
   function createCompletion(): { completion: NavigationCompletion; promise: Promise<boolean> } {
     let resolve!: (success: boolean) => void;
-    const promise = new Promise<boolean>(completion => {
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<boolean>((completion, failure) => {
       resolve = completion;
+      reject = failure;
     });
-    return { completion: { settled: false, resolve }, promise };
+    return { completion: { settled: false, resolve, reject }, promise };
   }
 
   function settleRequest(request: NavigationRequest, success: boolean): void {
     if (request.completion.settled) return;
     request.completion.settled = true;
     request.completion.resolve(success);
+  }
+
+  function failRequest(request: NavigationRequest, error: unknown): void {
+    if (request.completion.settled) return;
+    request.completion.settled = true;
+    request.completion.reject(error);
   }
 
   function cancelActiveNavigation(): void {
@@ -1758,7 +1772,18 @@ export function createRouter(config: RouterConfig): Router {
         preserveActive: preparationError?.preserveActive ?? false,
       };
       if (failure.request.id !== latestRequestId) return;
-      commit(failure);
+      try {
+        commit(failure);
+      } catch (reportingError) {
+        // Error-state commitment must never strand the navigation promise.
+        // Preserve the original actionable failure for the caller.
+        trace('Failed to commit navigation error state', reportingError);
+        requestState = null;
+        navigationPhase = null;
+        errorState = failure.error;
+        failRequest(request, failure.error);
+        notifyStateChange();
+      }
     } finally {
       if (activeController?.signal === signal) {
         activeController = null;
@@ -1811,14 +1836,14 @@ export function createRouter(config: RouterConfig): Router {
           requestState = null;
           navigationPhase = null;
           errorState = null;
+          navigateExternal(
+            redirectUrl,
+          );
           settleRequest(
             request,
             true,
           );
           notifyStateChange();
-          navigateExternal(
-            redirectUrl,
-          );
           return;
         }
 
@@ -1891,15 +1916,15 @@ export function createRouter(config: RouterConfig): Router {
       navigationPhase = null;
       errorState = null;
 
+      navigateExternal(
+        request.url,
+      );
       settleRequest(
         request,
         true,
       );
 
       notifyStateChange();
-      navigateExternal(
-        request.url,
-      );
     } catch (error) {
       if (
         signal.aborted ||
@@ -1915,11 +1940,20 @@ export function createRouter(config: RouterConfig): Router {
         return;
       }
 
-      commit({
-        type: 'error',
-        request,
-        error,
-      });
+      try {
+        commit({
+          type: 'error',
+          request,
+          error,
+        });
+      } catch (reportingError) {
+        trace('Failed to commit navigation error state', reportingError);
+        requestState = null;
+        navigationPhase = null;
+        errorState = error;
+        failRequest(request, error);
+        notifyStateChange();
+      }
     } finally {
       if (
         activeController?.signal ===
@@ -2130,28 +2164,37 @@ export function createRouter(config: RouterConfig): Router {
         restoreActiveUrl();
 
         if (!result.preserveActive) {
-          runWithViewTransition({
-            url: result.request.url,
-            from: currentState,
-            to: null,
-            phase: 'error',
-            routeConfig: null,
-            error: result.error,
-          }, () => {
-            if (renderError) {
-              renderError('', result.error, publicRouter);
-            } else {
-              const heading = browserDocument?.createElement('h1');
-              if (!heading) return;
-              heading.textContent = 'Page failed to load';
-              renderPrimaryNode(
-                heading,
-                createStatusRoute(result.request.url),
-              );
-            }
-
-            disposeAllRenders();
-          });
+          try {
+            runWithViewTransition({
+              url: result.request.url,
+              from: currentState,
+              to: null,
+              phase: 'error',
+              routeConfig: null,
+              error: result.error,
+            }, () => {
+              try {
+                if (renderError) {
+                  renderError('', result.error, publicRouter);
+                } else {
+                  const heading = browserDocument?.createElement('h1');
+                  if (!heading) return;
+                  heading.textContent = 'Page failed to load';
+                  renderPrimaryNode(
+                    heading,
+                    createStatusRoute(result.request.url),
+                  );
+                }
+              } finally {
+                disposeAllRenders();
+              }
+            });
+          } catch (reportingError) {
+            // Error presentation is best-effort. Never replace the actionable
+            // navigation failure or leave its promise unsettled because an
+            // error renderer failed while reporting it.
+            trace('Navigation error renderer failed', reportingError);
+          }
         }
 
         history.rollbackUpdate(result.request.historyUpdate);
@@ -2163,7 +2206,7 @@ export function createRouter(config: RouterConfig): Router {
         errorState = result.error;
         trace('Navigation failed', result.error);
         restorePreviousScroll(result.request.historyUpdate);
-        settleRequest(result.request, false);
+        failRequest(result.request, result.error);
         notifyStateChange();
         return;
       }
@@ -2175,7 +2218,7 @@ export function createRouter(config: RouterConfig): Router {
     const resolvedHref = historyUpdate.nextEntry?.href ?? currentHref();
     const displayUrl = new URL(resolvedHref, routerLocation().origin);
 
-    requestNavigation(
+    void requestNavigation(
       displayUrl,
       resolveNavigationMatchUrl(
         displayUrl,
@@ -2184,7 +2227,7 @@ export function createRouter(config: RouterConfig): Router {
       0,
       undefined,
       historyUpdate,
-    );
+    ).catch(error => trace('Popstate navigation failed', error));
   }
 
   function handleClick(event: MouseEvent): void {
@@ -2212,7 +2255,7 @@ export function createRouter(config: RouterConfig): Router {
     }
 
     event.preventDefault();
-    navigate(url);
+    void navigate(url).catch(error => trace('Intercepted navigation failed', error));
   }
 
   function navigate(target: string | URL, options: NavigationOptions = {}): Promise<boolean> {
@@ -2503,7 +2546,7 @@ export function createRouter(config: RouterConfig): Router {
         0,
         undefined,
         history.createDefaultUpdate(),
-      );
+      ).catch(error => trace('Initial navigation failed', error));
     });
   }
 

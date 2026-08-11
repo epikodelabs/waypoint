@@ -190,6 +190,18 @@ outlets.
 
 ---
 
+# Navigation failure semantics
+
+Navigation promises distinguish expected routing outcomes from execution failures:
+
+- committed navigation resolves `true`;
+- blocked, not-found, cancelled/superseded, and ignored same-URL navigation resolve `false`;
+- route loading, parsing, preparation, rendering/commit, external-dispatch, and server-delivery failures reject.
+
+A rejection is also reflected in `router.state.error`. Error rendering is best-effort: a failing custom `renderError` cannot replace the original navigation error or leave the navigation promise unsettled. Server-resolution failures remain errors rather than being collapsed into hidden/not-found results, so applications cannot accidentally treat an unavailable authorization service as an authorization denial.
+
+---
+
 # Runtime configuration
 
 Delivered navigation is installed as runtime configuration.

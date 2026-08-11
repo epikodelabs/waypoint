@@ -149,8 +149,8 @@ idescribe('Router history rollback regressions', () => {
       }),
     ).toBeTrue();
 
-    expect(await router.navigate('/next'))
-      .toBeFalse();
+    await expectAsync(router.navigate('/next'))
+      .toBeRejectedWithError('Commit failed');
 
     expect(window.history.state)
       .toEqual({ session: 7 });
@@ -173,8 +173,8 @@ idescribe('Router history rollback regressions', () => {
 
     expect(await router.navigate('/'))
       .toBeTrue();
-    expect(await router.navigate('/broken'))
-      .toBeFalse();
+    await expectAsync(router.navigate('/broken'))
+      .toBeRejectedWithError('Load failed');
 
     expect(window.location.pathname).toBe('/');
     expect(router.state.error)
@@ -214,8 +214,8 @@ idescribe('Router history rollback regressions', () => {
 
     expect(await router.navigate('/'))
       .toBeTrue();
-    expect(await router.navigate('/next'))
-      .toBeFalse();
+    await expectAsync(router.navigate('/next'))
+      .toBeRejectedWithError('Commit failed');
 
     expect(window.location.pathname).toBe('/');
     expect(
