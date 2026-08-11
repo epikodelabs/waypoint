@@ -1,51 +1,88 @@
 # Waypoint
 
-> **The client shouldn't know about navigation it isn't allowed to use.**
+> **Server-side routing for Angular.**
 
-Waypoint is a typed Angular navigation library built around a different assumption
-than traditional client-side routers: **navigation is runtime configuration, not
-a static application asset**.
+Waypoint is an Angular routing library where the server controls which routes
+and route artifacts are delivered to the browser.
 
-Instead of shipping the complete route graph to every browser and relying on
-guards to deny access, Waypoint allows navigation to be **compiled, filtered by
-the server, and delivered on demand**. Clients receive only the navigation they
-are authorized to discover.
+Traditional client-side routers usually ship the application's route graph and
+use guards to decide whether a navigation may continue. Waypoint can keep
+protected navigation outside the initial client application: authored routes
+are compiled into server metadata and independently deliverable browser
+artifacts, authorized on the server, and delivered only when the current client
+is allowed to receive them.
+
+Server-side routing in Waypoint is not the same thing as server-side rendering
+(SSR). Angular may still render in the browser or use SSR. The term describes
+**where route visibility and route-code delivery are controlled**.
 
 ---
 
 # Why Waypoint?
 
-Most routers answer one question:
+Most client routers answer:
 
-> "How do I navigate between pages?"
+> "Can this client activate this route?"
 
-Waypoint answers another one first:
+Waypoint can answer an earlier question on the server:
 
-> "Which pages should this browser even know exist?"
+> "Should this client receive this route at all?"
 
-This makes Waypoint particularly suitable for:
+That distinction matters when the route map itself reveals application
+structure or when protected route code should not be part of the browser's
+initially available application artifacts.
 
-- enterprise applications
-- multi-tenant systems
-- role-based applications
+Waypoint is particularly suited to applications with:
+
+- role- or permission-based route delivery
+- multi-tenant navigation
 - feature licensing
-- plugin architectures
-- server-driven UI
+- protected administration areas
+- independently owned route branches
+- server-controlled application composition
+
+---
+
+# How it works
+
+Author navigation once in TypeScript.
+
+```text
+TypeScript navigation
+        ↓
+Waypoint compiler
+        ↓
+Semantic navigation model
+        ↓
+Server authorization metadata + isolated browser artifacts
+        ↓
+Server authorization
+        ↓
+Allowed route artifacts
+        ↓
+Browser runtime
+```
+
+The server can resolve the requested URL against generated navigation metadata,
+evaluate the route policy, and expose only the artifact required for the
+allowed navigation. The browser installs delivered navigation atomically and
+revalidates the current URL against its updated configuration.
 
 ---
 
 # Highlights
 
-- Server-driven navigation
+- Server-side route authorization and delivery
+- Compiler-generated isolated browser artifacts
 - Typed params and query strings
 - Function-based navigation lifecycle
 - Layout composition
+- Route ownership with `routeSlot()` and `routesFor()`
 - Named outlets
 - Lazy loading
 - Standalone Angular
 - Atomic runtime configuration
 - Explicit revalidation
-- Compiler-driven navigation artifacts
 
 ---
 
@@ -57,7 +94,9 @@ npm install @epikodelabs/waypoint
 
 ---
 
-# Quick start
+# Route authoring
+
+Waypoint keeps the declaration of a destination together:
 
 ```ts
 const routes = [
@@ -66,9 +105,9 @@ const routes = [
       '/projects/:projectId',
       frame(ProjectPage, {
         prepare: [
-          ctx => ({
+          context => ({
             project: inject(ProjectStore)
-              .load(ctx.params.projectId),
+              .load(context.params.projectId),
           }),
         ],
       }),
@@ -82,50 +121,78 @@ const routes = [
 ];
 ```
 
-Everything about a destination lives together:
+A destination can describe its URL, typed schemas, rendering, lifecycle,
+identity, policy, and providers without spreading routing behavior across guard
+and resolver classes.
 
-- URL
-- lifecycle
-- schemas
-- rendering
-- identity
+---
+
+# Route ownership
+
+Large applications can declare extension boundaries without duplicating one
+large route tree.
+
+```ts
+export const routes = [
+  layout('/app', AppShellComponent, [
+    routeSlot('administration'),
+  ]),
+];
+```
+
+A separately owned route set targets that slot:
+
+```ts
+export const administrationRoutes = routesFor(
+  'administration',
+  [
+    route('/users', UsersPage, {
+      policy: {
+        roles: ['admin'],
+      },
+    }),
+  ],
+);
+```
+
+The compiler preserves ownership and inherited path, layout, provider, and
+policy context while deriving server metadata and browser artifacts from the
+same authored navigation model.
 
 ---
 
 # Core concepts
 
-## route()
+## `route()`
 
-Describes a destination.
+Defines a navigable destination, including path, params, query, identity,
+policy, providers, and rendering metadata.
 
-Owns:
+## `frame()`
 
-- path
-- params
-- query
-- redirects
-- navigation identity
+Connects a view with navigation lifecycle behavior:
 
-## frame()
+- `beforeLeave`
+- `beforeEnter`
+- `prepare`
+- `afterEnter`
 
-Connects rendering with navigation lifecycle.
+## `layout()`
 
-Lifecycle includes:
+Adds inherited path, rendering, provider, policy, and lifecycle context for
+descendant navigation.
 
-- prepare
-- beforeEnter
-- beforeLeave
-- afterEnter
+## `routeSlot()` and `routesFor()`
 
-## layout()
-
-Composes application shells without turning layouts into navigation state.
+Define stable ownership boundaries for separately authored route branches.
+They are navigation-composition concepts and are distinct from named rendering
+outlets.
 
 ---
 
-# Dynamic configuration
+# Runtime configuration
 
-Navigation is runtime configuration.
+Delivered navigation is installed as runtime configuration.
 
 ```ts
 const changed = router.replaceConfiguration({
@@ -138,45 +205,39 @@ if (changed) {
 }
 ```
 
-`replaceConfiguration()` installs a new navigation model atomically.
+`replaceConfiguration()` replaces the active navigation model atomically.
 
-`revalidate()` decides whether the current URL should be matched again.
+`revalidate()` explicitly rematches the current URL when permissions, server
+state, feature availability, or delivered route configuration changes.
 
-Keeping those operations separate allows applications to update permissions,
-feature flags, server state, and navigation in a single transaction.
-
----
-
-# Immutable routes
-
-Route definitions should be treated as immutable configuration values.
-
-Prefer replacing route objects rather than mutating them.
-
-This keeps runtime caching deterministic and makes configuration replacement
-predictable.
+Keeping installation and revalidation separate lets applications coordinate
+navigation changes with other application state instead of implicitly forcing a
+transition on every configuration update.
 
 ---
 
-# Server-driven navigation
+# Compiler
 
-Author routes once.
+The Waypoint compiler turns authored TypeScript navigation into a validated,
+AST-free semantic model and derives delivery artifacts from it.
 
+The current compiler pipeline includes:
+
+```text
+TypeScript source
+→ semantic resolution
+→ Navigation IR
+→ expansion and validation
+→ artifact planning
+→ isolated browser bundles
+→ server index and shards
+→ delivery manifest
 ```
-TypeScript routes
-        ↓
-Waypoint compiler
-        ↓
-Navigation artifacts
-        ↓
-Authorization
-        ↓
-Filtered route graph
-        ↓
-Browser
-```
 
-The browser receives only the navigation it is allowed to discover.
+Protected route sets can become independently deliverable browser artifacts.
+Generated server metadata retains the path, policy, ownership, dependency, and
+artifact information needed to authorize and resolve delivery without shipping
+the complete protected route catalog to the client.
 
 ---
 
@@ -184,35 +245,25 @@ The browser receives only the navigation it is allowed to discover.
 
 ## App1
 
-Demonstrates Waypoint as a traditional client-side router with:
-
-- layouts
-- lifecycle
-- lazy loading
-- named outlets
-- typed navigation
+Exercises the Waypoint runtime surface directly, including layouts, lifecycle,
+lazy loading, named outlets, and typed navigation.
 
 ## App2
 
-Demonstrates server-driven navigation.
-
-The browser starts with no route graph.
-
-Navigation artifacts are requested from the server, installed with
-`replaceConfiguration()`, then activated using `revalidate()`.
+Exercises Waypoint's server-side routing model. The browser starts with the
+public shell, while protected navigation is resolved against generated server
+metadata and loaded from authorized compiler artifacts.
 
 ---
 
 # Philosophy
 
-Waypoint intentionally keeps the public API small.
+Waypoint keeps application route authoring declarative and moves delivery
+complexity into the compiler and server integration.
 
-The complexity belongs in the compiler and navigation pipeline—not in
-application code.
-
-Applications describe navigation once.
-
-Waypoint derives everything else.
+Applications describe navigation once. The compiler derives the representations
+needed by the browser and server without changing the navigation language's
+meaning.
 
 ---
 

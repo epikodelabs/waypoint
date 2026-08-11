@@ -8,5 +8,6 @@
   "dependencies": {
     "tslib": "^2.8.1"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "description": "Server-side routing for Angular with authorized route and artifact delivery."
 }

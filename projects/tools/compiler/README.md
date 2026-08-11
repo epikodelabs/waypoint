@@ -1,6 +1,6 @@
-# Route Compiler
+# Waypoint Route Compiler
 
-`@epikodelabs/route-compiler` resolves authored Waypoint navigation declarations into an AST-free semantic program, validates and expands that program, plans protected route artifacts, and emits server metadata and focused browser entries.
+`@epikodelabs/route-compiler` is the build-time half of Waypoint's server-side routing model. It resolves authored navigation declarations into an AST-free semantic program, validates and expands that program, plans protected route artifacts, and emits the server authorization metadata and isolated browser entries used for route delivery.
 
 ## Pipeline
 
@@ -41,6 +41,16 @@ SemanticRoute
 ```
 
 Legacy `Parsed*`, `Compiled*`, and `RouteGraph` names are intentionally absent.
+
+## Server-side routing outputs
+
+The compiler deliberately produces both sides of the delivery boundary from one authored navigation model:
+
+- server indexes and shards used to resolve paths, ownership, policy, dependencies, and artifact identity;
+- isolated browser artifacts for independently deliverable route sets;
+- a delivery manifest that connects emitted bundles to server metadata.
+
+Authorization and HTTP delivery remain server-integration concerns; the compiler supplies deterministic metadata and artifacts for that integration.
 
 ## Current capabilities
 
@@ -88,7 +98,7 @@ IR validation checks structural references, ranges, schemas, slots, and `routesF
 
 ## Artifact Plan v1
 
-The compiler now produces a versioned `RouteArtifactPlan` before emission. The plan is the sole contract for server emitters, browser-entry emitters, and the future bundler. It records hierarchical artifact dependencies, generated entries, isolated browser bundle requirements, server shards, and manifest/index documents. See `ARTIFACT-PLAN-V1.md`.
+The compiler produces a versioned `RouteArtifactPlan` before emission. The plan is the sole contract for server emitters, browser-entry emitters, and artifact bundling. It records hierarchical artifact dependencies, generated entries, isolated browser bundle requirements, server shards, and manifest/index documents. See `ARTIFACT-PLAN-V1.md`.
 ## Atomic publication
 
 Artifact Bundler v1 publishes through a staging directory and one directory
