@@ -634,6 +634,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   private resolutionGeneration = 0;
   private navigationRequestId = 0;
   private engine: VanillaRouter | null = null;
+  private engineStartupTask: Promise<void> | null = null;
   private currentState: RouterState = EMPTY_ROUTER_STATE;
   private readonly outlets = new Map<string, HTMLElement[]>();
   private readonly notFoundRecoveryTasks = new Map<string, Promise<void>>();
@@ -693,9 +694,12 @@ export class Router<TRoutes extends NavigationTree = any> {
 
     this.outlets.set(outletName, registered);
 
-    if (this.engine) {
+    if (this.engine || this.engineStartupTask) {
       return;
     }
+
+    this.startEngine();
+    return;
 
     const engine = createRouter({
       routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
@@ -920,6 +924,7 @@ export class Router<TRoutes extends NavigationTree = any> {
     this.navigationRequestId++;
     this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
+    this.engineStartupTask = null;
     this.notFoundRecoveryTasks.clear();
     this.engine = null;
     this.outlets.clear();
@@ -1289,6 +1294,61 @@ export class Router<TRoutes extends NavigationTree = any> {
       });
 
     this.notFoundRecoveryTasks.set(key, task);
+  }
+
+  private startEngine(): void {
+    let task!: Promise<void>;
+    task = Promise.resolve()
+      .then(async () => {
+        const location = getRouterLocation(this.document);
+        const url = new URL(location.href);
+
+        if (
+          this.configuration.resolveRoutes
+          && url.origin === location.origin
+          && isPathInsideBase(url.pathname, this.baseHref)
+        ) {
+          await this.resolveRoutesForUrl(url, { install: false });
+        }
+
+        if (
+          this.engineStartupTask !== task
+          || this.engine
+          || this.outlets.size === 0
+        ) {
+          return;
+        }
+
+        const engine = this.createEngine();
+
+        try {
+          engine.start();
+        } catch (error) {
+          engine.dispose();
+          throw error;
+        }
+
+        if (this.engineStartupTask !== task) {
+          engine.dispose();
+          return;
+        }
+
+        this.engine = engine;
+        this.currentState = snapshotRouterState(engine.state);
+        this.requestTick();
+      })
+      .catch((error) => {
+        if (this.engineStartupTask === task) {
+          this.recordNavigationError(error);
+        }
+      })
+      .finally(() => {
+        if (this.engineStartupTask === task) {
+          this.engineStartupTask = null;
+        }
+      });
+
+    this.engineStartupTask = task;
   }
 
   private createEngine(): VanillaRouter {

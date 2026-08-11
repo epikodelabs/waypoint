@@ -382,6 +382,9 @@ describe('Router: flat routes and layouts', () => {
       { resolveRoutes },
     );
 
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resolveRoutes.calls.reset();
+
     await navigate('/legacy');
 
     expect(resolveRoutes).toHaveBeenCalledTimes(1);
