@@ -5,6 +5,8 @@ export * from './route-adapter';
 export * from './route-builders';
 export * from './route-slots';
 export * from './server-delivery';
+export * from './server-http';
+export * from './server-express';
 export * from './server-routing';
 export * from './server-router';
 export { RouterLink } from './router-link';

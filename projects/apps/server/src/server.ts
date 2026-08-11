@@ -11,8 +11,8 @@ import express, {
 } from 'express';
 import path from 'node:path';
 import {
+  createExpressServerRouterHandlers,
   createServerRouter,
-  ServerArtifactResolutionError,
 } from '@epikodelabs/waypoint';
 
 import {
@@ -38,27 +38,21 @@ const serverRouter = createServerRouter<ArtifactDescriptor, Branch>({
     + `/${encodeURIComponent(artifact.hash ?? '')}`,
 });
 
+const navigation = createExpressServerRouterHandlers<
+  ArtifactDescriptor,
+  Request
+>({
+  router: serverRouter,
+  principalFrom: request => request.principal,
+  artifactPathFor: artifact => {
+    if (!artifact.file) {
+      throw new Error(`Artifact "${artifact.artifactKey}" has no published file.`);
+    }
+    return resolveOutputPath(artifact.file);
+  },
+});
+
 app.use(readPrincipal);
-
-function hideRoute(response: Response): void {
-  response
-    .status(404)
-    .set({
-      'Cache-Control': 'private, no-store',
-      Vary: 'Authorization, Cookie',
-    })
-    .json({ error: 'Route not found.' });
-}
-
-function unavailable(response: Response): void {
-  response
-    .status(503)
-    .set({
-      'Cache-Control': 'private, no-store',
-      Vary: 'Authorization, Cookie',
-    })
-    .json({ error: 'Navigation artifact unavailable.' });
-}
 
 app.get('/api/ping', (_request, response) => {
   response.json({
@@ -68,81 +62,8 @@ app.get('/api/ping', (_request, response) => {
   });
 });
 
-app.get('/api/navigation/resolve', async (request, response, next) => {
-  try {
-    const target = request.query['path'];
-
-    if (typeof target !== 'string' || !target.trim()) {
-      response.status(400).json({ error: 'Invalid path.' });
-      return;
-    }
-
-    const resolution = await serverRouter.resolve(target, request.principal);
-
-    // Unknown and unauthorized destinations intentionally have the same public
-    // response. Authorization must not become a route-discovery oracle.
-    if (!resolution) {
-      hideRoute(response);
-      return;
-    }
-
-    response
-      .set({
-        'Cache-Control': 'private, no-store',
-        Vary: 'Authorization, Cookie',
-      })
-      .json(resolution);
-  } catch (error) {
-    if (error instanceof ServerArtifactResolutionError) {
-      unavailable(response);
-      return;
-    }
-
-    next(error);
-  }
-});
-
-app.get(
-  '/api/navigation/modules/:artifactKey/:hash',
-  async (request, response, next) => {
-    try {
-      const artifactKey = request.params['artifactKey'] ?? '';
-      const hash = request.params['hash'] ?? '';
-      const descriptor = await serverRouter.resolveModule(
-        artifactKey,
-        hash,
-        request.principal,
-      );
-
-      // Do not reveal whether a guessed, stale, or unauthorized artifact exists.
-      if (!descriptor?.file) {
-        response.status(404).end();
-        return;
-      }
-
-      response.set({
-        'Cache-Control': 'private, no-store',
-        'Content-Type': 'text/javascript; charset=utf-8',
-        Vary: 'Authorization, Cookie',
-        'X-Content-Type-Options': 'nosniff',
-      });
-
-      response.sendFile(
-        resolveOutputPath(descriptor.file),
-        error => {
-          if (error && !response.headersSent) next(error);
-        },
-      );
-    } catch (error) {
-      if (error instanceof ServerArtifactResolutionError) {
-        response.status(404).end();
-        return;
-      }
-
-      next(error);
-    }
-  },
-);
+app.get('/api/navigation/resolve', navigation.resolve);
+app.get('/api/navigation/modules/:artifactKey/:hash', navigation.module);
 
 app.use(
   express.static(browserDistFolder, {

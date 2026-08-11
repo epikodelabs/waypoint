@@ -282,8 +282,32 @@ const resolution = await serverRouter.resolve(requestedPath, principal);
 
 `createServerRouter()` owns path matching, shard selection, route-set lookup,
 dependency ordering, complete-chain authorization, and construction of the
-browser delivery plan. An Express, Fastify, Node, or other server adapter only
-maps HTTP requests and responses around that API.
+browser delivery plan.
+
+Waypoint also provides a transport-neutral HTTP layer and an Express adapter:
+
+```ts
+const navigation = createExpressServerRouterHandlers({
+  router: serverRouter,
+  principalFrom: request => request.principal,
+  artifactPathFor: artifact => resolveOutputPath(artifact.file),
+});
+
+app.get('/api/navigation/resolve', navigation.resolve);
+app.get('/api/navigation/modules/:artifactKey/:hash', navigation.module);
+```
+
+`createServerRouterHttpHandler()` owns Waypoint's HTTP semantics: malformed
+resolution requests, private non-cacheable responses, indistinguishable
+unknown/unauthorized routes, module security headers, and safe masking of stale
+or unauthorized artifact requests. `createExpressServerRouterHandlers()` only
+translates those transport-neutral results to Express request/response objects
+and sends an already-authorized file.
+
+The Express adapter has no runtime dependency on Express inside the Waypoint
+package. It targets the small structural request/response surface it needs, so
+applications keep control over Express versions, authentication middleware,
+filesystem layout, and server composition.
 
 Artifact module requests are resolved by `artifactKey + hash`, not emitted
 filenames. The server authorizes the complete dependency chain again before it
