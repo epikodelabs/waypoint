@@ -1,11 +1,5 @@
 export {
-  canContainAuthorizationDomain,
-  normalizeAuthorizationDomain,
-  PUBLIC_AUTHORIZATION_DOMAIN,
-} from './planning/authorization-domain.js';
-export type { AuthorizationDomain } from './planning/authorization-domain.js';
-export {
-  deriveArtifactAuthorization,
-  authorizationFor,
-} from './planning/artifact-authorization.js';
-export { validateAuthorizationIsolation } from './validation/validate-authorization-isolation.js';
+  domainKey,
+  planSharedBundle,
+} from './planning/shared-bundles.js';
+export { decideSharedChunk } from './bundler/shared-chunk-policy.js';
