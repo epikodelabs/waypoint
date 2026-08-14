@@ -1,10 +1,23 @@
 export {
   provideRouter as provideClientRouter,
   provideRouter,
+  Router,
+  ROUTE,
+  ROUTE_CONTEXT,
+  RouterLink,
+  RouterOutlet,
+  route,
+  redirectRoute,
+  layout,
+  lazyLayout,
+  lazyRoute,
+  routeSlot,
+  routesFor,
+  type NavigationTree,
   type NamedRouteDefinition,
   type ResolvedNavigationConfiguration,
   type RouteResolution,
   type RouteResolutionContext,
   type RouterOptions,
-} from '../src/lib/router';
-export { type RouterRevalidationOptions } from '../src/lib/router-contract';
+} from '@epikodelabs/waypoint';
+export { type RouterRevalidationOptions } from '@epikodelabs/waypoint';
