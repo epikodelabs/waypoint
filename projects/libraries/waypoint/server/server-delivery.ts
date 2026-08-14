@@ -1,8 +1,11 @@
 /** Stable wire protocol version for server-resolved Waypoint navigation. */
-export const WAYPOINT_SERVER_DELIVERY_VERSION = 1 as const;
+export const WAYPOINT_SERVER_DELIVERY_VERSION = 2 as const;
+
+export type ServerArtifactDeliveryKind = 'route' | 'shared';
 
 /** One browser-loadable artifact selected and authorized by the server. */
 export interface ServerArtifactDelivery {
+  readonly kind: ServerArtifactDeliveryKind;
   readonly artifactKey: string;
   readonly moduleUrl: string;
   readonly hash: string;
@@ -11,10 +14,8 @@ export interface ServerArtifactDelivery {
 /**
  * Complete server-authorized delivery plan for one requested destination.
  *
- * Artifacts are dependency-first. `artifactKey` identifies the artifact that
- * contains the requested destination; redirect-followed artifacts may appear
- * later in the same plan. The browser consumes the plan without discovering the server's route,
- * ownership, policy, or artifact graphs.
+ * Artifacts are dependency-first. Shared artifacts may appear in the plan, but
+ * only route artifacts contribute `routesFor()` definitions to navigation.
  */
 export interface ServerNavigationResolution {
   readonly version: typeof WAYPOINT_SERVER_DELIVERY_VERSION;
@@ -28,25 +29,10 @@ export function isServerNavigationResolution(
   if (!value || typeof value !== 'object') return false;
 
   const candidate = value as Partial<ServerNavigationResolution>;
-  if (
-    candidate.version !== WAYPOINT_SERVER_DELIVERY_VERSION
-    || !nonEmptyString(candidate.artifactKey)
-    || !Array.isArray(candidate.artifacts)
-    || candidate.artifacts.length === 0
-  ) {
-    return false;
-  }
-
-  const keys = new Set<string>();
-
-  for (const artifact of candidate.artifacts) {
-    if (!isServerArtifactDelivery(artifact) || keys.has(artifact.artifactKey)) {
-      return false;
-    }
-    keys.add(artifact.artifactKey);
-  }
-
-  return keys.has(candidate.artifactKey);
+  return candidate.version === WAYPOINT_SERVER_DELIVERY_VERSION
+    && nonEmptyString(candidate.artifactKey)
+    && Array.isArray(candidate.artifacts)
+    && candidate.artifacts.every(isServerArtifactDelivery);
 }
 
 export function isServerArtifactDelivery(
@@ -55,8 +41,8 @@ export function isServerArtifactDelivery(
   if (!value || typeof value !== 'object') return false;
 
   const candidate = value as Partial<ServerArtifactDelivery>;
-
-  return nonEmptyString(candidate.artifactKey)
+  return (candidate.kind === 'route' || candidate.kind === 'shared')
+    && nonEmptyString(candidate.artifactKey)
     && nonEmptyString(candidate.moduleUrl)
     && nonEmptyString(candidate.hash);
 }
