@@ -1,58 +1,59 @@
+import type { SemanticPolicy } from '../semantic/model.js';
+
 export interface AuthorizationDomain {
   readonly allowAnonymous: boolean;
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
 }
 
-export const PUBLIC_AUTHORIZATION_DOMAIN: AuthorizationDomain = Object.freeze({
-  allowAnonymous: true,
-  roles: Object.freeze([]),
-  permissions: Object.freeze([]),
-});
-
-export function normalizeAuthorizationDomain(
-  policy: {
-    readonly allowAnonymous?: boolean;
-    readonly roles?: readonly string[];
-    readonly permissions?: readonly string[];
-  } | undefined,
+/**
+ * A route-set artifact can contain several branches. Its domain must therefore
+ * represent the audience allowed to receive the entire artifact.
+ *
+ * v2 uses the intersection of branch audiences: only requirements common to
+ * every branch are safe as artifact-wide requirements. If branches have
+ * incompatible policies, the planner reports that the route set must be split.
+ */
+export function commonAuthorizationDomain(
+  policies: readonly SemanticPolicy[],
 ): AuthorizationDomain {
-  return Object.freeze({
-    allowAnonymous: policy?.allowAnonymous === true,
-    roles: Object.freeze(unique(policy?.roles)),
-    permissions: Object.freeze(unique(policy?.permissions)),
+  if (policies.length === 0) {
+    return freeze({ allowAnonymous: true, roles: [], permissions: [] });
+  }
+
+  return freeze({
+    allowAnonymous: policies.every(policy => policy.allowAnonymous === true),
+    roles: intersect(policies.map(policy => policy.roles ?? [])),
+    permissions: intersect(policies.map(policy => policy.permissions ?? [])),
   });
 }
 
-/**
- * Returns true when every principal admitted by `candidate` is also admitted
- * by `container`.
- *
- * This is intentionally conservative. Roles and permissions are requirements,
- * not a numeric privilege rank. A bundle may be placed in another domain only
- * when the latter is at least as restrictive for all represented dimensions.
- */
 export function canContainAuthorizationDomain(
   container: AuthorizationDomain,
-  candidate: AuthorizationDomain,
+  owned: AuthorizationDomain,
 ): boolean {
-  if (candidate.allowAnonymous && !container.allowAnonymous) return true;
-  if (container.allowAnonymous && !candidate.allowAnonymous) return false;
+  if (container.allowAnonymous && !owned.allowAnonymous) return false;
+  return isSuperset(container.roles, owned.roles)
+    && isSuperset(container.permissions, owned.permissions);
+}
 
-  return (
-    isSuperset(container.roles, candidate.roles) &&
-    isSuperset(container.permissions, candidate.permissions)
+function intersect(groups: readonly (readonly string[])[]): readonly string[] {
+  if (groups.length === 0) return Object.freeze([]);
+  const [first, ...rest] = groups;
+  return Object.freeze(
+    [...new Set(first)].filter(value => rest.every(group => group.includes(value))).sort(),
   );
 }
 
-function unique(values: readonly string[] | undefined): readonly string[] {
-  return [...new Set(values ?? [])].sort();
+function isSuperset(left: readonly string[], right: readonly string[]): boolean {
+  const values = new Set(left);
+  return right.every(value => values.has(value));
 }
 
-function isSuperset(
-  stricterRequirements: readonly string[],
-  weakerRequirements: readonly string[],
-): boolean {
-  const weaker = new Set(weakerRequirements);
-  return stricterRequirements.every(value => weaker.has(value));
+function freeze(value: AuthorizationDomain): AuthorizationDomain {
+  return Object.freeze({
+    allowAnonymous: value.allowAnonymous,
+    roles: Object.freeze([...value.roles]),
+    permissions: Object.freeze([...value.permissions]),
+  });
 }

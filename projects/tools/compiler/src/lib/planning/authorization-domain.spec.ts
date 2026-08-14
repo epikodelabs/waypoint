@@ -1,33 +1,29 @@
 import {
   canContainAuthorizationDomain,
-  normalizeAuthorizationDomain,
+  commonAuthorizationDomain,
 } from './authorization-domain';
 
-describe('authorization domains', () => {
-  it('allows stricter role requirements to contain weaker-domain code', () => {
-    const application = normalizeAuthorizationDomain({
-      roles: ['user'],
-    });
-    const administration = normalizeAuthorizationDomain({
-      roles: ['user', 'admin'],
-    });
+describe('Artifact Plan v2 authorization', () => {
+  it('allows a stricter audience to consume code from a weaker requirement set', () => {
+    const user = commonAuthorizationDomain([{ roles: ['user'] } as any]);
+    const userAdmin = commonAuthorizationDomain([{ roles: ['user', 'admin'] } as any]);
 
-    expect(canContainAuthorizationDomain(administration, application)).toBeTrue();
-    expect(canContainAuthorizationDomain(application, administration)).toBeFalse();
+    expect(canContainAuthorizationDomain(userAdmin, user)).toBeTrue();
+    expect(canContainAuthorizationDomain(user, userAdmin)).toBeFalse();
   });
 
-  it('does not invent an ordering between unrelated roles', () => {
-    const finance = normalizeAuthorizationDomain({ roles: ['finance'] });
-    const administration = normalizeAuthorizationDomain({ roles: ['admin'] });
+  it('does not rank unrelated roles', () => {
+    const admin = commonAuthorizationDomain([{ roles: ['admin'] } as any]);
+    const finance = commonAuthorizationDomain([{ roles: ['finance'] } as any]);
 
-    expect(canContainAuthorizationDomain(finance, administration)).toBeFalse();
-    expect(canContainAuthorizationDomain(administration, finance)).toBeFalse();
+    expect(canContainAuthorizationDomain(admin, finance)).toBeFalse();
+    expect(canContainAuthorizationDomain(finance, admin)).toBeFalse();
   });
 
-  it('keeps authenticated code out of anonymous domains', () => {
-    const publicDomain = normalizeAuthorizationDomain({ allowAnonymous: true });
-    const authenticated = normalizeAuthorizationDomain({ roles: ['user'] });
+  it('does not allow protected code into an anonymous artifact', () => {
+    const publicDomain = commonAuthorizationDomain([{ allowAnonymous: true } as any]);
+    const admin = commonAuthorizationDomain([{ roles: ['admin'] } as any]);
 
-    expect(canContainAuthorizationDomain(publicDomain, authenticated)).toBeFalse();
+    expect(canContainAuthorizationDomain(publicDomain, admin)).toBeFalse();
   });
 });
