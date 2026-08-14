@@ -24,22 +24,21 @@ const MULTI_VALUE_FLAGS = new Set([
   'host-module',
 ]);
 
-async function main(): Promise<void> {
-  const command = process.argv[2];
+export async function runCli(args: readonly string[]): Promise<number> {
+  const command = args[0];
 
   if (command === '--help' || command === '-h') {
     printUsage();
-    return;
+    return 0;
   }
 
   if (command !== 'compile') {
     printUsage();
-    process.exitCode = 1;
-    return;
+    return 1;
   }
 
   const result = await compile(
-    readCompileOptions(process.argv.slice(3)),
+    readCompileOptions(args.slice(1)),
   );
 
   for (const item of result.diagnostics) {
@@ -69,9 +68,7 @@ async function main(): Promise<void> {
     }
   }
 
-  if (!result.success) {
-    process.exitCode = 1;
-  }
+  return result.success ? 0 : 1;
 }
 
 export function readCompileOptions(
