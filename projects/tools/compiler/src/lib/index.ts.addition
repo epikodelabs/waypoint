@@ -1,2 +1,2 @@
-export { plan } from './compiler/plan.js';
-export type { RouteCompilerPlanResult } from './compiler/plan.js';
+export { planHostEntry } from './planning/plan-host-entry.js';
+export { emitHostEntry } from './emitters/emit-host-entry.js';
