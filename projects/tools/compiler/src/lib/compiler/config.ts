@@ -36,3 +36,12 @@ function normalizeHostModules(values: readonly string[] | undefined): readonly s
   }
   return Object.freeze([...result].sort());
 }
+
+function findApplicationRoot(entry: string): string {
+  let current = path.dirname(entry);
+  while (current !== path.dirname(current)) {
+    if (path.basename(current) === 'src') return path.dirname(current);
+    current = path.dirname(current);
+  }
+  throw new Error(`Unable to derive application root from route entry "${entry}".`);
+}

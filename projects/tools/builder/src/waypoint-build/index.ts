@@ -10,7 +10,6 @@ import { compile } from '../../compiler/src/lib/index.js';
 interface WaypointBuildOptions {
   readonly buildTarget: string;
   readonly entry?: string;
-  readonly artifactTsconfig: string;
   readonly serverOutput: string;
   readonly entriesOutput: string;
   readonly manifestOutput: string;
@@ -27,7 +26,6 @@ async function execute(options: WaypointBuildOptions, context: BuilderContext): 
 
     const result = await compile({
       entry: path.resolve(root, projectRoot, options.entry ?? 'src/app/app.routes.ts'),
-      artifactTsConfig: path.resolve(root, options.artifactTsconfig),
       serverOutput: path.resolve(root, options.serverOutput),
       entriesOutput: path.resolve(root, options.entriesOutput),
       manifestOutput: path.resolve(root, options.manifestOutput),
@@ -53,5 +51,4 @@ async function execute(options: WaypointBuildOptions, context: BuilderContext): 
     return { success: false, error: message };
   }
 }
-
 export default createBuilder<WaypointBuildOptions>(execute);

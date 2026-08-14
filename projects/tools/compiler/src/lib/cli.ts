@@ -13,6 +13,7 @@ const BOOLEAN_FLAGS = new Set([
 const VALUE_FLAGS = new Set([
   'entry',
   'artifact-tsconfig',
+  'artifact-tsconfig',
   'server-output',
   'entries-output',
   'manifest-output',
@@ -24,21 +25,22 @@ const MULTI_VALUE_FLAGS = new Set([
   'host-module',
 ]);
 
-export async function runCli(args: readonly string[]): Promise<number> {
-  const command = args[0];
+async function main(): Promise<void> {
+  const command = process.argv[2];
 
   if (command === '--help' || command === '-h') {
     printUsage();
-    return 0;
+    return;
   }
 
   if (command !== 'compile') {
     printUsage();
-    return 1;
+    process.exitCode = 1;
+    return;
   }
 
   const result = await compile(
-    readCompileOptions(args.slice(1)),
+    readCompileOptions(process.argv.slice(3)),
   );
 
   for (const item of result.diagnostics) {
@@ -68,7 +70,9 @@ export async function runCli(args: readonly string[]): Promise<number> {
     }
   }
 
-  return result.success ? 0 : 1;
+  if (!result.success) {
+    process.exitCode = 1;
+  }
 }
 
 export function readCompileOptions(
@@ -127,7 +131,6 @@ export function readCompileOptions(
 
   const required = [
     'entry',
-    'artifact-tsconfig',
     'server-output',
     'entries-output',
     'manifest-output',
