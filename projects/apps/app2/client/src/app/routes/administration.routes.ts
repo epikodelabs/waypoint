@@ -5,8 +5,8 @@ import {
   routesFor,
 } from '@epikodelabs/waypoint';
 
-import { AdminPage, AdminSidebarComponent } from './admin-pages';
-import { DemoSessionService } from '@waypoint-demo/runtime';
+import { AdminPage, AdminSidebarComponent } from '../pages/admin-pages';
+import { DemoSessionService } from '../core/demo-session.service';
 
 export const adminRoute = route(
   '/admin',

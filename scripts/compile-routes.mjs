@@ -40,8 +40,6 @@ const args = [
   routeEntry,
   '--artifact-tsconfig',
   routeArtifactTsConfig,
-  '--host-module',
-  '@waypoint-demo/runtime',
   '--server-output',
   compilerOutputs.serverOutput,
   '--entries-output',

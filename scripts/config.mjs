@@ -18,12 +18,12 @@ export const compilerModule = resolvePath(
 
 export const routeEntry = resolvePath(
   workspaceRoot,
-  'projects/apps/shared/src/public-api.ts',
+  'projects/apps/app2/client/src/app/app.routes.ts',
 );
 
 export const routeArtifactTsConfig = resolvePath(
   workspaceRoot,
-  'projects/apps/shared/tsconfig.artifacts.json',
+  'projects/apps/app2/client/tsconfig.artifacts.json',
 );
 
 export const developmentOutputRoot = resolvePath(

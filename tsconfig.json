@@ -10,9 +10,6 @@
       ],
       "@epikodelabs/waypoint/server": [
         "./projects/libraries/waypoint/server/public-api.ts"
-      ],
-      "@waypoint-demo/runtime": [
-        "./projects/apps/shared/src/lib/demo-runtime.ts"
       ]
     },
     "noImplicitOverride": true,
