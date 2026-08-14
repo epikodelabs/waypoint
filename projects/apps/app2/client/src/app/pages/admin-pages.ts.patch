@@ -1,0 +1,4 @@
+// Add a deliberately unique build-test sentinel close to AdminPage.
+// It must survive minification as a string literal in the protected artifact.
+export const WAYPOINT_ADMIN_ARTIFACT_SENTINEL =
+  'WAYPOINT_BUILD_SENTINEL_ADMIN_7f84e2c1';
