@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "With Prerequisites Builder",
+  "type": "object",
+  "properties": {
+    "delegateTarget": {
+      "type": "string",
+      "description": "Target to run after prerequisites complete."
+    },
+    "prerequisiteTargets": {
+      "type": "array",
+      "description": "Targets to run before the delegate target.",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "targetConfiguration": {
+      "type": "string",
+      "description": "Configuration name to apply when delegated targets omit one."
+    }
+  },
+  "required": [
+    "delegateTarget"
+  ],
+  "additionalProperties": true
+}

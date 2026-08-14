@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Run Script Builder",
+  "type": "object",
+  "properties": {
+    "script": {
+      "type": "string",
+      "description": "Workspace-relative path to the Node.js script."
+    },
+    "args": {
+      "type": "array",
+      "description": "Arguments to pass to the script.",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "workingDirectory": {
+      "type": "string",
+      "description": "Working directory relative to the workspace root."
+    }
+  },
+  "required": [
+    "script"
+  ],
+  "additionalProperties": false
+}

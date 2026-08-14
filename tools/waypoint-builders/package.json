@@ -1,0 +1,6 @@
+{
+  "name": "waypoint-builders",
+  "private": true,
+  "type": "commonjs",
+  "builders": "builders.json"
+}

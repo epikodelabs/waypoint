@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -40,15 +41,28 @@ export interface ServerShard extends ServerRouterShard<Branch> {
 const workspaceRoot =
   path.resolve(process.cwd());
 
+const packagedOutputRoot =
+  path.resolve(import.meta.dirname, '../waypoint');
+
+const defaultOutputRoot =
+  existsSync(
+    path.join(
+      packagedOutputRoot,
+      'server-index.json',
+    ),
+  )
+    ? packagedOutputRoot
+    : path.resolve(
+        workspaceRoot,
+        'dist/waypoint-generated/server',
+      );
+
 const outputRoot =
   process.env['WAYPOINT_OUTPUT_ROOT']
     ? path.resolve(
         process.env['WAYPOINT_OUTPUT_ROOT'],
       )
-    : path.resolve(
-        workspaceRoot,
-        'dist/waypoint-generated/server',
-      );
+    : defaultOutputRoot;
 
 const indexPath =
   process.env['WAYPOINT_SERVER_INDEX']

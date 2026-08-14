@@ -33,7 +33,7 @@ export const developmentOutputRoot = resolvePath(
 
 export const productionOutputRoot = resolvePath(
   workspaceRoot,
-  'dist/apps/server/waypoint',
+  'dist/app2-server/waypoint',
 );
 
 export const outputRoot = developmentOutputRoot;

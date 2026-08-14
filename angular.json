@@ -208,7 +208,7 @@
           },
           "defaultConfiguration": "development",
           "options": {
-            "port": 4201,
+            "port": 4200,
             "proxyConfig": "projects/apps/app2/client/proxy.conf.json"
           }
         }
@@ -247,6 +247,25 @@
       "prefix": "app",
       "architect": {
         "build": {
+          "builder": "./tools/waypoint-builders:with-prerequisites",
+          "options": {
+            "delegateTarget": ":application",
+            "prerequisiteTargets": [
+              ":build-router-compiler",
+              ":compile-routes"
+            ]
+          },
+          "configurations": {
+            "development": {
+              "targetConfiguration": "development"
+            },
+            "production": {
+              "targetConfiguration": "production"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "application": {
           "builder": "@angular/build:application",
           "options": {
             "outputPath": "dist/app2-server",
@@ -298,19 +317,69 @@
           "defaultConfiguration": "production"
         },
         "serve": {
+          "builder": "./tools/waypoint-builders:with-prerequisites",
+          "options": {
+            "delegateTarget": ":dev-server",
+            "prerequisiteTargets": [
+              ":build-router-compiler",
+              ":compile-routes"
+            ]
+          },
+          "configurations": {
+            "development": {
+              "targetConfiguration": "development"
+            },
+            "production": {
+              "targetConfiguration": "production"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "dev-server": {
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "app2-server:build:production"
+              "buildTarget": "app2-server:application:production"
             },
             "development": {
-              "buildTarget": "app2-server:build:development"
+              "buildTarget": "app2-server:application:development"
             }
           },
           "defaultConfiguration": "development",
           "options": {
             "port": 4300
           }
+        },
+        "build-router-compiler": {
+          "builder": "./tools/waypoint-builders:run-script",
+          "options": {
+            "script": "scripts/build-compiler.mjs",
+            "args": [
+              "--force"
+            ]
+          },
+          "configurations": {
+            "development": {},
+            "production": {}
+          },
+          "defaultConfiguration": "development"
+        },
+        "compile-routes": {
+          "builder": "./tools/waypoint-builders:run-script",
+          "options": {
+            "script": "scripts/compile-routes.mjs"
+          },
+          "configurations": {
+            "development": {},
+            "production": {
+              "args": [
+                "--output",
+                "dist/app2-server/waypoint",
+                "--profile"
+              ]
+            }
+          },
+          "defaultConfiguration": "development"
         }
       }
     }

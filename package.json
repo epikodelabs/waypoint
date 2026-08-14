@@ -17,8 +17,8 @@
     "test:watch": "testify",
     "test:node": "testify --browser node",
     "test:coverage": "testify --headless --browser chrome --coverage",
-    "start:server": "npm run compiler:build && node scripts/serve-server.mjs",
-    "build:server": "npm run compiler:build && node scripts/build-server.mjs",
+    "start:server": "ng serve app2-server",
+    "build:server": "ng build app2-server",
     "compiler:test": "npm run compiler:build && npm --prefix projects/tools/compiler test",
     "verify": "npm run build && npm run compiler:test && npm run compiler:compile:check && ng build app1 --configuration development && ng build app2-client --configuration development && ng build app2-server --configuration development && npm test"
   },
