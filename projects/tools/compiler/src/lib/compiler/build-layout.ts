@@ -1,0 +1,25 @@
+import path from 'node:path';
+
+export interface WaypointBuildLayout {
+  readonly root: string;
+  readonly publicRoot: string;
+  readonly protectedRoot: string;
+  readonly metadataRoot: string;
+  readonly entriesRoot: string;
+  readonly manifest: string;
+  readonly serverRoot: string;
+}
+
+export function createBuildLayout(outputPath: string): WaypointBuildLayout {
+  const root = path.resolve(outputPath);
+  const metadataRoot = path.join(root, '.waypoint');
+  return Object.freeze({
+    root,
+    publicRoot: path.join(root, 'browser'),
+    protectedRoot: path.join(root, 'protected'),
+    metadataRoot,
+    entriesRoot: path.join(metadataRoot, 'entries'),
+    manifest: path.join(metadataRoot, 'manifest.json'),
+    serverRoot: path.join(metadataRoot, 'server'),
+  });
+}
