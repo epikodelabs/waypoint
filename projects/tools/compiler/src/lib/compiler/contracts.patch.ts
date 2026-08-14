@@ -1,19 +1,19 @@
-// Replace PlannedArtifactBundle.isolated:
+// Artifact Plan v2 should use a discriminated artifact union:
 //
-// BEFORE
-//   /** v1 artifacts must not share protected code across route-set entries. */
-//   readonly isolated: true;
+// export type PlannedArtifact = PlannedRouteArtifact | PlannedSharedArtifact;
 //
-// AFTER
-export interface PlannedArtifactBundle {
-  readonly outputDirectory: string;
-  readonly fileNameTemplate: string;
-  readonly format: 'esm';
-  readonly platform: 'browser';
-
-  /**
-   * Sharing is disabled by default. The bundler may extract a dependency only
-   * when Artifact Plan v2 supplies a compatible authorization-aware share group.
-   */
-  readonly sharing: 'authorization-aware';
-}
+// export interface PlannedRouteArtifact {
+//   readonly kind: 'route';
+//   ...
+//   readonly authorization: AuthorizationDomain;
+//   readonly sharedDependencies: readonly string[];
+// }
+//
+// export interface RouteArtifactPlan {
+//   readonly version: 2;
+//   readonly artifacts: readonly PlannedArtifact[];
+//   ...
+// }
+//
+// Route artifacts keep their routeSetId/browserEntry/server descriptor fields.
+// Shared artifacts deliberately do not pretend to be route sets.

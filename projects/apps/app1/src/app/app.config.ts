@@ -8,10 +8,10 @@ import { BrowserModule } from '@angular/platform-browser';
 import { provideRouter } from '@epikodelabs/waypoint';
 import {
   applicationRoutes,
-  provideLocalDemoPrincipalSwitching,
   publicRoutes,
   routes,
-} from '@waypoint-demo/runtime';
+} from './app.routes';
+import { provideLocalDemoPrincipalSwitching } from './core/demo-session.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
