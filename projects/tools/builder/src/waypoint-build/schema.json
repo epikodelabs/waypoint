@@ -1,29 +1,16 @@
 {
   "$schema": "http://json-schema.org/schema",
-  "title": "Waypoint build",
+  "title": "Waypoint build options",
   "type": "object",
   "properties": {
     "buildTarget": {
-      "type": "string"
+      "type": "string",
+      "description": "Underlying Angular application build target."
     },
     "entry": {
       "type": "string",
-      "default": "src/app/app.routes.ts"
-    },
-    "artifactTsconfig": {
-      "type": "string"
-    },
-    "serverOutput": {
-      "type": "string"
-    },
-    "entriesOutput": {
-      "type": "string"
-    },
-    "manifestOutput": {
-      "type": "string"
-    },
-    "artifactsOutput": {
-      "type": "string"
+      "default": "src/app/app.routes.ts",
+      "description": "Waypoint navigation entry relative to the Angular project root."
     },
     "routesExport": {
       "type": "string",
@@ -35,12 +22,7 @@
     }
   },
   "required": [
-    "buildTarget",
-    "artifactTsconfig",
-    "serverOutput",
-    "entriesOutput",
-    "manifestOutput",
-    "artifactsOutput"
+    "buildTarget"
   ],
   "additionalProperties": false
 }

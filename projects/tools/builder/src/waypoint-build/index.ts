@@ -10,26 +10,26 @@ import { compile } from '../../compiler/src/lib/index.js';
 interface WaypointBuildOptions {
   readonly buildTarget: string;
   readonly entry?: string;
-  readonly serverOutput: string;
-  readonly entriesOutput: string;
-  readonly manifestOutput: string;
-  readonly artifactsOutput?: string;
   readonly routesExport?: string;
   readonly profile?: boolean;
 }
 
 async function execute(options: WaypointBuildOptions, context: BuilderContext): Promise<BuilderOutput> {
   try {
-    const root = context.workspaceRoot;
-    const metadata = context.target ? await context.getProjectMetadata(context.target.project) : {};
-    const projectRoot = typeof metadata['root'] === 'string' ? metadata['root'] : '';
+    const workspaceRoot = context.workspaceRoot;
+    const target = targetFromTargetString(options.buildTarget);
+    const projectMetadata = await context.getProjectMetadata(target.project);
+    const projectRoot = typeof projectMetadata['root'] === 'string' ? projectMetadata['root'] : '';
+    const buildOptions = await context.getTargetOptions(target);
+    const outputPath = resolveOutputPath(workspaceRoot, buildOptions['outputPath']);
+    const waypointOutput = path.join(outputPath, 'waypoint');
 
     const result = await compile({
-      entry: path.resolve(root, projectRoot, options.entry ?? 'src/app/app.routes.ts'),
-      serverOutput: path.resolve(root, options.serverOutput),
-      entriesOutput: path.resolve(root, options.entriesOutput),
-      manifestOutput: path.resolve(root, options.manifestOutput),
-      artifactsOutput: options.artifactsOutput ? path.resolve(root, options.artifactsOutput) : undefined,
+      entry: path.resolve(workspaceRoot, projectRoot, options.entry ?? 'src/app/app.routes.ts'),
+      serverOutput: path.join(waypointOutput, 'server'),
+      entriesOutput: path.join(waypointOutput, 'entries'),
+      manifestOutput: path.join(waypointOutput, 'manifest.json'),
+      artifactsOutput: path.join(waypointOutput, 'artifacts'),
       routesExport: options.routesExport,
       profile: options.profile,
     });
@@ -42,7 +42,7 @@ async function execute(options: WaypointBuildOptions, context: BuilderContext): 
     }
     if (!result.success) return { success: false, error: 'Waypoint compilation failed.' };
 
-    const scheduled = await context.scheduleTarget(targetFromTargetString(options.buildTarget));
+    const scheduled = await context.scheduleTarget(target);
     try { return await scheduled.result; }
     finally { await scheduled.stop(); }
   } catch (error) {
@@ -51,4 +51,14 @@ async function execute(options: WaypointBuildOptions, context: BuilderContext): 
     return { success: false, error: message };
   }
 }
+
+function resolveOutputPath(workspaceRoot: string, value: unknown): string {
+  if (typeof value === 'string' && value.length > 0) return path.resolve(workspaceRoot, value);
+  if (value && typeof value === 'object') {
+    const base = (value as { base?: unknown }).base;
+    if (typeof base === 'string' && base.length > 0) return path.resolve(workspaceRoot, base);
+  }
+  throw new Error('Waypoint build requires the underlying Angular target to define outputPath.');
+}
+
 export default createBuilder<WaypointBuildOptions>(execute);
