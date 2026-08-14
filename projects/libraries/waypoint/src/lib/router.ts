@@ -47,6 +47,13 @@ import type {
 import type { TypedHref, TypedNavigate } from './typed-navigation';
 import type { RouteRuntime } from './route-runtime';
 
+import {
+  ROUTE,
+  ROUTE_CONTEXT,
+  Router as RouterContract,
+  type RouterRevalidationOptions,
+} from './router-contract';
+
 import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-events';
 
 import { getRouterLocation, isPathInsideBase, resolveRouterUrl, routerHref, stripBaseHref } from './router-url';
@@ -87,15 +94,6 @@ export interface ResolvedNavigationConfiguration {
   readonly contributions?: readonly RouteContributionDefinition[];
 }
 
-export interface RouterRevalidationOptions {
-  /**
-   * Removes every route and contribution previously installed through
-   * `resolveRoutes`, then resolves the current URL again before revalidating.
-   * Authored routes and contributions are preserved.
-   */
-  readonly resetResolvedRoutes?: boolean;
-}
-
 export type RouteResolution =
   | NavigationTree
   | ResolvedNavigationConfiguration
@@ -131,10 +129,6 @@ export interface NamedRouteDefinition {
   readonly paramsSchema?: ParamSchemaRecord;
   readonly querySchema?: QuerySchemaRecord;
 }
-
-export const ROUTE = new InjectionToken<ActivatedRoute>('ROUTE');
-
-export const ROUTE_CONTEXT = new InjectionToken<RouteRenderContext>('ROUTE_CONTEXT');
 
 interface RouterConfiguration<
   TRoutes extends NavigationTree = NavigationTree,
@@ -616,7 +610,8 @@ function interpolateNamedPath(
   return path;
 }
 
-export class Router<TRoutes extends NavigationTree = any> {
+export class ServerRouter<TRoutes extends NavigationTree = any>
+  extends RouterContract<TRoutes> {
   private readonly appRef: ApplicationRef;
   private readonly injector: EnvironmentInjector;
   private readonly destroyRef: DestroyRef;
@@ -644,6 +639,7 @@ export class Router<TRoutes extends NavigationTree = any> {
   public readonly hrefTo: TypedHref<TRoutes>;
 
   constructor(private configuration: RouterConfiguration<TRoutes>) {
+    super();
     this.appRef = inject(ApplicationRef);
     this.injector = inject(EnvironmentInjector);
     this.destroyRef = inject(DestroyRef);
@@ -1546,13 +1542,19 @@ export function provideRouter<const TRoutes extends NavigationTree>(
       useValue: config,
     },
     {
-      provide: Router,
+      provide: ServerRouter,
       useFactory: (configuration: RouterConfiguration<TRoutes>) =>
-        new Router<TRoutes>(configuration),
+        new ServerRouter<TRoutes>(configuration),
       deps: [ROUTER_CONFIGURATION],
+    },
+    {
+      provide: RouterContract,
+      useExisting: ServerRouter,
     },
   ];
 }
+
+export const provideServerRouter = provideRouter;
 
 export { type LayoutOptions, type RouteOptions };
 

@@ -7,7 +7,7 @@ import {
   inject,
 } from '@angular/core';
 
-import { Router } from './router';
+import { Router } from './router-contract';
 
 @Directive({ selector: 'router-outlet', standalone: true })
 export class RouterOutlet implements OnInit {

@@ -5,6 +5,12 @@
       "@epikodelabs/waypoint": [
         "./projects/libraries/waypoint/src/public-api.ts"
       ],
+      "@epikodelabs/waypoint/client": [
+        "./projects/libraries/waypoint/client/public-api.ts"
+      ],
+      "@epikodelabs/waypoint/server": [
+        "./projects/libraries/waypoint/server/public-api.ts"
+      ],
       "@waypoint-demo/runtime": [
         "./projects/apps/shared/src/lib/demo-runtime.ts"
       ]

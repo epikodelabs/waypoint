@@ -4,16 +4,14 @@ export * from './query-schema';
 export * from './route-adapter';
 export * from './route-builders';
 export * from './route-slots';
-export * from './browser-delivery';
-export * from './server-delivery';
-export * from './server-host-runtime';
-export * from './server-http';
-export * from './server-express';
-export * from './server-routing';
-export * from './server-router';
-export * from './server-source';
 export { RouterLink } from './router-link';
 export * from './navigation-definitions';
+export {
+  ROUTE,
+  ROUTE_CONTEXT,
+  Router,
+  type RouterRevalidationOptions,
+} from './router-contract';
 export * from './router-events';
 export * from './router-url';
 export * from './typed-navigation';
@@ -45,15 +43,10 @@ export {
   type ViewTransitionPhase,
   type ViewTransitionsOption,
 } from './vanilla-router';
-export {
-  provideRouter,
-  ROUTE,
-  ROUTE_CONTEXT,
-  Router,
-  type NamedRouteDefinition,
-  type ResolvedNavigationConfiguration,
-  type RouterRevalidationOptions,
-  type RouteResolution,
-  type RouteResolutionContext,
-  type RouterOptions,
+export type {
+  NamedRouteDefinition,
+  ResolvedNavigationConfiguration,
+  RouteResolution,
+  RouteResolutionContext,
+  RouterOptions,
 } from './router';

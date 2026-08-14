@@ -7,7 +7,6 @@ import {
   layout,
   lazyLayout,
   lazyRoute,
-  provideRouter,
   redirectRoute,
   RouterOutlet,
   route,
@@ -17,6 +16,7 @@ import {
   Router,
   type NavigationTree,
 } from '@epikodelabs/waypoint';
+import { provideServerRouter } from '@epikodelabs/waypoint/server';
 
 ensureAngularTestEnvironment();
 
@@ -75,7 +75,7 @@ describe('Router: flat routes and layouts', () => {
         ChildComponent,
         SettingsComponent,
       ],
-      providers: [...provideRouter(routes, options)],
+      providers: [...provideServerRouter(routes, options)],
     });
 
     outlet = document.createElement('div');

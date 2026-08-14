@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import type { ServerPrincipal } from '@epikodelabs/waypoint';
+import type { ServerPrincipal } from '@epikodelabs/waypoint/server';
 
 declare global {
   namespace Express {

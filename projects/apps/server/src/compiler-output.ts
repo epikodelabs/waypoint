@@ -1,14 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { createServerRouterSnapshotSource } from '@epikodelabs/waypoint';
+import { createServerRouterSnapshotSource } from '@epikodelabs/waypoint/server';
 import type {
   ServerRouterIndex,
   ServerRouterShard,
   ServerArtifactRecord,
   ServerRouteBranch,
   ServerRoutePolicy,
-} from '@epikodelabs/waypoint';
+} from '@epikodelabs/waypoint/server';
 
 export interface Branch extends ServerRouteBranch {
   readonly id: string;

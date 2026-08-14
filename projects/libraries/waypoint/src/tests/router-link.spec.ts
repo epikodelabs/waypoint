@@ -6,9 +6,9 @@ import {
   RouterLink,
   RouterOutlet,
   Router,
-  provideRouter,
   route,
 } from '@epikodelabs/waypoint';
+import { provideServerRouter } from '@epikodelabs/waypoint/server';
 
 ensureAngularTestEnvironment();
 
@@ -80,7 +80,7 @@ describe('RouterLink', () => {
         RouterLinkHostComponent,
       ],
       providers: [
-        ...provideRouter([
+        ...provideServerRouter([
           route('/', HomeComponent),
           route('/about', AboutComponent),
         ]),

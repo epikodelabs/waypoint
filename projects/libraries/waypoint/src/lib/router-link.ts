@@ -26,7 +26,7 @@ import type {
   PathNavigationTarget,
 } from './navigation-targets';
 
-import { Router } from './router';
+import { Router } from './router-contract';
 
 type RouterLinkCommands =
   readonly unknown[];
