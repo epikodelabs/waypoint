@@ -13,7 +13,7 @@ const ngCli = resolvePath(
 
 const buildCode = await run(
   process.execPath,
-  [ngCli, 'build', 'server'],
+  [ngCli, 'build', 'app2-server'],
   { cwd: workspaceRoot },
 );
 

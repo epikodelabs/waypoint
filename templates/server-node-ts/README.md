@@ -11,6 +11,6 @@ It includes:
 - navigation resolve and module endpoints
 - browser app wiring for server-resolved route delivery
 
-`projects/apps/server` is expected to use its own copied files.
+`projects/apps/app2/server` is expected to use its own copied files.
 This directory is a starter tree, not a live source dependency for the demo
 app build.

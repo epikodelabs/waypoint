@@ -3,7 +3,8 @@
   "version": "1.0.1",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve client",
+    "start": "ng serve app1",
+    "start:app2": "ng serve app2-client",
     "build": "ng build waypoint",
     "watch": "ng build waypoint --watch --configuration development",
     "compiler:build": "node scripts/build-compiler.mjs --force",
@@ -19,7 +20,7 @@
     "start:server": "npm run compiler:build && node scripts/serve-server.mjs",
     "build:server": "npm run compiler:build && node scripts/build-server.mjs",
     "compiler:test": "npm run compiler:build && npm --prefix projects/tools/compiler test",
-    "verify": "npm run build && npm run compiler:test && npm run compiler:compile:check && ng build client --configuration development && ng build server --configuration development && npm test"
+    "verify": "npm run build && npm run compiler:test && npm run compiler:compile:check && ng build app1 --configuration development && ng build app2-client --configuration development && ng build app2-server --configuration development && npm test"
   },
   "private": true,
   "type": "module",

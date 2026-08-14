@@ -22,7 +22,7 @@ if (compileCode !== 0) {
 
   process.exitCode = await run(
     process.execPath,
-    [ngCli, 'serve', 'server', '--port', '4300'],
+    [ngCli, 'serve', 'app2-server', '--port', '4300'],
     {
       cwd: workspaceRoot,
       env: {

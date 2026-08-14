@@ -1,7 +1,7 @@
 import { routeSlot, type NavigationTree } from '@epikodelabs/waypoint';
 
 /**
- * The client app ships only the public navigation skeleton.
+ * App 2 ships only the public navigation skeleton.
  *
  * It does not contain page routes, layouts, components, guards,
  * or protected route metadata. Those arrive through compiler artifacts.
