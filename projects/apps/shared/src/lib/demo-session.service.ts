@@ -1,7 +1,11 @@
 import {
+  inject,
   Injectable,
+  InjectionToken,
   signal,
+  type Provider,
 } from '@angular/core';
+import { Router } from '@epikodelabs/waypoint';
 
 export interface DemoUser {
   readonly id: string;
@@ -73,12 +77,25 @@ function initialDemoUser(): DemoUser {
   return demoUsers.find(user => user.id === identity) ?? demoUsers[0];
 }
 
+export type DemoPrincipalSwitcher = (
+  session: DemoSessionService,
+  userId: string,
+) => Promise<void>;
+
+export const DEMO_PRINCIPAL_SWITCHER = new InjectionToken<DemoPrincipalSwitcher>(
+  'DEMO_PRINCIPAL_SWITCHER',
+);
+
 @Injectable({
   providedIn: 'root',
 })
 export class DemoSessionService {
   readonly users = demoUsers;
   private readonly initialUser = initialDemoUser();
+  private readonly principalSwitcher = inject(
+    DEMO_PRINCIPAL_SWITCHER,
+    { optional: true },
+  );
   readonly currentUserId = signal(this.initialUser.id);
   readonly draftDirty = signal(
     this.initialUser.prefersDraftGuard,
@@ -102,7 +119,25 @@ export class DemoSessionService {
     ) ?? this.users[0];
   }
 
+  activateLocalUser(userId: string): DemoUser {
+    const user = this.users.find(candidate => candidate.id === userId);
+    if (!user) {
+      throw new Error(`Unknown demo principal "${userId}".`);
+    }
+
+    this.currentUserId.set(user.id);
+    this.draftDirty.set(user.prefersDraftGuard);
+    this.workspaceLoads.set(0);
+
+    return user;
+  }
+
   async switchPrincipal(userId: string): Promise<void> {
+    if (this.principalSwitcher) {
+      await this.principalSwitcher(this, userId);
+      return;
+    }
+
     const response = await fetch('/api/session/principal', {
       method: 'POST',
       credentials: 'same-origin',
@@ -157,4 +192,27 @@ export class DemoSessionService {
     };
   }
 
+}
+
+export function provideLocalDemoPrincipalSwitching(): Provider {
+  return {
+    provide: DEMO_PRINCIPAL_SWITCHER,
+    useFactory: () => {
+      const router = inject(Router);
+
+      return async (session: DemoSessionService, userId: string) => {
+        const user = session.activateLocalUser(userId);
+        const filters = user.focusFilters
+          .map(filter => `filters=${encodeURIComponent(filter)}`)
+          .join('&');
+        const target =
+          `/app/workspace/${user.homeProjectId}`
+          + `?view=${encodeURIComponent(user.preferredView)}`
+          + `&page=1`
+          + (filters ? `&${filters}` : '');
+
+        await router.navigate(target);
+      };
+    },
+  };
 }
