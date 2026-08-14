@@ -1,13 +1,13 @@
-# Regular-client Waypoint refactor
+# Waypoint tool layout
 
-This pass removes `@waypoint-demo/runtime` and the synthetic `projects/apps/shared` project.
+The Angular builder now lives beside the existing compiler:
 
-The app now owns ordinary local Angular source:
+```text
+projects/tools/
+  builder/
+  compiler/
+```
 
-- `app.routes.ts` is the authored navigation entry.
-- grouped route contributions live under `app/routes/`.
-- application state lives under `app/core/`.
-- pages/components live under `app/pages/`.
-- route code uses normal relative imports.
+`builder` is intentionally thin. It owns Angular Architect/workspace orchestration; `compiler` remains responsible for navigation semantics and artifact planning.
 
-The existing route compiler is temporarily pointed at the normal client `app.routes.ts`. The next step is a custom Waypoint Angular builder that consumes this ordinary application graph and emits host/protected partitions without requiring application-specific host-module aliases.
+The next change should expose the compiler pipeline as a programmatic API and replace the builder's CLI subprocess with a direct call.

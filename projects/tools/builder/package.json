@@ -1,0 +1,9 @@
+{
+  "name": "@epikodelabs/waypoint-builder",
+  "version": "0.0.0",
+  "private": true,
+  "builders": "./builders.json",
+  "dependencies": {
+    "@angular-devkit/architect": "^0.2100.0"
+  }
+}

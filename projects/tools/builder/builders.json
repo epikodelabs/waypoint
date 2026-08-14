@@ -1,0 +1,20 @@
+{
+  "$schema": "../node_modules/@angular-devkit/architect/src/builders-schema.json",
+  "builders": {
+    "run-script": {
+      "implementation": "./src/run-script/index.cjs",
+      "schema": "./src/run-script/schema.json",
+      "description": "Runs a local Node.js script."
+    },
+    "with-prerequisites": {
+      "implementation": "./src/with-prerequisites/index.cjs",
+      "schema": "./src/with-prerequisites/schema.json",
+      "description": "Runs prerequisite targets before delegating to another target."
+    },
+    "waypoint-build": {
+      "implementation": "./src/waypoint-build/index.cjs",
+      "schema": "./src/waypoint-build/schema.json",
+      "description": "Compile Waypoint artifacts, then run the Angular client build."
+    }
+  }
+}

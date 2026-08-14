@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "title": "Waypoint build",
+  "type": "object",
+  "properties": {
+    "buildTarget": {
+      "type": "string"
+    },
+    "entry": {
+      "type": "string",
+      "default": "src/app/app.routes.ts"
+    },
+    "artifactTsconfig": {
+      "type": "string"
+    },
+    "serverOutput": {
+      "type": "string"
+    },
+    "entriesOutput": {
+      "type": "string"
+    },
+    "manifestOutput": {
+      "type": "string"
+    },
+    "artifactsOutput": {
+      "type": "string"
+    },
+    "routesExport": {
+      "type": "string",
+      "default": "routes"
+    },
+    "profile": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "buildTarget",
+    "artifactTsconfig",
+    "serverOutput",
+    "entriesOutput",
+    "manifestOutput",
+    "artifactsOutput"
+  ],
+  "additionalProperties": false
+}
