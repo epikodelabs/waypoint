@@ -1,2 +1,11 @@
-export { planHostEntry } from './planning/plan-host-entry.js';
-export { emitHostEntry } from './emitters/emit-host-entry.js';
+export {
+  canContainAuthorizationDomain,
+  normalizeAuthorizationDomain,
+  PUBLIC_AUTHORIZATION_DOMAIN,
+} from './planning/authorization-domain.js';
+export type { AuthorizationDomain } from './planning/authorization-domain.js';
+export {
+  deriveArtifactAuthorization,
+  authorizationFor,
+} from './planning/artifact-authorization.js';
+export { validateAuthorizationIsolation } from './validation/validate-authorization-isolation.js';
