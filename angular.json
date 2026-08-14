@@ -247,7 +247,7 @@
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "./tools/waypoint-builders:with-prerequisites",
+          "builder": "./builders:with-prerequisites",
           "options": {
             "delegateTarget": ":application",
             "prerequisiteTargets": [
@@ -317,7 +317,7 @@
           "defaultConfiguration": "production"
         },
         "serve": {
-          "builder": "./tools/waypoint-builders:with-prerequisites",
+          "builder": "./builders:with-prerequisites",
           "options": {
             "delegateTarget": ":dev-server",
             "prerequisiteTargets": [
@@ -351,7 +351,7 @@
           }
         },
         "build-router-compiler": {
-          "builder": "./tools/waypoint-builders:run-script",
+          "builder": "./builders:run-script",
           "options": {
             "script": "scripts/build-compiler.mjs",
             "args": [
@@ -365,7 +365,7 @@
           "defaultConfiguration": "development"
         },
         "compile-routes": {
-          "builder": "./tools/waypoint-builders:run-script",
+          "builder": "./builders:run-script",
           "options": {
             "script": "scripts/compile-routes.mjs"
           },
