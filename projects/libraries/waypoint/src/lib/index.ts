@@ -50,3 +50,4 @@ export type {
   RouteResolutionContext,
   RouterOptions,
 } from './router';
+export { provideRouter, provideRouter as provideClientRouter } from './router';

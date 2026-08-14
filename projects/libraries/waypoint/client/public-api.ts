@@ -1,5 +1,6 @@
 export {
   provideRouter as provideClientRouter,
+  provideRouter,
   type NamedRouteDefinition,
   type ResolvedNavigationConfiguration,
   type RouteResolution,
