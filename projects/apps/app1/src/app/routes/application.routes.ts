@@ -1,9 +1,11 @@
 import { inject } from '@angular/core';
 import {
   frame,
+  layout,
   lazyRoute,
   redirectRoute,
   route,
+  routeSlot,
   routesFor,
   s,
   type NavigationTree,
@@ -11,6 +13,7 @@ import {
 
 import { DemoSessionService } from '../core/demo-session.service';
 import {
+  DemoShellComponent,
   EditorPage,
   EditorSidebarComponent,
   ReportsSidebarComponent,
@@ -133,7 +136,7 @@ export const reportsSidebarRoute = route(
   },
 );
 
-const entries = [
+const branchEntries = [
   appHomeRoute,
   workspaceRoute,
   workspaceSidebarRoute,
@@ -143,6 +146,13 @@ const entries = [
   editorSidebarRoute,
   reportsRoute,
   reportsSidebarRoute,
+] as const satisfies NavigationTree;
+
+const entries = [
+  layout('/app', DemoShellComponent, [
+    ...branchEntries,
+    routeSlot('administration'),
+  ]),
 ] as const satisfies NavigationTree;
 
 export const applicationRoutes = routesFor('application', 'application-core', entries);
