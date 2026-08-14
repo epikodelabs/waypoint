@@ -1,37 +1,53 @@
 /*
-After plan() and host-only app.routes.ts generation, but BEFORE scheduling Angular:
+The Angular builder should now use exactly the same transaction.
 
-const prepared = await prepareProtectedBuild(
-  plannedCompilerOptions,
-  planned.plan,
-  layout.metadataRoot,
+const sources = await prepareArtifactSources(
+  compilerOutputs,
+  artifactPlan,
+);
+
+const transaction = await createBuildTransaction(
+  compilerOutputs,
+  artifactPlan,
+  sources,
 );
 
 try {
-  const replacements = ...host-route replacement...;
-
-  const overrides = withWaypointRuntimePolyfill(
-    {
-      ...baseOptions,
-      fileReplacements: replacements,
-    },
-    prepared.hostRuntimeEntry,
+  // Before publish(), use transaction.sources for host integration.
+  const hostRuntime = await emitHostRuntimeEntry(
+    ...,
+    transaction.sources.hostRuntimeModules,
   );
 
-  const scheduled = await context.scheduleTarget(target, overrides);
-  ...
+  const hostEntry = await emitHostEntry(...);
+
+  const angular = await scheduleAngularHost({
+    hostEntry,
+    hostRuntime,
+  });
+
+  if (!angular.success) {
+    await transaction.rollback();
+    return angular;
+  }
+
+  const result = await transaction.publish();
+  report(result.diagnostics);
+
+  return result.success
+    ? { success: true }
+    : { success: false, error: 'Waypoint publication failed.' };
 } finally {
-  await prepared.dispose();
+  await transaction.dispose();
 }
 
-The important property is ordering:
+Now the builder never calls monolithic compile().
 
-  plan
-    -> AOT protected source preparation
-    -> discover identity-sensitive package imports
-    -> generate host runtime registrar
-    -> Angular host build (registrar injected automatically)
-    -> protected bundling
+Ownership is explicit:
 
-Application code never imports or registers host module namespaces.
+builder
+  owns WaypointBuildTransaction
+    owns PreparedArtifactSources
+    owns snapshots
+    owns publication lifetime
 */

@@ -1,5 +1,13 @@
-export { createSharedArtifact } from './planning/shared-artifact.js';
-export type { PlannedSharedArtifact } from './planning/shared-artifact.js';
-export { planSharedArtifacts } from './planning/plan-shared-artifacts.js';
-export { linkSharedArtifacts } from './planning/link-shared-artifacts.js';
-export { artifactDeliveryOrder } from './publication/delivery-order.js';
+export {
+  createBuildTransaction,
+} from './compiler/build-transaction.js';
+export type {
+  BuildTransactionResult,
+  WaypointBuildTransaction,
+} from './compiler/build-transaction.js';
+export {
+  snapshotDirectory,
+} from './compiler/output-snapshot.js';
+export type {
+  OutputSnapshot,
+} from './compiler/output-snapshot.js';
