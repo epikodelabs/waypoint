@@ -179,36 +179,22 @@ describe('server routing', () => {
   });
 });
 
-describe('server executable identity', () => {
-  it('changes route identity when a transitive dependency hash changes', () => {
-    const first = {
+describe('server effective artifact identity', () => {
+  it('changes when a transitive dependency content hash changes', () => {
+    const first: ServerArtifactIndex = {
       artifacts: [
-        {
-          artifactKey: 'shared',
-          routeSetId: 'shared',
-          dependencies: [],
-          branchIds: ['shared-branch'],
-          file: 'shared.js',
-          hash: 'S1',
-        },
-        {
-          artifactKey: 'route',
-          routeSetId: 'route',
-          dependencies: ['shared'],
-          branchIds: ['route-branch'],
-          file: 'route.js',
-          hash: 'R1',
-        },
+        artifact('shared', [], ['shared']),
+        artifact('route', ['shared'], ['route']),
       ],
     };
 
-    const second = {
+    const second: ServerArtifactIndex = {
       artifacts: [
         {
-          ...first.artifacts[0]!,
-          hash: 'S2',
+          ...artifact('shared', [], ['shared']),
+          hash: 'OTHER',
         },
-        first.artifacts[1]!,
+        artifact('route', ['shared'], ['route']),
       ],
     };
 

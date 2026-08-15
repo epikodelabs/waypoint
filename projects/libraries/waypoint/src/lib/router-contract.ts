@@ -10,6 +10,15 @@ import type {
   RouterState,
 } from './vanilla-router';
 
+/**
+ * @deprecated Server-driven routers refresh the authorized tree by default.
+ * Kept temporarily so existing callers can request the legacy explicit
+ * authorization-boundary behavior while migrating.
+ */
+export interface RouterRevalidationOptions {
+  readonly resetResolvedRoutes?: boolean;
+}
+
 export type RouterReloadReason =
   | 'reset'
   | 'principal-change';
@@ -55,7 +64,7 @@ export abstract class Router<TRoutes extends NavigationTree = any> {
     options?: NavigationOptions,
   ): Promise<boolean>;
   abstract href(target: NavigationTarget | null | undefined): string | null;
-  abstract revalidate(): Promise<boolean>;
+  abstract revalidate(options?: RouterRevalidationOptions): Promise<boolean>;
   abstract reload(options?: RouterReloadOptions): Promise<never>;
   abstract updateHistoryState(state: unknown): void;
   abstract preload(): Promise<void>;

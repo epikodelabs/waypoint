@@ -1,27 +1,33 @@
 /** Stable wire protocol version for server-resolved Waypoint navigation. */
-export const WAYPOINT_SERVER_DELIVERY_VERSION = 2 as const;
+export const WAYPOINT_SERVER_DELIVERY_VERSION = 1 as const;
 
 export type ServerArtifactDeliveryKind = 'route' | 'shared';
 
-/** One browser-loadable artifact selected and authorized by the server. */
+/**
+ * Existing v1 target-resolution descriptor.
+ *
+ * Keep this contract intentionally small and backward-compatible.
+ */
 export interface ServerArtifactDelivery {
-  readonly kind: ServerArtifactDeliveryKind;
   readonly artifactKey: string;
   readonly moduleUrl: string;
   readonly hash: string;
+}
 
-  /**
-   * Effective executable identity of this artifact including its transitive
-   * dependency content identities. This is deliberately opaque to the browser.
-   */
+/**
+ * Full-configuration refresh descriptor.
+ *
+ * `kind` and dependency-aware `identity` are refresh-only metadata; they are
+ * not added to ordinary target-resolution responses.
+ */
+export interface ServerConfigurationArtifactDelivery
+  extends ServerArtifactDelivery {
+  readonly kind: ServerArtifactDeliveryKind;
   readonly identity: string;
 }
 
 /**
  * Complete server-authorized delivery plan for one requested destination.
- *
- * Artifacts are dependency-first. Shared artifacts may appear in the plan, but
- * only route artifacts contribute `routesFor()` definitions to navigation.
  */
 export interface ServerNavigationResolution {
   readonly version: typeof WAYPOINT_SERVER_DELIVERY_VERSION;
@@ -29,16 +35,13 @@ export interface ServerNavigationResolution {
   readonly artifacts: readonly ServerArtifactDelivery[];
 }
 
+/**
+ * Complete authorized executable navigation set used only by revalidate().
+ */
 export interface ServerNavigationConfiguration {
   readonly version: typeof WAYPOINT_SERVER_DELIVERY_VERSION;
-
-  /**
-   * Stable identity of the complete authorized executable navigation set.
-   * Equal revision means revalidation is a strict no-op.
-   */
   readonly revision: string;
-
-  readonly artifacts: readonly ServerArtifactDelivery[];
+  readonly artifacts: readonly ServerConfigurationArtifactDelivery[];
   readonly landing?: string;
 }
 
@@ -47,11 +50,15 @@ export function isServerNavigationConfiguration(
 ): value is ServerNavigationConfiguration {
   if (!value || typeof value !== 'object') return false;
 
-  const candidate = value as Partial<ServerNavigationConfiguration>;
+  const candidate =
+    value as Partial<ServerNavigationConfiguration>;
+
   return candidate.version === WAYPOINT_SERVER_DELIVERY_VERSION
     && nonEmptyString(candidate.revision)
     && Array.isArray(candidate.artifacts)
-    && candidate.artifacts.every(isServerArtifactDelivery)
+    && candidate.artifacts.every(
+      isServerConfigurationArtifactDelivery,
+    )
     && (
       candidate.landing === undefined
       || (
@@ -67,24 +74,56 @@ export function isServerNavigationResolution(
 ): value is ServerNavigationResolution {
   if (!value || typeof value !== 'object') return false;
 
-  const candidate = value as Partial<ServerNavigationResolution>;
-  return candidate.version === WAYPOINT_SERVER_DELIVERY_VERSION
-    && nonEmptyString(candidate.artifactKey)
-    && Array.isArray(candidate.artifacts)
-    && candidate.artifacts.every(isServerArtifactDelivery);
+  const candidate =
+    value as Partial<ServerNavigationResolution>;
+
+  if (
+    candidate.version !== WAYPOINT_SERVER_DELIVERY_VERSION
+    || !nonEmptyString(candidate.artifactKey)
+    || !Array.isArray(candidate.artifacts)
+    || !candidate.artifacts.every(isServerArtifactDelivery)
+  ) {
+    return false;
+  }
+
+  const keys =
+    candidate.artifacts.map(
+      artifact => artifact.artifactKey,
+    );
+
+  return new Set(keys).size === keys.length
+    && keys.includes(candidate.artifactKey);
 }
 
 export function isServerArtifactDelivery(
   value: unknown,
 ): value is ServerArtifactDelivery {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
 
-  const candidate = value as Partial<ServerArtifactDelivery>;
-  return (candidate.kind === 'route' || candidate.kind === 'shared')
-    && nonEmptyString(candidate.artifactKey)
+  const candidate =
+    value as Partial<ServerArtifactDelivery>;
+
+  return nonEmptyString(candidate.artifactKey)
     && nonEmptyString(candidate.moduleUrl)
-    && nonEmptyString(candidate.hash)
-    && nonEmptyString(candidate.identity);
+    && nonEmptyString(candidate.hash);
+}
+
+export function isServerConfigurationArtifactDelivery(
+  value: unknown,
+): value is ServerConfigurationArtifactDelivery {
+  if (!isServerArtifactDelivery(value)) {
+    return false;
+  }
+
+  const candidate =
+    value as Partial<ServerConfigurationArtifactDelivery>;
+
+  return (
+    candidate.kind === 'route'
+    || candidate.kind === 'shared'
+  ) && nonEmptyString(candidate.identity);
 }
 
 function nonEmptyString(value: unknown): value is string {

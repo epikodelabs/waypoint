@@ -53,6 +53,7 @@ import {
   Router as RouterContract,
   RouterReloadError,
   type RouterReloadOptions,
+  type RouterRevalidationOptions,
 } from './router-contract';
 
 import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-events';
@@ -1215,10 +1216,26 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     return null;
   }
 
-  async revalidate(): Promise<boolean> {
+  async revalidate(
+    options: RouterRevalidationOptions = {},
+  ): Promise<boolean> {
     const resolveConfiguration =
       this.configuration.resolveRoutes
         ?.resolveConfiguration;
+
+    /*
+     * Compatibility path for pre-configuration-resolver integrations.
+     *
+     * Existing callers that explicitly requested resetResolvedRoutes must keep
+     * the old fail-closed behavior until they migrate to the new full
+     * configuration endpoint.
+     */
+    if (
+      !resolveConfiguration
+      && options.resetResolvedRoutes
+    ) {
+      return this.revalidateLegacyResolvedRoutes();
+    }
 
     if (!resolveConfiguration) {
       try {
@@ -1341,6 +1358,73 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         this.configurationResolutionController =
           null;
       }
+    }
+  }
+
+  private async revalidateLegacyResolvedRoutes(): Promise<boolean> {
+    this.resolutionGeneration++;
+    this.navigationRequestId++;
+    this.resolvedRoutes =
+      Object.freeze([]);
+    this.resolvedContributionsById.clear();
+    this.resolvedContributionIdentityById.clear();
+    this.resolvedConfigurationRevision =
+      undefined;
+    this.unresolvedRouteKeys.clear();
+    this.abortResolvedRouteRequests();
+    this.resolvingRouteKeys.clear();
+    this.rebuildResolvedRegistry();
+
+    const location =
+      getRouterLocation(this.document);
+
+    const url =
+      resolveRouterUrl(
+        `${location.pathname}${location.search}${location.hash}`,
+        this.baseHref,
+        location,
+        'navigate',
+      );
+
+    try {
+      if (
+        this.configuration.resolveRoutes
+        && url.origin === location.origin
+        && isPathInsideBase(
+          url.pathname,
+          this.baseHref,
+        )
+      ) {
+        await this.resolveRoutesForUrl(
+          url,
+          {
+            force: true,
+            install: false,
+          },
+        );
+      }
+
+      /*
+       * The engine may not exist yet when revalidation races initial
+       * server-resolution startup. The registry revocation/re-resolution above
+       * is still valid; there is simply no active view to rematch.
+       */
+      if (!this.engine) {
+        return false;
+      }
+
+      return await this.installCurrentRegistry();
+    } catch (error) {
+      try {
+        if (this.engine) {
+          await this.installCurrentRegistry();
+        }
+      } catch {
+        // Preserve original authorization/resolution failure.
+      }
+
+      this.recordNavigationError(error);
+      throw error;
     }
   }
 

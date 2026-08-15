@@ -10,6 +10,7 @@ import {
   isServerNavigationConfiguration,
   isServerNavigationResolution,
   type ServerArtifactDelivery,
+  type ServerConfigurationArtifactDelivery,
 } from './server-delivery';
 
 export interface ServerNavigationFetchResponse {
@@ -79,7 +80,9 @@ interface RouteModule {
 
 export class ServerNavigationArtifactLoadError extends Error {
   constructor(
-    public readonly descriptor: ServerArtifactDelivery,
+    public readonly descriptor:
+      | ServerArtifactDelivery
+      | ServerConfigurationArtifactDelivery,
     public override readonly cause: unknown,
   ) {
     super(
@@ -140,7 +143,9 @@ export function createServerNavigationResolver(
   const latestIdentityByArtifact = new Map<string, string>();
 
   async function importArtifact(
-    descriptor: ServerArtifactDelivery,
+    descriptor:
+      | ServerArtifactDelivery
+      | ServerConfigurationArtifactDelivery,
   ): Promise<unknown> {
     const identity = deliveryIdentity(descriptor);
     const existing = loadedArtifacts.get(identity);
@@ -176,7 +181,9 @@ export function createServerNavigationResolver(
   }
 
   async function importRouteContribution(
-    descriptor: ServerArtifactDelivery,
+    descriptor:
+      | ServerArtifactDelivery
+      | ServerConfigurationArtifactDelivery,
   ): Promise<RouteContributionDefinition> {
     const loaded = await importArtifact(descriptor) as RouteModule;
     const contribution = loaded?.default;
@@ -191,7 +198,10 @@ export function createServerNavigationResolver(
   }
 
   async function loadDeliveryPlan(
-    artifacts: readonly ServerArtifactDelivery[],
+    artifacts: readonly (
+      | ServerArtifactDelivery
+      | ServerConfigurationArtifactDelivery
+    )[],
     signal?: AbortSignal,
   ): Promise<Readonly<{
     contributions: readonly RouteContributionDefinition[];
@@ -203,7 +213,7 @@ export function createServerNavigationResolver(
     for (const artifact of artifacts) {
       throwIfAborted(signal);
 
-      if (artifact.kind === 'shared') {
+      if ('kind' in artifact && artifact.kind === 'shared') {
         await importArtifact(artifact);
         continue;
       }
@@ -420,9 +430,13 @@ function resolutionRequestUrl(
 }
 
 function deliveryIdentity(
-  descriptor: ServerArtifactDelivery,
+  descriptor:
+    | ServerArtifactDelivery
+    | ServerConfigurationArtifactDelivery,
 ): string {
-  return descriptor.identity;
+  return 'identity' in descriptor
+    ? descriptor.identity
+    : `${descriptor.artifactKey}:${descriptor.hash}`;
 }
 
 function unwrapArtifactLoadError(

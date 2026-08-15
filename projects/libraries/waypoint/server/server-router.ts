@@ -12,7 +12,7 @@ import {
 } from './server-routing';
 import {
   WAYPOINT_SERVER_DELIVERY_VERSION,
-  type ServerArtifactDelivery,
+  type ServerConfigurationArtifactDelivery,
   type ServerNavigationConfiguration,
   type ServerNavigationResolution,
 } from './server-delivery';
@@ -253,7 +253,7 @@ export function createServerRouter<
       }
     }
 
-    const artifacts: ServerArtifactDelivery[] =
+    const artifacts: ServerConfigurationArtifactDelivery[] =
       ordered.map(artifact => {
         if (!artifact.file || !artifact.hash) {
           throw new ServerArtifactResolutionError(
@@ -389,7 +389,7 @@ export function createServerRouter<
 
 
 function configurationRevision(
-  artifacts: readonly ServerArtifactDelivery[],
+  artifacts: readonly ServerConfigurationArtifactDelivery[],
 ): string {
   return `v1:${artifacts
     .map(
