@@ -6,7 +6,7 @@ import {
 } from '@epikodelabs/waypoint';
 
 import { AdminPage, AdminSidebarComponent } from '../demo/admin-pages';
-import { DemoSessionService } from '@waypoint-demo/runtime';
+import { DemoSessionService } from '../core/demo-session.service';
 
 export const adminRoute = route(
   '/admin',

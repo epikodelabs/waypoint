@@ -182,6 +182,7 @@ export function createServerNavigationResolution<T extends ServerArtifactRecord>
     }
 
     return Object.freeze({
+      kind: 'route' as const,
       artifactKey: artifact.artifactKey,
       moduleUrl,
       hash: artifact.hash,

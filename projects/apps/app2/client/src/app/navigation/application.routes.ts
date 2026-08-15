@@ -11,7 +11,7 @@ import {
   type NavigationTree,
 } from '@epikodelabs/waypoint';
 
-import { DemoSessionService } from '@waypoint-demo/runtime';
+import { DemoSessionService } from '../core/demo-session.service';
 import {
   DemoShellComponent,
   EditorPage,

@@ -1,4 +1,7 @@
-import type { RouteContributionDefinition } from '@epikodelabs/waypoint';
+import type {
+  NavigationTree,
+  RouteContributionDefinition,
+} from '@epikodelabs/waypoint';
 import {
   registerServerNavigationHostModules,
   type ServerNavigationHostModules,
@@ -50,6 +53,18 @@ export type ServerNavigationResolver = (
 
 interface RouteModule {
   readonly default?: unknown;
+}
+
+export class ServerNavigationArtifactLoadError extends Error {
+  constructor(
+    public readonly descriptor: ServerArtifactDelivery,
+    public override readonly cause: unknown,
+  ) {
+    super(
+      `Failed to load server navigation artifact "${descriptor.artifactKey}" from "${descriptor.moduleUrl}".`,
+    );
+    this.name = 'ServerNavigationArtifactLoadError';
+  }
 }
 
 /**
@@ -227,9 +242,84 @@ export function createServerNavigationResolver(
   };
 }
 
-/* Existing helpers below this point remain unchanged:
- * normalizeEndpoint, normalizeRetryCount, resolutionRequestUrl,
- * deliveryIdentity, ServerNavigationArtifactLoadError,
- * unwrapArtifactLoadError, throwIfAborted, defaultFetch,
- * defaultImportModule, isRouteContributionDefinition.
- */
+function normalizeEndpoint(endpoint: string): string {
+  const normalized = endpoint.trim();
+  if (!normalized) {
+    throw new Error('Server navigation endpoint must not be empty.');
+  }
+
+  return normalized;
+}
+
+function normalizeRetryCount(value: number): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error('Server navigation artifactRefreshRetries must be a non-negative number.');
+  }
+
+  return Math.floor(value);
+}
+
+function resolutionRequestUrl(
+  endpoint: string,
+  target: string,
+): string {
+  const separator =
+    endpoint.includes('?')
+      ? (endpoint.endsWith('?') || endpoint.endsWith('&') ? '' : '&')
+      : '?';
+
+  return `${endpoint}${separator}path=${encodeURIComponent(target)}`;
+}
+
+function deliveryIdentity(
+  descriptor: ServerArtifactDelivery,
+): string {
+  return `${descriptor.artifactKey}:${descriptor.hash}`;
+}
+
+function unwrapArtifactLoadError(
+  error: ServerNavigationArtifactLoadError,
+): Error {
+  return error.cause instanceof Error
+    ? error.cause
+    : new Error(String(error.cause));
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+
+  throw signal.reason instanceof Error
+    ? signal.reason
+    : new Error('The operation was aborted.');
+}
+
+const defaultFetch: ServerNavigationFetch = async (
+  input,
+  init,
+) => {
+  return fetch(input, init);
+};
+
+const defaultImportModule: ServerNavigationModuleImporter = async (
+  moduleUrl,
+) => {
+  return import(moduleUrl);
+};
+
+export function isRouteContributionDefinition(
+  value: unknown,
+): value is RouteContributionDefinition<string, string, NavigationTree> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate =
+    value as Partial<RouteContributionDefinition<string, string, NavigationTree>>;
+
+  return candidate.kind === 'route-contribution'
+    && typeof candidate.id === 'string'
+    && candidate.id.trim().length > 0
+    && typeof candidate.slotId === 'string'
+    && candidate.slotId.trim().length > 0
+    && Array.isArray(candidate.entries);
+}

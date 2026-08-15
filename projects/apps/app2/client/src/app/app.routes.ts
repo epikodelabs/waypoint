@@ -1,12 +1,7 @@
-/*
- * Waypoint navigation module.
- *
- * The compiler follows this module's export graph and collects:
- *   - authored NavigationTree exports;
- *   - routesFor() contribution exports.
- *
- * There is no privileged `routes` export.
- */
+import {
+  routeSlot,
+  type NavigationTree,
+} from '@epikodelabs/waypoint';
 
 export {
   publicRoutes,
@@ -19,3 +14,12 @@ export {
 export {
   administrationRoutes,
 } from './routes/administration.routes';
+
+/**
+ * App 2 ships only the ownership slots in the initial client bundle.
+ * Server-resolved contributions attach to these slots at runtime.
+ */
+export const routes = [
+  routeSlot('public'),
+  routeSlot('application'),
+] as const satisfies NavigationTree;

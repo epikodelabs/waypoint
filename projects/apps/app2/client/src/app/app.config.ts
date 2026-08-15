@@ -1,3 +1,4 @@
+import * as angularCore from '@angular/core';
 import {
   type ApplicationConfig,
   ApplicationModule,
@@ -5,6 +6,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
+import * as waypoint from '@epikodelabs/waypoint';
 import {
   provideRouter,
 } from '@epikodelabs/waypoint';
@@ -24,7 +26,12 @@ export const appConfig: ApplicationConfig = {
     ...provideRouter(routes, {
       viewTransitions: true,
       resolveRoutes:
-        createServerNavigationResolver(),
+        createServerNavigationResolver({
+          hostModules: {
+            '@angular/core': angularCore,
+            '@epikodelabs/waypoint': waypoint,
+          },
+        }),
     }),
   ],
 };

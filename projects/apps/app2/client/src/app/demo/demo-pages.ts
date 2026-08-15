@@ -13,7 +13,7 @@ import {
   type DemoUser,
   type WorkspaceSnapshot,
   DemoSessionService,
-} from '@waypoint-demo/runtime';
+} from '../core/demo-session.service';
 
 type ParamsInput = Record<string, unknown>;
 type QueryInput = Record<string, unknown>;

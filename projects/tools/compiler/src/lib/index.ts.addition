@@ -1,16 +1,3 @@
 export {
-  collectNavigationModuleProgram,
-} from './resolution/navigation-module.js';
-
-export {
-  mergeRootNavigationTrees,
-} from './resolution/merge-root-navigation-trees.js';
-
-export {
-  validateNavigationModule,
-} from './validation/validate-navigation-module.js';
-
-export type {
-  NavigationModuleExport,
-  NavigationModuleProgram,
-} from './resolution/navigation-module.js';
+  validateAuthorizationMonotonicity,
+} from './validation/validate-authorization-monotonicity.js';
