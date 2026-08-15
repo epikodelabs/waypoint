@@ -17,7 +17,7 @@ export interface CompileWaypointResult {
 export async function compileWaypoint(
   options: CompileWaypointOptions,
 ): Promise<CompileWaypointResult> {
-  const { compileRoutes } = await import('./compile-routes');
+  const { compileRoutes } = await import('./compile-routes.js');
   await compileRoutes(options);
   return { success: true };
 }

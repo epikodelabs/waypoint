@@ -1,6 +1,6 @@
 import type {
   SemanticNavigationProgram,
-} from '../semantic/model.js';
+} from '../ir/model.js';
 import type {
   RouteCompilerDiagnostic,
 } from '../compiler/contracts.js';

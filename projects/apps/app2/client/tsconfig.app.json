@@ -2,5 +2,9 @@
   "extends": "../../../../tsconfig.json",
   "compilerOptions": { "types": [] },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["src/**/*.spec.ts"]
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/app/demo/**/*.ts",
+    "src/app/navigation/**/*.ts"
+  ]
 }

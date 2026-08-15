@@ -1,4 +1,4 @@
-import type { SemanticPolicy } from '../semantic/model.js';
+import type { SemanticPolicy } from '../ir/model.js';
 
 export interface AuthorizationDomain {
   readonly allowAnonymous: boolean;
@@ -25,6 +25,20 @@ export function commonAuthorizationDomain(
     allowAnonymous: policies.every(policy => policy.allowAnonymous === true),
     roles: intersect(policies.map(policy => policy.roles ?? [])),
     permissions: intersect(policies.map(policy => policy.permissions ?? [])),
+  });
+}
+
+export function normalizeAuthorizationDomain(
+  policy: {
+    readonly allowAnonymous?: boolean;
+    readonly roles?: readonly string[];
+    readonly permissions?: readonly string[];
+  } | undefined,
+): AuthorizationDomain {
+  return freeze({
+    allowAnonymous: policy?.allowAnonymous === true,
+    roles: Object.freeze([...(policy?.roles ?? [])].sort()),
+    permissions: Object.freeze([...(policy?.permissions ?? [])].sort()),
   });
 }
 

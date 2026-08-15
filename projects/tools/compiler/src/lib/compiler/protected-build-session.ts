@@ -43,7 +43,7 @@ export async function createProtectedBuildSession(
       if (disposed) {
         throw new Error('Waypoint protected build session is already disposed.');
       }
-      return bundleArtifacts(planned, plan, sources);
+      return bundleArtifacts(planned, plan);
     },
 
     async dispose(): Promise<void> {

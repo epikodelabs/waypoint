@@ -119,7 +119,11 @@ function calledName(expression: ts.Expression): string | undefined {
 }
 
 function hasExportModifier(node: ts.Node): boolean {
-  return !!node.modifiers?.some(
+  if (!ts.canHaveModifiers(node)) {
+    return false;
+  }
+
+  return !!ts.getModifiers(node)?.some(
     modifier => modifier.kind === ts.SyntaxKind.ExportKeyword,
   );
 }

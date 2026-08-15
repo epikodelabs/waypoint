@@ -1,6 +1,4 @@
-import type {
-  NavigationTree,
-} from '@epikodelabs/waypoint';
+type NavigationTree = readonly unknown[];
 
 export function mergeRootNavigationTrees(
   trees: readonly NavigationTree[],

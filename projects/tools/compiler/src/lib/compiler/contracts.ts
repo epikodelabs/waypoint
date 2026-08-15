@@ -15,6 +15,7 @@ export interface RouteCompilerOutputs {
   readonly serverOutput: string;
   readonly entriesOutput: string;
   readonly manifestOutput: string;
+  readonly buildManifestOutput?: string;
   /** Output directory reserved for bundled browser artifacts. */
   readonly artifactsOutput?: string;
 }
@@ -76,6 +77,7 @@ export interface PlannedCompilerOutputs {
   readonly serverOutput: string;
   readonly entriesOutput: string;
   readonly manifestOutput: string;
+  readonly buildManifestOutput?: string;
   readonly artifactsOutput: string;
   readonly dryRun: boolean;
   readonly routesExport: string;
@@ -208,6 +210,8 @@ export interface RouteArtifactManifestDocument {
     readonly artifactKey?: string;
   }[];
 }
+
+export type WaypointBuildManifestDocument = RouteArtifactManifestDocument;
 
 export interface PlannedServerShard {
   readonly prefix: string;

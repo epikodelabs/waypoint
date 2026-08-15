@@ -1,5 +1,6 @@
 import type { ExpandedNavigationModel, ExpandedRouteSet } from '../ir/model.js';
 import type { RouteCompilerDiagnostic } from '../compiler/contracts.js';
+import { toSourceSpan } from '../compiler/diagnostics.js';
 import {
   commonAuthorizationDomain,
   type AuthorizationDomain,
@@ -34,7 +35,7 @@ export function deriveRouteSetAuthorization(
         message:
           `Route set "${routeSet.id}" contains branches with different authorization domains. ` +
           `Split the route set so each protected artifact has one delivery audience.`,
-        source: routeSet.source,
+        source: toSourceSpan(routeSet.source),
       });
       break;
     }

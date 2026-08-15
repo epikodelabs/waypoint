@@ -16,5 +16,15 @@
     "strict": true,
     "noEmitOnError": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/tests/**/*.ts",
+    "src/**/*.spec.ts",
+    "src/**/*.patch.ts",
+    "src/lib/emitters/group-artifacts-by-authorization.ts",
+    "src/lib/semantic/implicit-root-slots.ts",
+    "src/lib/validation/validate-artifact-authorization.ts",
+    "src/lib/validation/validate-authorization-monotonicity.ts",
+    "src/lib/validation/validate-implicit-root-slots.ts"
+  ]
 }

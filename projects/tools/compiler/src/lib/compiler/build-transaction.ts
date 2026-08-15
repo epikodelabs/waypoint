@@ -96,7 +96,6 @@ export async function createBuildTransaction(
     const bundles = await bundleArtifacts(
       planned,
       plan,
-      sources,
     );
     diagnostics.push(...bundles.diagnostics);
 

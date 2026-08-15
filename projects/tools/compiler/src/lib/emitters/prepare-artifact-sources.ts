@@ -5,6 +5,7 @@ import {
   discoverHostRuntimeModules,
 } from './discover-host-runtime-modules.js';
 import type {
+  PlannedRouteArtifact,
   PlannedCompilerOutputs,
   RouteArtifactPlan,
 } from '../compiler/contracts.js';
@@ -33,7 +34,7 @@ export async function prepareArtifactSources(
     return Object.freeze({
       outputRoot: compiled.outputRoot,
       hostRuntimeModules,
-      entryFor: artifact => compiled.entryFor(artifact),
+      entryFor: (artifact: PlannedRouteArtifact) => compiled.entryFor(artifact),
       dispose: () => compiled.dispose(),
     });
   } catch (error) {

@@ -4,11 +4,16 @@ import type { PlannedCompilerOutputs, RouteCompilerOptions } from './contracts.j
 export function normalizeCompilerOptions(options: RouteCompilerOptions): PlannedCompilerOutputs {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const manifestOutput = path.resolve(cwd, options.manifestOutput);
+  const artifactTsConfig = options.artifactTsConfig;
+
+  if (!artifactTsConfig) {
+    throw new Error('Route compiler requires artifactTsConfig.');
+  }
 
   return {
     cwd,
     entry: path.resolve(cwd, options.entry),
-    artifactTsConfig: path.resolve(cwd, options.artifactTsConfig),
+    artifactTsConfig: path.resolve(cwd, artifactTsConfig),
     hostModules: normalizeHostModules(options.hostModules),
     serverOutput: path.resolve(cwd, options.serverOutput),
     entriesOutput: path.resolve(cwd, options.entriesOutput),

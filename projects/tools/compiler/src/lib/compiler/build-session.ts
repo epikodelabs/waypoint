@@ -48,7 +48,6 @@ export async function createBuildSession(
       bundled ??= bundleArtifacts(
         planned,
         plan,
-        sources,
       );
 
       return bundled;

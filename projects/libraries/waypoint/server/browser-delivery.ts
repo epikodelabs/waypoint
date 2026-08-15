@@ -303,7 +303,7 @@ const defaultFetch: ServerNavigationFetch = async (
 const defaultImportModule: ServerNavigationModuleImporter = async (
   moduleUrl,
 ) => {
-  return import(moduleUrl);
+  return import(/* @vite-ignore */ moduleUrl);
 };
 
 export function isRouteContributionDefinition(

@@ -2,7 +2,7 @@ import type {
   SemanticNavigationProgram,
   SemanticRouteContribution,
   SemanticRouteSlot,
-} from './model.js';
+} from '../ir/model.js';
 
 export interface ImplicitRootSlotResult {
   readonly program: SemanticNavigationProgram;
