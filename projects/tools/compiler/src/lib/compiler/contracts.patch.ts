@@ -1,32 +1,15 @@
 /*
-Split compiler outputs by purpose.
+Change:
 
-BEFORE
+  readonly routesExport: string;
 
-export interface RouteCompilerOutputs {
-  readonly serverOutput: string;
-  readonly manifestOutput: string;
-  readonly artifactsOutput?: string;
-}
+to:
 
-AFTER
+  readonly routesExport?: string;
 
-export interface RouteCompilerOutputs {
-  /** Runtime server routing index consumed by the deployed server. */
-  readonly serverOutput: string;
+in RouteCompilerOptions and PlannedCompilerOutputs.
 
-  /** Browser-deliverable protected artifact root. */
-  readonly artifactsOutput?: string;
+Do not inject "routes" during normalization anymore.
 
-  /**
-   * Optional build/debug manifest. Not required by runtime delivery and should
-   * not participate in the server publication transaction.
-   */
-  readonly buildManifestOutput?: string;
-}
-
-Rename RouteArtifactManifestDocument -> WaypointBuildManifestDocument if that
-type is no longer used by runtime code.
-
-ServerRouteIndexDocument + shards remain runtime deployment contracts.
+The compiler should discover the root when no explicit override exists.
 */

@@ -1,9 +1,14 @@
 /*
-When generating the nested `waypoint` schema:
+For waypoint.routesExport:
 
-- do not add it to the parent schema's `required` array;
-- keep `default: {}`;
-- keep defaults on each nested property.
+- remove the default value;
+- describe it as an ambiguity override.
 
-The parent Angular application schema remains otherwise unchanged.
+Example:
+
+routesExport: {
+  type: 'string',
+  description:
+    'Explicit root navigation export. Usually unnecessary; Waypoint auto-detects a single exported navigation root.',
+}
 */

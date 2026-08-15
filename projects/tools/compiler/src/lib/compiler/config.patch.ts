@@ -1,15 +1,11 @@
 /*
-Rename:
-  manifestOutput
-to:
-  buildManifestOutput
+Remove:
 
-Make it optional.
+  routesExport: options.routesExport ?? 'routes'
 
-Normal custom-builder applications should not need to configure it. If enabled,
-derive a default such as:
+Use:
 
-  <angular output>/.waypoint/build-manifest.json
+  routesExport: options.routesExport
 
-CLI/compiler inspection workflows may still request it explicitly.
+This preserves explicit overrides but makes discovery the normal path.
 */
