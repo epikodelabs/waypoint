@@ -1,15 +1,35 @@
 /*
-Builder derives runtime and debug destinations separately.
+The Angular builder gets an important benefit from the split:
 
-Runtime:
-  protectedRoot
-  serverRoot/index.json
-  serverRoot/shards/
+const pipeline = await prepareBuildPipeline(
+  planned,
+  artifactPlan,
+);
 
-Optional build/debug:
-  metadataRoot/build-manifest.json
+try {
+  // BuildSession resources remain alive here.
+  const runtimeEntry = await emitHostRuntimeEntry(
+    ...,
+    pipeline.session.sources.hostRuntimeModules,
+  );
 
-The server output belongs to the deployable server application.
-`.waypoint/build-manifest.json` is optional tooling state and should never be
-served as part of protected module delivery.
+  const hostResult = await runAngularHost(...);
+
+  if (!hostResult.success) {
+    await pipeline.publication.rollback();
+    return hostResult;
+  }
+
+  const waypoint = await pipeline.publish();
+  ...
+} finally {
+  await pipeline.dispose();
+}
+
+The host build needs BuildSession, but it does not need PublicationTransaction
+internals.
+
+This is the ownership split:
+  BuildSession            -> temporary/compiler lifetime
+  PublicationTransaction  -> deployment mutation lifetime
 */

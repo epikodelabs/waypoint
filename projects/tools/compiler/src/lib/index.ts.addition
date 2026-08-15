@@ -1,9 +1,21 @@
 export {
-  finalizeRuntimeServerIndex,
-} from './planning/finalize-runtime-delivery.js';
+  createBuildSession,
+} from './compiler/build-session.js';
+export type {
+  BuildSession,
+} from './compiler/build-session.js';
+
 export {
-  finalizeBuildManifest,
-} from './planning/finalize-build-manifest.js';
+  createPublicationTransaction,
+} from './compiler/publication-transaction.js';
+export type {
+  PublicationResult,
+  PublicationTransaction,
+} from './compiler/publication-transaction.js';
+
 export {
-  emitBuildManifest,
-} from './emitters/emit-build-manifest.js';
+  prepareBuildPipeline,
+} from './compiler/build-pipeline.js';
+export type {
+  PreparedBuildPipeline,
+} from './compiler/build-pipeline.js';

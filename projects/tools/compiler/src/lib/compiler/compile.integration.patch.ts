@@ -1,43 +1,28 @@
 /*
-After plan validation:
+After Artifact Plan validation:
 
-const sources = await prepareArtifactSources(
+const pipeline = await prepareBuildPipeline(
   planned,
   artifactPlan,
-);
-
-const transaction = await createBuildTransaction(
-  planned,
-  artifactPlan,
-  sources,
 );
 
 try {
-  const result = await transaction.publish();
-
+  const result = await pipeline.publish();
   diagnostics.push(...result.diagnostics);
   emitted.push(...result.emitted);
-  bundles = result.bundles;
-  delivery = result.delivery;
 
   if (!result.success) {
     return finish(false);
   }
 } finally {
-  await transaction.dispose();
+  await pipeline.dispose();
 }
 
-Delete from compile.ts:
-- direct snapshotDirectory ownership
-- emitBrowserEntries call
-- direct bundleArtifacts call
-- finalizeDeliveryDocuments call
-- validateFinalizedDelivery call
-- emitServerArtifacts call
-- restoreSnapshots/discardSnapshots helpers
+compile() no longer owns:
+- PreparedArtifactSources directly
+- output snapshots
+- publication commit/rollback
+- build-manifest emission
 
-compile() remains responsible for:
-resolve -> evaluate -> IR -> validate -> expand -> plan -> validate plan
-
-The transaction owns everything after that.
+Its job is orchestration only.
 */
