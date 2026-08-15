@@ -30,6 +30,9 @@ describe('server HTTP handler', () => {
         calls += 1;
         return null;
       },
+      async resolveLanding() {
+        return null;
+      },
       async resolveModule() {
         return null;
       },
@@ -51,6 +54,9 @@ describe('server HTTP handler', () => {
       async resolve() {
         return null;
       },
+      async resolveLanding() {
+        return null;
+      },
       async resolveModule() {
         return null;
       },
@@ -66,9 +72,10 @@ describe('server HTTP handler', () => {
 
   it('returns authorized resolution using private non-cacheable headers', async () => {
     const resolution = {
-      version: 1 as const,
+      version: 2 as const,
       artifactKey: 'workspace',
       artifacts: [{
+        kind: 'route' as const,
         artifactKey: 'workspace',
         moduleUrl: '/modules/workspace/ABC123',
         hash: 'ABC123',
@@ -77,6 +84,9 @@ describe('server HTTP handler', () => {
     const handler = createServerRouterHttpHandler<Artifact>({
       async resolve() {
         return resolution;
+      },
+      async resolveLanding() {
+        return null;
       },
       async resolveModule() {
         return null;
@@ -94,6 +104,12 @@ describe('server HTTP handler', () => {
   it('maps publication failure to 503 only on authorized route resolution', async () => {
     const handler = createServerRouterHttpHandler<Artifact>({
       async resolve() {
+        throw new ServerArtifactResolutionError(
+          'unavailable',
+          'Artifact is not published.',
+        );
+      },
+      async resolveLanding() {
         throw new ServerArtifactResolutionError(
           'unavailable',
           'Artifact is not published.',
@@ -125,6 +141,9 @@ describe('server HTTP handler', () => {
       async resolve() {
         return null;
       },
+      async resolveLanding() {
+        return null;
+      },
       async resolveModule() {
         return artifact;
       },
@@ -147,6 +166,9 @@ describe('server HTTP handler', () => {
       async resolve() {
         return null;
       },
+      async resolveLanding() {
+        return null;
+      },
       async resolveModule() {
         calls += 1;
         return null;
@@ -162,5 +184,134 @@ describe('server HTTP handler', () => {
       hash: 'old',
     })).status).toBe(404);
     expect(calls).toBe(1);
+  });
+
+  it('returns a private reload destination when the current target is still authorized', async () => {
+    const principal = {
+      subject: 'reader',
+      roles: new Set(['user']),
+      permissions: new Set(['read']),
+    };
+    const seenTargets: string[] = [];
+    const seenPrincipals: unknown[] = [];
+    const handler = createServerRouterHttpHandler<Artifact>({
+      async resolve(target, actual) {
+        seenTargets.push(String(target));
+        seenPrincipals.push(actual);
+        return {
+          version: 2 as const,
+          artifactKey: 'workspace',
+          artifacts: [{
+            kind: 'route' as const,
+            artifactKey: 'workspace',
+            moduleUrl: '/modules/workspace/ABC123',
+            hash: 'ABC123',
+          }],
+        };
+      },
+      async resolveLanding() {
+        return null;
+      },
+      async resolveModule() {
+        return null;
+      },
+    });
+
+    expect(await handler.reload({
+      reason: 'reset',
+      target: '/workspace?tab=files',
+      principal,
+    })).toEqual({
+      kind: 'json',
+      status: 200,
+      headers: WAYPOINT_PRIVATE_NO_STORE_HEADERS,
+      body: {
+        version: 1,
+        location: '/workspace?tab=files',
+      },
+    });
+    expect(seenTargets).toEqual(['/workspace?tab=files']);
+    expect(seenPrincipals).toEqual([principal]);
+  });
+
+  it('resets the principal before selecting a new public reload destination', async () => {
+    const seenPrincipals: unknown[] = [];
+    const resetContexts: string[] = [];
+    const handler = createServerRouterHttpHandler<
+      Artifact,
+      Readonly<{ sessionId: string }>
+    >({
+      async resolve(_target, principal) {
+        seenPrincipals.push(principal);
+        return null;
+      },
+      async resolveLanding(targets, principal) {
+        seenPrincipals.push(principal);
+        return typeof targets[0] === 'string'
+          ? targets[0]
+          : null;
+      },
+      async resolveModule() {
+        return null;
+      },
+    }, {
+      reload: {
+        publicLocation: '/?account=choose',
+        async resetPrincipal(context) {
+          resetContexts.push(context.sessionId);
+        },
+      },
+    });
+
+    expect(await handler.reload({
+      reason: 'principal-change',
+      target: '/admin',
+      principal: {
+        subject: 'admin',
+        roles: new Set(['admin']),
+        permissions: new Set(['manage']),
+      },
+      context: {
+        sessionId: 'session-1',
+      },
+    })).toEqual({
+      kind: 'json',
+      status: 200,
+      headers: WAYPOINT_PRIVATE_NO_STORE_HEADERS,
+      body: {
+        version: 1,
+        location: '/?account=choose',
+      },
+    });
+    expect(resetContexts).toEqual(['session-1']);
+    expect(seenPrincipals).toEqual([undefined, undefined]);
+  });
+
+  it('rejects external reload targets before invoking the router', async () => {
+    let calls = 0;
+    const handler = createServerRouterHttpHandler<Artifact>({
+      async resolve() {
+        calls += 1;
+        return null;
+      },
+      async resolveLanding() {
+        calls += 1;
+        return null;
+      },
+      async resolveModule() {
+        return null;
+      },
+    });
+
+    expect(await handler.reload({
+      reason: 'reset',
+      target: 'https://evil.example/phish',
+    })).toEqual({
+      kind: 'json',
+      status: 400,
+      headers: WAYPOINT_PRIVATE_NO_STORE_HEADERS,
+      body: { error: 'Invalid reload target.' },
+    });
+    expect(calls).toBe(0);
   });
 });

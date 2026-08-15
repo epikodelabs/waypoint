@@ -10,6 +10,9 @@ export {
   ROUTE,
   ROUTE_CONTEXT,
   Router,
+  RouterReloadError,
+  type RouterReloadOptions,
+  type RouterReloadReason,
   type RouterRevalidationOptions,
 } from './router-contract';
 export * from './router-events';

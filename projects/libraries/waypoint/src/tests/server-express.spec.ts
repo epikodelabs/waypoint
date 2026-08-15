@@ -35,7 +35,10 @@ class ResponseDouble implements ExpressLikeResponse {
   }
 
   set(headers: Readonly<Record<string, string>>): ExpressLikeResponse {
-    this.headers = headers;
+    this.headers = {
+      ...this.headers,
+      ...headers,
+    };
     return this;
   }
 
@@ -62,8 +65,9 @@ class ResponseDouble implements ExpressLikeResponse {
 function request(
   query: Readonly<Record<string, unknown>> = {},
   params: Readonly<Record<string, string | undefined>> = {},
+  body?: unknown,
 ): ExpressLikeRequest {
-  return { query, params };
+  return { query, params, body };
 }
 
 function nextSpy(): { next: ExpressLikeNext; errors: unknown[] } {
@@ -82,14 +86,18 @@ describe('Express server router adapter', () => {
       router: {
         async resolve() {
           return {
-            version: 1,
+            version: 2 as const,
             artifactKey: 'workspace',
             artifacts: [{
+              kind: 'route' as const,
               artifactKey: 'workspace',
               moduleUrl: '/modules/workspace/ABC123',
               hash: 'ABC123',
             }],
           };
+        },
+        async resolveLanding() {
+          return null;
         },
         async resolveModule() {
           return null;
@@ -118,6 +126,10 @@ describe('Express server router adapter', () => {
     const handlers = createExpressServerRouterHandlers<Artifact, ExpressLikeRequest>({
       router: {
         async resolve(_target, actual) {
+          seen.push(actual);
+          return null;
+        },
+        async resolveLanding(_targets, actual) {
           seen.push(actual);
           return null;
         },
@@ -151,6 +163,9 @@ describe('Express server router adapter', () => {
         async resolve() {
           return null;
         },
+        async resolveLanding() {
+          return null;
+        },
         async resolveModule() {
           return artifact;
         },
@@ -176,6 +191,9 @@ describe('Express server router adapter', () => {
     const handlers = createExpressServerRouterHandlers<Artifact>({
       router: {
         async resolve() {
+          return null;
+        },
+        async resolveLanding() {
           return null;
         },
         async resolveModule() {
@@ -208,6 +226,9 @@ describe('Express server router adapter', () => {
         async resolve() {
           throw failure;
         },
+        async resolveLanding() {
+          return null;
+        },
         async resolveModule() {
           return null;
         },
@@ -220,5 +241,72 @@ describe('Express server router adapter', () => {
     await handlers.resolve(request({ path: '/workspace' }), response, next);
 
     expect(errors).toEqual([failure]);
+  });
+
+  it('translates reload responses and lets reset hooks touch the response', async () => {
+    const principal = {
+      subject: 'reader',
+      roles: new Set(['user']),
+      permissions: new Set(['read']),
+    };
+    const resetBodies: unknown[] = [];
+    const handlers = createExpressServerRouterHandlers<
+      Artifact,
+      ExpressLikeRequest,
+      ResponseDouble
+    >({
+      router: {
+        async resolve() {
+          return null;
+        },
+        async resolveLanding(targets, actual) {
+          expect(actual).toBeUndefined();
+          return typeof targets[0] === 'string'
+            ? targets[0]
+            : null;
+        },
+        async resolveModule() {
+          return null;
+        },
+      },
+      principalFrom: () => principal,
+      artifactPathFor: item => item.file,
+      reload: {
+        publicLocation: '/?account=choose',
+        async resetPrincipal(request, response) {
+          resetBodies.push(request.body);
+          response.set({
+            'Clear-Site-Data': '"cache"',
+          });
+        },
+      },
+    });
+    const response = new ResponseDouble();
+    const { next, errors } = nextSpy();
+
+    await handlers.reload(
+      request({}, {}, {
+        reason: 'principal-change',
+        target: '/app/workspace/101',
+      }),
+      response,
+      next,
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers).toEqual({
+      'Clear-Site-Data': '"cache"',
+      'Cache-Control': 'private, no-store',
+      Vary: 'Authorization, Cookie',
+    });
+    expect(response.jsonBody).toEqual({
+      version: 1,
+      location: '/?account=choose',
+    });
+    expect(resetBodies).toEqual([{
+      reason: 'principal-change',
+      target: '/app/workspace/101',
+    }]);
+    expect(errors).toEqual([]);
   });
 });

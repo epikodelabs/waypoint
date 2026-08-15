@@ -38,7 +38,8 @@ const serverRouter = createServerRouter<ArtifactDescriptor, Branch>({
 
 const navigation = createExpressServerRouterHandlers<
   ArtifactDescriptor,
-  Request
+  Request,
+  Response
 >({
   router: serverRouter,
   principalFrom: request => request.principal,
@@ -48,27 +49,24 @@ const navigation = createExpressServerRouterHandlers<
     }
     return resolveOutputPath(artifact.file);
   },
+  reload: {
+    publicLocation: '/?account=choose',
+    landingTargets: ['/?account=choose'],
+    async resetPrincipal(_request, response) {
+      response
+        .set({
+          'Clear-Site-Data': '"cache"',
+        })
+        .clearCookie('identity', {
+          path: '/',
+          sameSite: 'lax',
+        });
+    },
+  },
 });
 
 app.use(express.json({ limit: '16kb' }));
 app.use(readPrincipal);
-
-app.post('/api/session/logout', (_request, response) => {
-  response
-    .status(200)
-    .set({
-      'Cache-Control': 'private, no-store',
-      Vary: 'Authorization, Cookie',
-      'Clear-Site-Data': '"cache"',
-    })
-    .clearCookie('identity', {
-      path: '/',
-      sameSite: 'lax',
-    })
-    .json({
-      location: '/?account=choose',
-    });
-});
 
 app.post('/api/session/principal', async (request, response, next) => {
   try {
@@ -117,6 +115,7 @@ app.get('/api/ping', (_request, response) => {
   });
 });
 
+app.post('/api/navigation/reload', navigation.reload);
 app.get('/api/navigation/resolve', navigation.resolve);
 app.get('/api/navigation/modules/:artifactKey/:hash', navigation.module);
 

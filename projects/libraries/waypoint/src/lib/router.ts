@@ -51,6 +51,8 @@ import {
   ROUTE,
   ROUTE_CONTEXT,
   Router as RouterContract,
+  RouterReloadError,
+  type RouterReloadOptions,
   type RouterRevalidationOptions,
 } from './router-contract';
 
@@ -201,6 +203,24 @@ function snapshotRouterState(state: RouterState): RouterState {
     historyState: state.historyState ?? null,
     routeConfig: state.routeConfig ?? null,
   });
+}
+
+function readReloadLocation(payload: unknown): string {
+  if (
+    !payload
+    || typeof payload !== 'object'
+    || (payload as { version?: unknown }).version !== 1
+    || typeof (payload as { location?: unknown }).location !== 'string'
+  ) {
+    throw new Error('Server returned an invalid Waypoint reload response.');
+  }
+
+  const location = (payload as { location: string }).location;
+  if (!location.startsWith('/') || location.startsWith('//')) {
+    throw new Error('Server returned an unsafe Waypoint reload location.');
+  }
+
+  return location;
 }
 
 function execute<TContext, TResult>(
@@ -903,6 +923,30 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       this.recordNavigationError(error);
       throw error;
     }
+  }
+
+  async reload(options: RouterReloadOptions = {}): Promise<never> {
+    const response = await fetch('/api/navigation/reload', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        reason: options.reason ?? 'reset',
+        target: options.target ?? this.displayUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new RouterReloadError(response.status);
+    }
+
+    const payload: unknown = await response.json();
+    window.location.replace(readReloadLocation(payload));
+
+    return new Promise<never>(() => {});
   }
 
   updateHistoryState(state: unknown): void {

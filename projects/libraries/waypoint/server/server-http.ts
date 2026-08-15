@@ -30,6 +30,32 @@ export interface ServerModuleRequest {
   readonly principal?: ServerPrincipal;
 }
 
+export type ServerReloadReason =
+  | 'reset'
+  | 'principal-change';
+
+export interface ServerReloadRequest<
+  TContext = unknown,
+> {
+  readonly reason?: unknown;
+  readonly target?: unknown;
+  readonly principal?: ServerPrincipal;
+  readonly context?: TContext;
+}
+
+export interface ServerReloadOptions<
+  TContext = unknown,
+> {
+  readonly resetPrincipal?: (context: TContext) => void | Promise<void>;
+  readonly publicLocation?: string;
+  readonly landingTargets?: readonly string[];
+}
+
+export interface ServerReloadResult {
+  readonly version: 1;
+  readonly location: string;
+}
+
 export interface ServerJsonResponse<T> {
   readonly kind: 'json';
   readonly status: number;
@@ -60,11 +86,17 @@ export type ServerModuleResponse<
   TArtifact extends ServerArtifactRecord = ServerArtifactRecord,
 > = ServerArtifactResponse<TArtifact> | ServerEmptyResponse;
 
+export type ServerReloadResponse =
+  | ServerJsonResponse<ServerReloadResult>
+  | ServerJsonResponse<{ readonly error: string }>;
+
 export interface ServerRouterHttpHandler<
   TArtifact extends ServerArtifactRecord = ServerArtifactRecord,
+  TContext = unknown,
 > {
   resolve(request: ServerResolveRequest): Promise<ServerResolveResponse>;
   module(request: ServerModuleRequest): Promise<ServerModuleResponse<TArtifact>>;
+  reload(request: ServerReloadRequest<TContext>): Promise<ServerReloadResponse>;
 }
 
 /**
@@ -78,9 +110,15 @@ export interface ServerRouterHttpHandler<
  */
 export function createServerRouterHttpHandler<
   TArtifact extends ServerArtifactRecord,
+  TContext = unknown,
 >(
-  router: Pick<ServerRouter<TArtifact>, 'resolve' | 'resolveModule'>,
-): ServerRouterHttpHandler<TArtifact> {
+  router: Pick<ServerRouter<TArtifact>, 'resolve' | 'resolveLanding' | 'resolveModule'>,
+  options: Readonly<{
+    readonly reload?: ServerReloadOptions<TContext>;
+  }> = {},
+): ServerRouterHttpHandler<TArtifact, TContext> {
+  const reloadOptions = options.reload;
+
   return Object.freeze({
     async resolve(request: ServerResolveRequest) {
       const target = stringValue(request.target);
@@ -126,6 +164,64 @@ export function createServerRouterHttpHandler<
         throw error;
       }
     },
+
+    async reload(request: ServerReloadRequest<TContext>) {
+      const reason = reloadReasonValue(request.reason);
+      if (!reason) {
+        return json(400, { error: 'Invalid reload reason.' });
+      }
+
+      const target = optionalStringValue(request.target);
+      if (request.target !== undefined && !target) {
+        return json(400, { error: 'Invalid reload target.' });
+      }
+
+      const normalizedTarget = target
+        ? normalizeInternalTarget(target)
+        : null;
+      if (target && !normalizedTarget) {
+        return json(400, { error: 'Invalid reload target.' });
+      }
+
+      if (
+        reason === 'principal-change'
+        && !reloadOptions?.resetPrincipal
+      ) {
+        return json(501, {
+          error: 'Principal reset is not configured.',
+        });
+      }
+
+      try {
+        let principal = request.principal;
+        if (reason === 'principal-change') {
+          await reloadOptions!.resetPrincipal!(request.context as TContext);
+          principal = undefined;
+        }
+
+        const location = await selectReloadLocation(
+          router,
+          principal,
+          normalizedTarget ?? undefined,
+          reason,
+          reloadOptions,
+        );
+
+        return location
+          ? json(200, {
+              version: 1 as const,
+              location,
+            })
+          : json(403, {
+              error: 'No authorized reload destination.',
+            });
+      } catch (error) {
+        if (error instanceof ServerArtifactResolutionError) {
+          return json(503, { error: 'Navigation artifact unavailable.' });
+        }
+        throw error;
+      }
+    },
   });
 }
 
@@ -148,4 +244,61 @@ function empty(status: number): ServerEmptyResponse {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function optionalStringValue(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  return stringValue(value);
+}
+
+function reloadReasonValue(value: unknown): ServerReloadReason | null {
+  return value === 'reset' || value === 'principal-change'
+    ? value
+    : null;
+}
+
+function normalizeInternalTarget(target: string): string | null {
+  try {
+    const url = new URL(target, 'http://waypoint.local');
+    if (url.origin !== 'http://waypoint.local') {
+      return null;
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+async function selectReloadLocation<
+  TArtifact extends ServerArtifactRecord,
+  TContext,
+>(
+  router: Pick<ServerRouter<TArtifact>, 'resolve' | 'resolveLanding'>,
+  principal: ServerPrincipal | undefined,
+  target: string | undefined,
+  reason: ServerReloadReason,
+  options: ServerReloadOptions<TContext> | undefined,
+): Promise<string | null> {
+  if (target) {
+    const resolution = await router.resolve(target, principal);
+    if (resolution) {
+      return target;
+    }
+  }
+
+  const fallbacks = reason === 'principal-change'
+    ? [
+        ...(options?.publicLocation ? [options.publicLocation] : []),
+        ...(options?.landingTargets ?? []),
+      ]
+    : [...(options?.landingTargets ?? [])];
+
+  if (fallbacks.length === 0) {
+    return null;
+  }
+
+  return router.resolveLanding(
+    Object.freeze(fallbacks),
+    principal,
+  );
 }

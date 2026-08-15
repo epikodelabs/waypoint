@@ -8,6 +8,7 @@ import {
 export interface ExpressLikeRequest {
   readonly query: Readonly<Record<string, unknown>>;
   readonly params: Readonly<Record<string, string | readonly string[] | undefined>>;
+  readonly body?: unknown;
 }
 
 export interface ExpressLikeResponse {
@@ -21,26 +22,46 @@ export interface ExpressLikeResponse {
 
 export type ExpressLikeNext = (error?: unknown) => void;
 
+export interface ExpressServerRouterReloadOptions<
+  TRequest extends ExpressLikeRequest = ExpressLikeRequest,
+  TResponse extends ExpressLikeResponse = ExpressLikeResponse,
+> {
+  readonly resetPrincipal?: (
+    request: TRequest,
+    response: TResponse,
+  ) => void | Promise<void>;
+  readonly publicLocation?: string;
+  readonly landingTargets?: readonly string[];
+}
+
 export interface ExpressServerRouterAdapterOptions<
   TArtifact extends ServerArtifactRecord,
   TRequest extends ExpressLikeRequest = ExpressLikeRequest,
+  TResponse extends ExpressLikeResponse = ExpressLikeResponse,
 > {
-  readonly router: Pick<ServerRouter<TArtifact>, 'resolve' | 'resolveModule'>;
+  readonly router: Pick<ServerRouter<TArtifact>, 'resolve' | 'resolveLanding' | 'resolveModule'>;
   readonly principalFrom?: (request: TRequest) => ServerPrincipal | undefined;
   readonly artifactPathFor: (artifact: TArtifact) => string;
+  readonly reload?: ExpressServerRouterReloadOptions<TRequest, TResponse>;
 }
 
 export interface ExpressServerRouterHandlers<
   TRequest extends ExpressLikeRequest = ExpressLikeRequest,
+  TResponse extends ExpressLikeResponse = ExpressLikeResponse,
 > {
   readonly resolve: (
     request: TRequest,
-    response: ExpressLikeResponse,
+    response: TResponse,
     next: ExpressLikeNext,
   ) => Promise<void>;
   readonly module: (
     request: TRequest,
-    response: ExpressLikeResponse,
+    response: TResponse,
+    next: ExpressLikeNext,
+  ) => Promise<void>;
+  readonly reload: (
+    request: TRequest,
+    response: TResponse,
     next: ExpressLikeNext,
   ) => Promise<void>;
 }
@@ -53,10 +74,26 @@ export interface ExpressServerRouterHandlers<
 export function createExpressServerRouterHandlers<
   TArtifact extends ServerArtifactRecord,
   TRequest extends ExpressLikeRequest = ExpressLikeRequest,
+  TResponse extends ExpressLikeResponse = ExpressLikeResponse,
 >(
-  options: ExpressServerRouterAdapterOptions<TArtifact, TRequest>,
-): ExpressServerRouterHandlers<TRequest> {
-  const http = createServerRouterHttpHandler(options.router);
+  options: ExpressServerRouterAdapterOptions<TArtifact, TRequest, TResponse>,
+): ExpressServerRouterHandlers<TRequest, TResponse> {
+  const http = createServerRouterHttpHandler<
+    TArtifact,
+    Readonly<{
+      request: TRequest;
+      response: TResponse;
+    }>
+  >(options.router, {
+    reload: options.reload
+      ? {
+          publicLocation: options.reload.publicLocation,
+          landingTargets: options.reload.landingTargets,
+          resetPrincipal: ({ request, response }) =>
+            options.reload?.resetPrincipal?.(request, response),
+        }
+      : undefined,
+  });
   const principalFrom = options.principalFrom ?? (() => undefined);
 
   return Object.freeze({
@@ -109,6 +146,39 @@ export function createExpressServerRouterHandlers<
         response.sendFile(file, (error?: Error) => {
           if (error && !response.headersSent) next(error);
         });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async reload(
+      request: TRequest,
+      response: TResponse,
+      next: ExpressLikeNext,
+    ) {
+      try {
+        const body =
+          request.body && typeof request.body === 'object'
+            ? request.body as {
+                readonly reason?: unknown;
+                readonly target?: unknown;
+              }
+            : {};
+
+        const result = await http.reload({
+          reason: body.reason,
+          target: body.target,
+          principal: principalFrom(request),
+          context: Object.freeze({
+            request,
+            response,
+          }),
+        });
+
+        response
+          .status(result.status)
+          .set(result.headers)
+          .json(result.body);
       } catch (error) {
         next(error);
       }

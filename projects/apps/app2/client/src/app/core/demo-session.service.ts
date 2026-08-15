@@ -113,6 +113,7 @@ export const DEMO_PRINCIPAL_SWITCHER = new InjectionToken<DemoPrincipalSwitcher>
 export class DemoSessionService {
   readonly users = demoUsers;
   private readonly initialUser = initialDemoUser();
+  private readonly router = inject(Router);
   private readonly principalSwitcher = inject(
     DEMO_PRINCIPAL_SWITCHER,
     { optional: true },
@@ -129,7 +130,9 @@ export class DemoSessionService {
 
     window.addEventListener('pageshow', () => {
       if (readIdentityCookie() !== this.realmIdentity) {
-        window.location.reload();
+        void this.router.reload().catch(() => {
+          window.location.reload();
+        });
       }
     });
   }
@@ -160,33 +163,11 @@ export class DemoSessionService {
     }
 
     const currentIdentity = readIdentityCookie();
-
-    /*
-     * Replacing one authenticated principal with another is a browser-realm
-     * boundary. Previously imported protected modules cannot be unloaded from
-     * the current JavaScript realm, so clear the old session and replace the
-     * document before authenticating another principal.
-     */
     if (currentIdentity && currentIdentity !== userId) {
-      const response = await fetch('/api/session/logout', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          Accept: 'application/json',
-        },
+      await this.router.reload({
+        reason: 'principal-change',
+        target: `/?account=${encodeURIComponent(userId)}`,
       });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to end principal "${currentIdentity}": ${response.status}.`,
-        );
-      }
-
-      const payload: unknown = await response.json();
-      const location = readSafeLocation(payload);
-
-      window.location.replace(location);
-      return;
     }
 
     const response = await fetch('/api/session/principal', {

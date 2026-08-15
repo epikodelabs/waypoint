@@ -21,3 +21,8 @@ export {
   type RouterOptions,
 } from '@epikodelabs/waypoint';
 export { type RouterRevalidationOptions } from '@epikodelabs/waypoint';
+export {
+  RouterReloadError,
+  type RouterReloadOptions,
+  type RouterReloadReason,
+} from '@epikodelabs/waypoint';
