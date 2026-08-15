@@ -18,7 +18,7 @@ export const compilerModule = resolvePath(
 
 export const routeEntry = resolvePath(
   workspaceRoot,
-  'projects/apps/app2/client/src/app/app.routes.ts',
+  'projects/apps/app2/client/src/app/app.compiler.routes.ts',
 );
 
 export const routeArtifactTsConfig = resolvePath(

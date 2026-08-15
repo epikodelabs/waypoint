@@ -79,8 +79,8 @@ export function loadServerIndex(): Promise<ServerIndex> {
 }
 
 export async function readServerOutputRevision(): Promise<string> {
-  const stat = await fs.stat(indexPath, { bigint: true });
-  return `${stat.mtimeNs}:${stat.size}`;
+  const stat = await statWithRetry(indexPath);
+  return `${stat.mtimeMs}:${stat.size}`;
 }
 
 export function resolveOutputPath(relative: string): string {
@@ -116,5 +116,70 @@ export const compilerOutputSource = createServerRouterSnapshotSource<
 });
 
 async function readJson<T>(file: string): Promise<T> {
-  return JSON.parse(await fs.readFile(file, 'utf8')) as T;
+  const contents = await readFileWithRetry(file);
+  return JSON.parse(contents) as T;
+}
+
+const RETRY_DELAY_MS = 100;
+const RETRY_TIMEOUT_MS = 5000;
+
+async function statWithRetry(
+  file: string,
+): Promise<Awaited<ReturnType<typeof fs.stat>>> {
+  return retryMissingFile(
+    () => fs.stat(file, { bigint: true }),
+    file,
+  );
+}
+
+async function readFileWithRetry(
+  file: string,
+): Promise<string> {
+  return retryMissingFile(
+    () => fs.readFile(file, 'utf8'),
+    file,
+  );
+}
+
+async function retryMissingFile<T>(
+  action: () => Promise<T>,
+  file: string,
+): Promise<T> {
+  const deadline =
+    Date.now() + RETRY_TIMEOUT_MS;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      return await action();
+    } catch (error) {
+      if (!isMissingFileError(error)) {
+        throw error;
+      }
+
+      lastError = error;
+      await delay(RETRY_DELAY_MS);
+    }
+  }
+
+  throw lastError ?? new Error(
+    `Timed out waiting for compiler output "${file}".`,
+  );
+}
+
+function isMissingFileError(
+  error: unknown,
+): error is NodeJS.ErrnoException {
+  return !!error
+    && typeof error === 'object'
+    && 'code' in error
+    && (error as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+function delay(
+  ms: number,
+): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
 }

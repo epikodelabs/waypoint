@@ -342,7 +342,8 @@
               "buildTarget": "app2-server:application:production"
             },
             "development": {
-              "buildTarget": "app2-server:application:development"
+              "buildTarget": "app2-server:application:development",
+              "prebundle": false
             }
           },
           "defaultConfiguration": "development",
