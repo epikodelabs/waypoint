@@ -1,0 +1,9 @@
+/*
+When generating the nested `waypoint` schema:
+
+- do not add it to the parent schema's `required` array;
+- keep `default: {}`;
+- keep defaults on each nested property.
+
+The parent Angular application schema remains otherwise unchanged.
+*/
