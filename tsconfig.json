@@ -47,12 +47,6 @@
     },
     {
       "path": "./projects/apps/app2/server/tsconfig.app.json"
-    },
-    {
-      "path": "./projects/apps/shared/tsconfig.artifacts.json"
-    },
-    {
-      "path": "./projects/tools/builder/tsconfig.json"
     }
   ]
 }

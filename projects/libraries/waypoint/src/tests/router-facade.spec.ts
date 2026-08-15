@@ -1249,6 +1249,13 @@ describe('Router: revalidation preserves active layout internals', () => {
       },
     );
 
+    const configuredRoutes = [
+      routeSlot(
+        'application',
+      ),
+      routeSlot('other'),
+    ] as const satisfies NavigationTree;
+
     TestBed.configureTestingModule({
       imports: [
         RouterOutlet,
@@ -1259,13 +1266,7 @@ describe('Router: revalidation preserves active layout internals', () => {
       ],
       providers: [
         ...provideRouter(
-          [
-            routeSlot(
-              'application',
-            ),
-            routeSlot('other'),
-          ] as const
-            satisfies NavigationTree,
+          configuredRoutes,
           {
             resolveRoutes,
           },
