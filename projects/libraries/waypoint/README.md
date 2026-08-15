@@ -432,9 +432,7 @@ membership in the application route graph. When identity, tenant, licensing, or
 permissions change, applications can explicitly cross an authorization boundary:
 
 ```ts
-await router.revalidate({
-  resetResolvedRoutes: true,
-});
+await router.revalidate();
 ```
 
 Waypoint then:

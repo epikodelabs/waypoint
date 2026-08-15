@@ -340,3 +340,40 @@ describe('browser delivery hardening', () => {
     expect(resolutions).toBe(1);
   });
 });
+
+describe('browser delivery contribution identity', () => {
+  it('returns artifactKey + hash identity for each delivered routesFor contribution', async () => {
+    const resolve =
+      createServerNavigationResolver({
+        fetch: async () => response(200, {
+          version: 2,
+          artifactKey: 'workspace',
+          artifacts: [{
+            kind: 'route',
+            artifactKey: 'workspace',
+            moduleUrl: '/modules/workspace.js',
+            hash: 'HASH-A',
+          }],
+        }),
+        async importModule() {
+          return {
+            default:
+              contribution('workspace'),
+          };
+        },
+      });
+
+    const result =
+      await resolve(
+        new URL(
+          'https://waypoint.test/workspace',
+        ),
+      );
+
+    expect(
+      result?.contributionIdentities,
+    ).toEqual({
+      workspace: 'workspace:HASH-A',
+    });
+  });
+});

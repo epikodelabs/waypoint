@@ -444,7 +444,7 @@ describe('Router: flat routes and layouts', () => {
     expect(router.href({ name: 'admin' })).toBe('/admin');
 
     allowed = false;
-    await router.revalidate({ resetResolvedRoutes: true });
+    await router.revalidate();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(router.href({ name: 'admin' })).toBeNull();
@@ -471,10 +471,10 @@ describe('Router: flat routes and layouts', () => {
 
     await navigate('/admin');
     allowed = false;
-    await router.revalidate({ resetResolvedRoutes: true });
+    await router.revalidate();
 
     allowed = true;
-    await router.revalidate({ resetResolvedRoutes: true });
+    await router.revalidate();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(router.href({ name: 'admin' })).toBe('/admin');
@@ -567,7 +567,7 @@ describe('Router: flat routes and layouts', () => {
     const navigation = router.navigate({ path: '/admin' });
     await Promise.resolve();
 
-    const revocation = router.revalidate({ resetResolvedRoutes: true });
+    const revocation = router.revalidate();
     release(staleContribution);
 
     await navigation;
@@ -601,7 +601,7 @@ describe('Router: flat routes and layouts', () => {
 
     fail = true;
     await expectAsync(
-      router.revalidate({ resetResolvedRoutes: true }),
+      router.revalidate(),
     ).toBeRejectedWithError(/authorization service unavailable/);
 
     expect((router.state.error as Error).message)
@@ -859,4 +859,232 @@ describe('Router: flat routes and layouts', () => {
     expect(router.state.path).toBe('');
   });
 
+});
+
+describe('Router: identity-preserving server revalidation', () => {
+  @Component({
+    standalone: true,
+    template: '<p>stable-page</p>',
+  })
+  class StableRevalidationPage {
+    static instances = 0;
+
+    constructor() {
+      StableRevalidationPage.instances++;
+    }
+  }
+
+  let outlet: HTMLElement;
+  let router: Router;
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    StableRevalidationPage.instances = 0;
+    window.history.replaceState(null, '', '/');
+  });
+
+  afterEach(() => {
+    router?.dispose();
+    outlet?.remove();
+  });
+
+  function createResolver(
+    initial: ReturnType<typeof routesFor>,
+    identity = 'application-core:A1',
+  ) {
+    const resolve = jasmine.createSpy('resolve').and.resolveTo({
+      contributions: [initial],
+      contributionIdentities: {
+        [initial.id]: identity,
+      },
+    }) as jasmine.Spy & RouterOptions['resolveRoutes'];
+
+    Object.assign(resolve, {
+      resolveConfiguration: jasmine.createSpy(
+        'resolveConfiguration',
+      ).and.resolveTo({
+        contributions: [initial],
+        contributionIdentities: {
+          [initial.id]: identity,
+        },
+      }),
+    });
+
+    return resolve;
+  }
+
+  it('does not recreate the active component when the authorized artifact tree is unchanged', async () => {
+    const contribution = routesFor(
+      'application',
+      'application-core',
+      [
+        route(
+          '/stable',
+          StableRevalidationPage,
+        ),
+      ],
+    );
+
+    const resolveRoutes =
+      createResolver(contribution);
+
+    TestBed.configureTestingModule({
+      imports: [
+        StableRevalidationPage,
+      ],
+      providers: [
+        ...provideRouter(
+          [
+            routeSlot('application'),
+          ] as const satisfies NavigationTree,
+          {
+            resolveRoutes,
+          },
+        ),
+      ],
+    });
+
+    outlet =
+      document.createElement('div');
+
+    router = TestBed.inject(Router);
+    router.connect('', outlet);
+
+    await router.navigate('/stable');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const before =
+      outlet.firstElementChild;
+
+    expect(
+      StableRevalidationPage.instances,
+    ).toBe(1);
+
+    expect(
+      await router.revalidate(),
+    ).toBeTrue();
+
+    expect(
+      outlet.firstElementChild,
+    ).toBe(before);
+
+    expect(
+      StableRevalidationPage.instances,
+    ).toBe(1);
+  });
+
+  it('preserves the active page when only an unrelated delivered branch changes', async () => {
+    const stable = routesFor(
+      'application',
+      'application-core',
+      [
+        route(
+          '/stable',
+          StableRevalidationPage,
+        ),
+      ],
+    );
+
+    const oldAdmin = routesFor(
+      'administration',
+      'administration-core',
+      [
+        route(
+          '/admin',
+          SettingsComponent,
+        ),
+      ],
+    );
+
+    const newAdmin = routesFor(
+      'administration',
+      'administration-core',
+      [
+        route(
+          '/admin',
+          ChildComponent,
+        ),
+      ],
+    );
+
+    const resolveRoutes = jasmine.createSpy(
+      'resolveRoutes',
+    ).and.resolveTo({
+      contributions: [
+        stable,
+        oldAdmin,
+      ],
+      contributionIdentities: {
+        'application-core':
+          'application-core:A1',
+        'administration-core':
+          'administration-core:B1',
+      },
+    }) as jasmine.Spy & RouterOptions['resolveRoutes'];
+
+    Object.assign(resolveRoutes, {
+      resolveConfiguration:
+        jasmine.createSpy(
+          'resolveConfiguration',
+        ).and.resolveTo({
+          contributions: [
+            stable,
+            newAdmin,
+          ],
+          contributionIdentities: {
+            'application-core':
+              'application-core:A1',
+            'administration-core':
+              'administration-core:B2',
+          },
+        }),
+    });
+
+    TestBed.configureTestingModule({
+      imports: [
+        StableRevalidationPage,
+        SettingsComponent,
+        ChildComponent,
+      ],
+      providers: [
+        ...provideRouter(
+          [
+            routeSlot('application'),
+            routeSlot('administration'),
+          ] as const satisfies NavigationTree,
+          {
+            resolveRoutes,
+          },
+        ),
+      ],
+    });
+
+    outlet =
+      document.createElement('div');
+
+    router = TestBed.inject(Router);
+    router.connect('', outlet);
+
+    await router.navigate('/stable');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const before =
+      outlet.firstElementChild;
+
+    expect(
+      StableRevalidationPage.instances,
+    ).toBe(1);
+
+    expect(
+      await router.revalidate(),
+    ).toBeTrue();
+
+    expect(
+      outlet.firstElementChild,
+    ).toBe(before);
+
+    expect(
+      StableRevalidationPage.instances,
+    ).toBe(1);
+  });
 });

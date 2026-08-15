@@ -9,7 +9,12 @@ import {
   type ServerPrincipal,
   type ServerRouteBranch,
 } from './server-routing';
-import type { ServerNavigationResolution } from './server-delivery';
+import {
+  WAYPOINT_SERVER_DELIVERY_VERSION,
+  type ServerArtifactDelivery,
+  type ServerNavigationConfiguration,
+  type ServerNavigationResolution,
+} from './server-delivery';
 
 export interface ServerRoutableBranch extends ServerRouteBranch {
   readonly path: string;
@@ -73,6 +78,9 @@ export interface ServerRouter<
     targets: readonly (string | URL)[],
     principal?: ServerPrincipal,
   ): Promise<string | null>;
+  resolveConfiguration(
+    principal?: ServerPrincipal,
+  ): Promise<ServerNavigationConfiguration>;
   resolveArtifact(
     artifactKey: string,
     principal?: ServerPrincipal,
@@ -221,6 +229,64 @@ export function createServerRouter<
     return null;
   }
 
+  async function resolveConfiguration(
+    principal?: ServerPrincipal,
+  ): Promise<ServerNavigationConfiguration> {
+    const snapshot = await options.loadSnapshot();
+    const ordered: TArtifact[] = [];
+    const seen = new Set<string>();
+
+    for (const artifact of snapshot.index.artifacts) {
+      const chain = await authorizedChain(
+        snapshot,
+        artifact.artifactKey,
+        principal,
+      );
+
+      if (!chain) continue;
+
+      for (const item of chain) {
+        if (seen.has(item.artifactKey)) continue;
+        seen.add(item.artifactKey);
+        ordered.push(item);
+      }
+    }
+
+    const artifacts: ServerArtifactDelivery[] =
+      ordered.map(artifact => {
+        if (!artifact.file || !artifact.hash) {
+          throw new ServerArtifactResolutionError(
+            'unavailable',
+            `Artifact "${artifact.artifactKey}" has not been published.`,
+          );
+        }
+
+        const moduleUrl = options.moduleUrlFor(artifact);
+        if (!moduleUrl.trim()) {
+          throw new ServerArtifactResolutionError(
+            'unavailable',
+            `Artifact "${artifact.artifactKey}" has no delivery URL.`,
+          );
+        }
+
+        return Object.freeze({
+          kind:
+            (artifact as TArtifact & { readonly kind?: 'route' | 'shared' }).kind
+              === 'shared'
+              ? 'shared'
+              : 'route',
+          artifactKey: artifact.artifactKey,
+          moduleUrl,
+          hash: artifact.hash,
+        });
+      });
+
+    return Object.freeze({
+      version: WAYPOINT_SERVER_DELIVERY_VERSION,
+      artifacts: Object.freeze(artifacts),
+    });
+  }
+
   async function resolveArtifact(
     artifactKey: string,
     principal?: ServerPrincipal,
@@ -303,6 +369,7 @@ export function createServerRouter<
     match,
     resolve,
     resolveLanding,
+    resolveConfiguration,
     resolveArtifact,
     resolveModule,
   });

@@ -53,7 +53,6 @@ import {
   Router as RouterContract,
   RouterReloadError,
   type RouterReloadOptions,
-  type RouterRevalidationOptions,
 } from './router-contract';
 
 import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-events';
@@ -94,6 +93,14 @@ import {
 export interface ResolvedNavigationConfiguration {
   readonly routes?: NavigationTree;
   readonly contributions?: readonly RouteContributionDefinition[];
+
+  /**
+   * Optional stable identity for server-delivered contributions.
+   * Native Waypoint delivery uses `artifactKey + hash`.
+   */
+  readonly contributionIdentities?: Readonly<Record<string, string>>;
+
+  readonly landing?: string;
 }
 
 export type RouteResolution =
@@ -101,6 +108,17 @@ export type RouteResolution =
   | ResolvedNavigationConfiguration
   | null
   | undefined;
+
+export interface RouteResolutionResolver {
+  (
+    url: URL,
+    context: RouteResolutionContext,
+  ): Promise<RouteResolution>;
+
+  readonly resolveConfiguration?: (
+    context: RouteResolutionContext,
+  ) => Promise<RouteResolution>;
+}
 
 function isNavigationTreeResolution(
   value: Exclude<RouteResolution, null | undefined>,
@@ -121,7 +139,7 @@ export interface RouterOptions {
   readonly preloading?: PreloadingStrategy;
   readonly viewTransitions?: ViewTransitionsOption;
   readonly namedRoutes?: readonly NamedRouteDefinition[];
-  readonly resolveRoutes?: (url: URL, context: RouteResolutionContext) => Promise<RouteResolution>;
+  readonly resolveRoutes?: RouteResolutionResolver;
   readonly contributions?: readonly RouteContributionDefinition[];
 }
 
@@ -494,13 +512,177 @@ function adaptRoute(
   return runtimeRoute;
 }
 
+
+interface AdaptedRouteCacheEntry {
+  readonly path: string;
+  readonly redirectTo?: string;
+  readonly layouts: readonly LayoutDefinition[];
+  readonly outletRoutes: readonly RouteDefinition[];
+  readonly outletRedirects: readonly (string | undefined)[];
+  readonly runtime: Route;
+}
+
+type AdaptedRouteCache =
+  WeakMap<
+    RouteDefinition,
+    AdaptedRouteCacheEntry[]
+  >;
+
+function sameReferences<T>(
+  left: readonly T[],
+  right: readonly T[],
+): boolean {
+  return left.length === right.length
+    && left.every(
+      (value, index) =>
+        value === right[index],
+    );
+}
+
+function mapsHaveSameReferences<T>(
+  left: ReadonlyMap<string, T>,
+  right: ReadonlyMap<string, T>,
+): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const [key, value] of left) {
+    if (right.get(key) !== value) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function mapsHaveSameValues(
+  left: ReadonlyMap<string, string>,
+  right: ReadonlyMap<string, string>,
+): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const [key, value] of left) {
+    if (right.get(key) !== value) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function findAdaptedRoute(
+  group: CompiledRouteGroup,
+  cache: AdaptedRouteCache | undefined,
+): Route | undefined {
+  const authoredPrimary =
+    group.primary.route;
+
+  const entries =
+    cache?.get(authoredPrimary);
+
+  if (!entries) {
+    return undefined;
+  }
+
+  const outletRoutes =
+    group.outlets.map(
+      outlet => outlet.route,
+    );
+
+  const outletRedirects =
+    group.outlets.map(
+      outlet => outlet.redirectTo,
+    );
+
+  return entries.find(
+    entry =>
+      entry.path === group.path
+      && entry.redirectTo
+        === group.primary.redirectTo
+      && sameReferences(
+        entry.layouts,
+        group.layouts,
+      )
+      && sameReferences(
+        entry.outletRoutes,
+        outletRoutes,
+      )
+      && sameReferences(
+        entry.outletRedirects,
+        outletRedirects,
+      ),
+  )?.runtime;
+}
+
+function rememberAdaptedRoute(
+  group: CompiledRouteGroup,
+  runtime: Route,
+  cache: AdaptedRouteCache | undefined,
+): Route {
+  if (!cache) {
+    return runtime;
+  }
+
+  const authoredPrimary =
+    group.primary.route;
+
+  const entries =
+    cache.get(authoredPrimary)
+    ?? [];
+
+  entries.push(
+    Object.freeze({
+      path: group.path,
+      redirectTo:
+        group.primary.redirectTo,
+      layouts:
+        Object.freeze([
+          ...group.layouts,
+        ]),
+      outletRoutes:
+        Object.freeze(
+          group.outlets.map(
+            outlet => outlet.route,
+          ),
+        ),
+      outletRedirects:
+        Object.freeze(
+          group.outlets.map(
+            outlet => outlet.redirectTo,
+          ),
+        ),
+      runtime,
+    }),
+  );
+
+  cache.set(
+    authoredPrimary,
+    entries,
+  );
+
+  return runtime;
+}
+
 function adaptRoutes(
   groups: readonly CompiledRouteGroup[],
   appRef: ApplicationRef,
   documentRef: Document,
   injector: EnvironmentInjector,
+  cache?: AdaptedRouteCache,
 ): Route[] {
   return groups.map((group): Route => {
+    const cached =
+      findAdaptedRoute(
+        group,
+        cache,
+      );
+
+    if (cached) {
+      return cached;
+    }
     const sharedPreparers = adaptFramePreparers(
       group.layouts
         .map(layout => layout.frame)
@@ -518,15 +700,19 @@ function adaptRoutes(
         );
       }
 
-      return adaptRoute(
-        authoredPrimary,
-        group.path,
-        group.primary.redirectTo,
-        group.layouts,
-        sharedPreparers,
-        appRef,
-        documentRef,
-        injector,
+      return rememberAdaptedRoute(
+        group,
+        adaptRoute(
+          authoredPrimary,
+          group.path,
+          group.primary.redirectTo,
+          group.layouts,
+          sharedPreparers,
+          appRef,
+          documentRef,
+          injector,
+        ),
+        cache,
       );
     }
 
@@ -565,12 +751,20 @@ function adaptRoutes(
       },
     );
 
-    return outlets.length === 0
-      ? primary
-      : {
-          ...primary,
-          outlets: Object.freeze(outlets),
-        };
+    const runtime =
+      outlets.length === 0
+        ? primary
+        : {
+            ...primary,
+            outlets:
+              Object.freeze(outlets),
+          };
+
+    return rememberAdaptedRoute(
+      group,
+      runtime,
+      cache,
+    );
   });
 }
 
@@ -645,7 +839,14 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private preResolvingNavigationCount = 0;
   private readonly unresolvedRouteKeys = new Set<string>();
   private resolvedRoutes: NavigationTree = Object.freeze([]);
-  private readonly resolvedContributionsById = new Map<string, RouteContributionDefinition>();
+  private readonly resolvedContributionsById =
+    new Map<string, RouteContributionDefinition>();
+  private readonly resolvedContributionIdentityById =
+    new Map<string, string>();
+  private readonly adaptedRouteCache:
+    AdaptedRouteCache =
+      new WeakMap();
+  private configurationResolutionController: AbortController | null = null;
   private resolutionGeneration = 0;
   private navigationRequestId = 0;
   private engine: VanillaRouter | null = null;
@@ -718,7 +919,13 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     return;
 
     const engine = createRouter({
-      routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
+      routes: adaptRoutes(
+        this.registry.groups,
+        this.appRef,
+        this.document,
+        this.injector,
+        this.adaptedRouteCache,
+      ),
 
       baseHref: this.baseHref,
 
@@ -873,10 +1080,15 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     return null;
   }
 
-  async revalidate(options: RouterRevalidationOptions = {}): Promise<boolean> {
-    if (!options.resetResolvedRoutes) {
+  async revalidate(): Promise<boolean> {
+    const resolveConfiguration =
+      this.configuration.resolveRoutes
+        ?.resolveConfiguration;
+
+    if (!resolveConfiguration) {
       try {
-        return await this.requireEngine().revalidate();
+        return await this.requireEngine()
+          .revalidate();
       } catch (error) {
         this.recordNavigationError(error);
         throw error;
@@ -885,43 +1097,97 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
     this.resolutionGeneration++;
     this.navigationRequestId++;
-    this.resolvedRoutes = Object.freeze([]);
-    this.resolvedContributionsById.clear();
     this.unresolvedRouteKeys.clear();
     this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
-    this.rebuildResolvedRegistry();
+    this.configurationResolutionController
+      ?.abort();
 
-    const location = getRouterLocation(this.document);
-    const url = resolveRouterUrl(
-      `${location.pathname}${location.search}${location.hash}`,
-      this.baseHref,
-      location,
-      'navigate',
-    );
+    const controller =
+      new AbortController();
+
+    this.configurationResolutionController =
+      controller;
+
+    const generation =
+      this.resolutionGeneration;
 
     try {
+      const resolved =
+        await resolveConfiguration({
+          signal: controller.signal,
+        });
+
       if (
-        this.configuration.resolveRoutes
-        && url.origin === location.origin
-        && isPathInsideBase(url.pathname, this.baseHref)
+        controller.signal.aborted
+        || generation
+          !== this.resolutionGeneration
       ) {
-        await this.resolveRoutesForUrl(url, { force: true, install: false });
+        return false;
       }
 
-      return await this.installCurrentRegistry();
+      const changed =
+        this.replaceResolvedNavigation(
+          resolved,
+        );
+
+      if (!changed) {
+        /*
+         * Strong no-op guarantee:
+         * same authorized artifact identities means the active component,
+         * layouts, providers, prepared data, scroll and history are untouched.
+         */
+        return true;
+      }
+
+      const rematched =
+        await this.installCurrentRegistry();
+
+      if (rematched) {
+        return true;
+      }
+
+      const landing =
+        resolved
+        && !Array.isArray(resolved)
+          ? resolved.landing
+          : undefined;
+
+      if (!landing) {
+        return false;
+      }
+
+      return await this.navigateResolved(
+        landing,
+        {
+          replace: true,
+        },
+      );
     } catch (error) {
-      // Revocation is the fail-closed half of an authorization-boundary change.
-      // Even when reauthorization cannot be completed, the engine must stop
-      // using the previously delivered protected configuration.
+      /*
+       * An explicit authorization refresh fails closed. The fetch itself is
+       * allowed to complete before mutation so an unchanged successful refresh
+       * can be observationally invisible, but a failed refresh must not leave
+       * previously delivered protected navigation active.
+       */
+      this.clearResolvedNavigation();
+
       try {
         await this.installCurrentRegistry();
       } catch {
-        // Preserve the first failure as the actionable error. The engine
-        // configuration was already replaced before its revalidation started.
+        // Preserve the original actionable error.
       }
+
       this.recordNavigationError(error);
       throw error;
+    } finally {
+      if (
+        this.configurationResolutionController
+          === controller
+      ) {
+        this.configurationResolutionController =
+          null;
+      }
     }
   }
 
@@ -964,6 +1230,8 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     this.navigationRequestId++;
     this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
+    this.configurationResolutionController?.abort();
+    this.configurationResolutionController = null;
     this.engineStartupTask = null;
     this.notFoundRecoveryTasks.clear();
     this.engine = null;
@@ -1196,6 +1464,192 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     }
   }
 
+  private clearResolvedNavigation(): void {
+    this.resolvedRoutes =
+      Object.freeze([]);
+
+    this.resolvedContributionsById.clear();
+    this.resolvedContributionIdentityById
+      .clear();
+
+    this.rebuildResolvedRegistry();
+  }
+
+  private replaceResolvedNavigation(
+    resolved: RouteResolution,
+  ): boolean {
+    const routes =
+      !resolved
+        ? Object.freeze(
+            [] as RouteDefinition[],
+          )
+        : isNavigationTreeResolution(
+            resolved,
+          )
+          ? resolved
+          : resolved.routes
+            ?? Object.freeze(
+              [] as RouteDefinition[],
+            );
+
+    const incomingContributions =
+      !resolved
+        || isNavigationTreeResolution(
+          resolved,
+        )
+        ? Object.freeze(
+            [] as RouteContributionDefinition[],
+          )
+        : resolved.contributions
+          ?? Object.freeze(
+            [] as RouteContributionDefinition[],
+          );
+
+    const incomingIdentities =
+      !resolved
+        || isNavigationTreeResolution(
+          resolved,
+        )
+        ? Object.freeze(
+            {} as Record<string, string>,
+          )
+        : resolved
+            .contributionIdentities
+          ?? Object.freeze(
+            {} as Record<string, string>,
+          );
+
+    const authoredContributionIds =
+      new Set(
+        (
+          this.configuration
+            .contributions ?? []
+        ).map(
+          contribution =>
+            contribution.id,
+        ),
+      );
+
+    const nextContributions =
+      new Map<
+        string,
+        RouteContributionDefinition
+      >();
+
+    const nextIdentities =
+      new Map<string, string>();
+
+    for (
+      const contribution
+      of incomingContributions
+    ) {
+      if (
+        authoredContributionIds.has(
+          contribution.id,
+        )
+      ) {
+        throw new Error(
+          `Resolved route contribution "${contribution.id}" conflicts with an authored contribution.`,
+        );
+      }
+
+      const identity =
+        incomingIdentities[
+          contribution.id
+        ];
+
+      const previousIdentity =
+        this.resolvedContributionIdentityById
+          .get(contribution.id);
+
+      const previousContribution =
+        this.resolvedContributionsById
+          .get(contribution.id);
+
+      /*
+       * Preserve the exact authored route/layout/component definition objects
+       * when the server confirms the executable artifact identity is unchanged.
+       */
+      const selected =
+        identity
+        && identity
+          === previousIdentity
+        && previousContribution
+          ? previousContribution
+          : contribution;
+
+      nextContributions.set(
+        contribution.id,
+        selected,
+      );
+
+      if (identity) {
+        nextIdentities.set(
+          contribution.id,
+          identity,
+        );
+      }
+    }
+
+    const routesUnchanged =
+      sameReferences(
+        this.resolvedRoutes,
+        routes,
+      );
+
+    const contributionsUnchanged =
+      mapsHaveSameReferences(
+        this.resolvedContributionsById,
+        nextContributions,
+      )
+      && mapsHaveSameValues(
+        this.resolvedContributionIdentityById,
+        nextIdentities,
+      );
+
+    if (
+      routesUnchanged
+      && contributionsUnchanged
+    ) {
+      return false;
+    }
+
+    const nextRegistry =
+      this.createResolvedRegistry(
+        routes,
+        nextContributions,
+      );
+
+    this.resolvedRoutes =
+      routes as NavigationTree;
+
+    this.resolvedContributionsById
+      .clear();
+
+    for (
+      const [id, contribution]
+      of nextContributions
+    ) {
+      this.resolvedContributionsById
+        .set(id, contribution);
+    }
+
+    this.resolvedContributionIdentityById
+      .clear();
+
+    for (
+      const [id, identity]
+      of nextIdentities
+    ) {
+      this.resolvedContributionIdentityById
+        .set(id, identity);
+    }
+
+    this.registry = nextRegistry;
+
+    return true;
+  }
+
   private mergeResolvedNavigation(resolved: Exclude<RouteResolution, null | undefined>): boolean {
     const routes = isNavigationTreeResolution(resolved)
       ? resolved
@@ -1203,6 +1657,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     const incomingContributions = isNavigationTreeResolution(resolved)
       ? Object.freeze([] as RouteContributionDefinition[])
       : resolved.contributions ?? Object.freeze([]);
+    const incomingIdentities = isNavigationTreeResolution(resolved)
+      ? Object.freeze({} as Record<string, string>)
+      : resolved.contributionIdentities ?? Object.freeze({} as Record<string, string>);
 
     if (routes.length === 0 && incomingContributions.length === 0) {
       return false;
@@ -1215,6 +1672,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         ]) as NavigationTree
       : this.resolvedRoutes;
     const nextContributions = new Map(this.resolvedContributionsById);
+    const nextIdentities = new Map(this.resolvedContributionIdentityById);
     const authoredContributionIds = new Set(
       (this.configuration.contributions ?? []).map(contribution => contribution.id),
     );
@@ -1225,7 +1683,36 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
           `Resolved route contribution "${contribution.id}" conflicts with an authored contribution.`,
         );
       }
-      nextContributions.set(contribution.id, contribution);
+      const identity =
+        incomingIdentities[
+          contribution.id
+        ];
+
+      const previousIdentity =
+        nextIdentities.get(
+          contribution.id,
+        );
+
+      const previousContribution =
+        nextContributions.get(
+          contribution.id,
+        );
+
+      nextContributions.set(
+        contribution.id,
+        identity
+        && identity === previousIdentity
+        && previousContribution
+          ? previousContribution
+          : contribution,
+      );
+
+      if (identity) {
+        nextIdentities.set(
+          contribution.id,
+          identity,
+        );
+      }
     }
 
     // Build and validate the complete candidate registry before mutating any
@@ -1241,6 +1728,12 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     for (const [id, contribution] of nextContributions) {
       this.resolvedContributionsById.set(id, contribution);
     }
+
+    this.resolvedContributionIdentityById.clear();
+    for (const [id, identity] of nextIdentities) {
+      this.resolvedContributionIdentityById.set(id, identity);
+    }
+
     this.registry = nextRegistry;
     return true;
   }
@@ -1278,7 +1771,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   }
 
   private async installCurrentRegistry(
-    options: Readonly<{ revalidate?: boolean }> = {},
+    options: Readonly<{
+      revalidate?: boolean;
+    }> = {},
   ): Promise<boolean> {
     const engine = this.engine;
 
@@ -1286,20 +1781,45 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       return false;
     }
 
-    engine.replaceConfiguration({
-      routes: adaptRoutes(
+    const routes =
+      adaptRoutes(
         this.registry.groups,
         this.appRef,
         this.document,
         this.injector,
-      ),
-      transitions: adaptFrameTransitions(
-        this.registry.groups,
-        this.injector,
-      ),
+        this.adaptedRouteCache,
+      );
+
+    const activeRouteConfig =
+      engine.state.routeConfig;
+
+    engine.replaceConfiguration({
+      routes,
+      transitions:
+        adaptFrameTransitions(
+          this.registry.groups,
+          this.injector,
+        ),
     });
 
-    if (options.revalidate === false) {
+    if (
+      options.revalidate === false
+    ) {
+      return true;
+    }
+
+    /*
+     * If the exact active runtime route survived reconciliation, none of the
+     * route definition, inherited layout or outlet references affecting the
+     * current page changed. Updating unrelated branches must therefore not
+     * recreate the active view or rerun lifecycle/prepare work.
+     */
+    if (
+      activeRouteConfig
+      && routes.includes(
+        activeRouteConfig,
+      )
+    ) {
       return true;
     }
 
@@ -1393,7 +1913,13 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
   private createEngine(): VanillaRouter {
     return createRouter({
-      routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
+      routes: adaptRoutes(
+        this.registry.groups,
+        this.appRef,
+        this.document,
+        this.injector,
+        this.adaptedRouteCache,
+      ),
 
       baseHref: this.baseHref,
 

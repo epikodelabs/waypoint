@@ -7,6 +7,7 @@ import {
   type ServerNavigationHostModules,
 } from './server-host-runtime';
 import {
+  isServerNavigationConfiguration,
   isServerNavigationResolution,
   type ServerArtifactDelivery,
 } from './server-delivery';
@@ -32,6 +33,7 @@ export type ServerNavigationModuleImporter = (
 
 export interface ServerNavigationResolverOptions {
   readonly endpoint?: string;
+  readonly configurationEndpoint?: string;
   readonly fetch?: ServerNavigationFetch;
   readonly importModule?: ServerNavigationModuleImporter;
   readonly artifactRefreshRetries?: number;
@@ -44,12 +46,29 @@ export interface ServerNavigationResolverContext {
 
 export interface ServerResolvedNavigationConfiguration {
   readonly contributions: readonly RouteContributionDefinition[];
+
+  /**
+   * Stable delivery identity for each route contribution.
+   *
+   * `artifactKey + hash` is deliberately kept separate from the route
+   * definition so Waypoint can preserve the old contribution object when the
+   * server confirms that the executable artifact is unchanged.
+   */
+  readonly contributionIdentities: Readonly<Record<string, string>>;
+
+  readonly landing?: string;
 }
 
-export type ServerNavigationResolver = (
-  url: URL,
-  context?: ServerNavigationResolverContext,
-) => Promise<ServerResolvedNavigationConfiguration | null>;
+export interface ServerNavigationResolver {
+  (
+    url: URL,
+    context?: ServerNavigationResolverContext,
+  ): Promise<ServerResolvedNavigationConfiguration | null>;
+
+  resolveConfiguration(
+    context?: ServerNavigationResolverContext,
+  ): Promise<ServerResolvedNavigationConfiguration>;
+}
 
 interface RouteModule {
   readonly default?: unknown;
@@ -96,7 +115,18 @@ export function createServerNavigationResolver(
     registerServerNavigationHostModules(options.hostModules);
   }
 
-  const endpoint = normalizeEndpoint(options.endpoint ?? '/api/navigation/resolve');
+  const endpoint =
+    normalizeEndpoint(
+      options.endpoint
+      ?? '/api/navigation/resolve',
+    );
+
+  const configurationEndpoint =
+    normalizeEndpoint(
+      options.configurationEndpoint
+      ?? '/api/navigation/configuration',
+    );
+
   const fetchNavigation = options.fetch ?? defaultFetch;
   const importModule = options.importModule ?? defaultImportModule;
   const artifactRefreshRetries = normalizeRetryCount(
@@ -157,6 +187,60 @@ export function createServerNavigationResolver(
     return contribution;
   }
 
+  async function loadDeliveryPlan(
+    artifacts: readonly ServerArtifactDelivery[],
+    signal?: AbortSignal,
+  ): Promise<Readonly<{
+    contributions: readonly RouteContributionDefinition[];
+    contributionIdentities: Readonly<Record<string, string>>;
+  }>> {
+    const contributions: RouteContributionDefinition[] = [];
+    const contributionIdentities: Record<string, string> = {};
+
+    for (const artifact of artifacts) {
+      throwIfAborted(signal);
+
+      if (artifact.kind === 'shared') {
+        await importArtifact(artifact);
+        continue;
+      }
+
+      const contribution =
+        await importRouteContribution(artifact);
+
+      const identity =
+        deliveryIdentity(artifact);
+
+      const previous =
+        contributionIdentities[contribution.id];
+
+      if (
+        previous !== undefined
+        && previous !== identity
+      ) {
+        throw new Error(
+          `Route contribution "${contribution.id}" was delivered by multiple artifact identities.`,
+        );
+      }
+
+      contributionIdentities[contribution.id] =
+        identity;
+
+      contributions.push(contribution);
+    }
+
+    throwIfAborted(signal);
+
+    return Object.freeze({
+      contributions:
+        Object.freeze(contributions),
+      contributionIdentities:
+        Object.freeze({
+          ...contributionIdentities,
+        }),
+    });
+  }
+
   async function resolveOnce(
     url: URL,
     signal?: AbortSignal,
@@ -200,34 +284,35 @@ export function createServerNavigationResolver(
       }
     }
 
-    const contributions: RouteContributionDefinition[] = [];
+    const plan =
+      await loadDeliveryPlan(
+        payload.artifacts,
+        signal,
+      );
 
-    for (const artifact of payload.artifacts) {
-      throwIfAborted(signal);
-
-      if (artifact.kind === 'shared') {
-        await importArtifact(artifact);
-        continue;
-      }
-
-      contributions.push(await importRouteContribution(artifact));
-    }
-
-    throwIfAborted(signal);
     return Object.freeze({
-      contributions: Object.freeze(contributions),
+      contributions:
+        plan.contributions,
+      contributionIdentities:
+        plan.contributionIdentities,
     });
   }
 
-  return async (
+  const resolver = async (
     url: URL,
     context: ServerNavigationResolverContext = {},
   ): Promise<ServerResolvedNavigationConfiguration | null> => {
-    let retryingArtifact: ServerNavigationArtifactLoadError | undefined;
+    let retryingArtifact:
+      ServerNavigationArtifactLoadError
+      | undefined;
 
     for (let attempt = 0; ; attempt++) {
       try {
-        return await resolveOnce(url, context.signal, retryingArtifact);
+        return await resolveOnce(
+          url,
+          context.signal,
+          retryingArtifact,
+        );
       } catch (error) {
         if (
           !(error instanceof ServerNavigationArtifactLoadError)
@@ -236,10 +321,67 @@ export function createServerNavigationResolver(
         ) {
           throw error;
         }
+
         retryingArtifact = error;
       }
     }
   };
+
+  const resolveConfiguration = async (
+    context: ServerNavigationResolverContext = {},
+  ): Promise<ServerResolvedNavigationConfiguration> => {
+    throwIfAborted(context.signal);
+
+    const response =
+      await fetchNavigation(
+        configurationEndpoint,
+        {
+          credentials: 'same-origin',
+          headers: Object.freeze({
+            Accept: 'application/json',
+          }),
+          signal: context.signal,
+        },
+      );
+
+    throwIfAborted(context.signal);
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to refresh Waypoint navigation configuration: ${response.status}.`,
+      );
+    }
+
+    const payload = await response.json();
+    throwIfAborted(context.signal);
+
+    if (!isServerNavigationConfiguration(payload)) {
+      throw new Error(
+        'Server returned an invalid Waypoint navigation configuration.',
+      );
+    }
+
+    const plan =
+      await loadDeliveryPlan(
+        payload.artifacts,
+        context.signal,
+      );
+
+    return Object.freeze({
+      contributions:
+        plan.contributions,
+      contributionIdentities:
+        plan.contributionIdentities,
+      landing: payload.landing,
+    });
+  };
+
+  return Object.assign(
+    resolver,
+    {
+      resolveConfiguration,
+    },
+  );
 }
 
 function normalizeEndpoint(endpoint: string): string {

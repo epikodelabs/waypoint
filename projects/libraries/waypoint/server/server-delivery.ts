@@ -23,6 +23,31 @@ export interface ServerNavigationResolution {
   readonly artifacts: readonly ServerArtifactDelivery[];
 }
 
+export interface ServerNavigationConfiguration {
+  readonly version: typeof WAYPOINT_SERVER_DELIVERY_VERSION;
+  readonly artifacts: readonly ServerArtifactDelivery[];
+  readonly landing?: string;
+}
+
+export function isServerNavigationConfiguration(
+  value: unknown,
+): value is ServerNavigationConfiguration {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Partial<ServerNavigationConfiguration>;
+  return candidate.version === WAYPOINT_SERVER_DELIVERY_VERSION
+    && Array.isArray(candidate.artifacts)
+    && candidate.artifacts.every(isServerArtifactDelivery)
+    && (
+      candidate.landing === undefined
+      || (
+        nonEmptyString(candidate.landing)
+        && candidate.landing.startsWith('/')
+        && !candidate.landing.startsWith('//')
+      )
+    );
+}
+
 export function isServerNavigationResolution(
   value: unknown,
 ): value is ServerNavigationResolution {

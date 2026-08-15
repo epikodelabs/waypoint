@@ -301,9 +301,7 @@ Waypoint distinguishes downloaded module state from active navigation state:
 The Angular router exposes this boundary explicitly:
 
 ```ts
-await router.revalidate({
-  resetResolvedRoutes: true,
-});
+await router.revalidate();
 ```
 
 Resetting resolved routes increments the resolver generation. Results from older

@@ -22,6 +22,10 @@ export interface ExpressLikeResponse {
 
 export type ExpressLikeNext = (error?: unknown) => void;
 
+export interface ExpressServerRouterRevalidationOptions {
+  readonly landingTargets?: readonly string[];
+}
+
 export interface ExpressServerRouterReloadOptions<
   TRequest extends ExpressLikeRequest = ExpressLikeRequest,
   TResponse extends ExpressLikeResponse = ExpressLikeResponse,
@@ -39,9 +43,20 @@ export interface ExpressServerRouterAdapterOptions<
   TRequest extends ExpressLikeRequest = ExpressLikeRequest,
   TResponse extends ExpressLikeResponse = ExpressLikeResponse,
 > {
-  readonly router: Pick<ServerRouter<TArtifact>, 'resolve' | 'resolveLanding' | 'resolveModule'>;
+  readonly router:
+    Pick<
+      ServerRouter<TArtifact>,
+      'resolve' | 'resolveLanding' | 'resolveModule'
+    >
+    & Partial<
+      Pick<
+        ServerRouter<TArtifact>,
+        'resolveConfiguration'
+      >
+    >;
   readonly principalFrom?: (request: TRequest) => ServerPrincipal | undefined;
   readonly artifactPathFor: (artifact: TArtifact) => string;
+  readonly revalidation?: ExpressServerRouterRevalidationOptions;
   readonly reload?: ExpressServerRouterReloadOptions<TRequest, TResponse>;
 }
 
@@ -50,6 +65,11 @@ export interface ExpressServerRouterHandlers<
   TResponse extends ExpressLikeResponse = ExpressLikeResponse,
 > {
   readonly resolve: (
+    request: TRequest,
+    response: TResponse,
+    next: ExpressLikeNext,
+  ) => Promise<void>;
+  readonly configuration: (
     request: TRequest,
     response: TResponse,
     next: ExpressLikeNext,
@@ -85,6 +105,7 @@ export function createExpressServerRouterHandlers<
       response: TResponse;
     }>
   >(options.router, {
+    revalidation: options.revalidation,
     reload: options.reload
       ? {
           publicLocation: options.reload.publicLocation,
@@ -107,6 +128,27 @@ export function createExpressServerRouterHandlers<
           target: request.query['path'],
           principal: principalFrom(request),
         });
+
+        response
+          .status(result.status)
+          .set(result.headers)
+          .json(result.body);
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async configuration(
+      request: TRequest,
+      response: TResponse,
+      next: ExpressLikeNext,
+    ) {
+      try {
+        const result =
+          await http.configuration({
+            principal:
+              principalFrom(request),
+          });
 
         response
           .status(result.status)

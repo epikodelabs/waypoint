@@ -1,4 +1,7 @@
-import type { ServerNavigationResolution } from './server-delivery';
+import type {
+  ServerNavigationConfiguration,
+  ServerNavigationResolution,
+} from './server-delivery';
 import {
   ServerArtifactResolutionError,
   type ServerArtifactRecord,
@@ -28,6 +31,14 @@ export interface ServerModuleRequest {
   readonly artifactKey: unknown;
   readonly hash: unknown;
   readonly principal?: ServerPrincipal;
+}
+
+export interface ServerConfigurationRequest {
+  readonly principal?: ServerPrincipal;
+}
+
+export interface ServerRevalidationOptions {
+  readonly landingTargets?: readonly string[];
 }
 
 export type ServerReloadReason =
@@ -90,11 +101,18 @@ export type ServerReloadResponse =
   | ServerJsonResponse<ServerReloadResult>
   | ServerJsonResponse<{ readonly error: string }>;
 
+export type ServerConfigurationResponse =
+  | ServerJsonResponse<ServerNavigationConfiguration>
+  | ServerJsonResponse<{ readonly error: string }>;
+
 export interface ServerRouterHttpHandler<
   TArtifact extends ServerArtifactRecord = ServerArtifactRecord,
   TContext = unknown,
 > {
   resolve(request: ServerResolveRequest): Promise<ServerResolveResponse>;
+  configuration(
+    request: ServerConfigurationRequest,
+  ): Promise<ServerConfigurationResponse>;
   module(request: ServerModuleRequest): Promise<ServerModuleResponse<TArtifact>>;
   reload(request: ServerReloadRequest<TContext>): Promise<ServerReloadResponse>;
 }
@@ -112,12 +130,24 @@ export function createServerRouterHttpHandler<
   TArtifact extends ServerArtifactRecord,
   TContext = unknown,
 >(
-  router: Pick<ServerRouter<TArtifact>, 'resolve' | 'resolveLanding' | 'resolveModule'>,
+  router:
+    Pick<
+      ServerRouter<TArtifact>,
+      'resolve' | 'resolveLanding' | 'resolveModule'
+    >
+    & Partial<
+      Pick<
+        ServerRouter<TArtifact>,
+        'resolveConfiguration'
+      >
+    >,
   options: Readonly<{
     readonly reload?: ServerReloadOptions<TContext>;
+    readonly revalidation?: ServerRevalidationOptions;
   }> = {},
 ): ServerRouterHttpHandler<TArtifact, TContext> {
   const reloadOptions = options.reload;
+  const revalidationOptions = options.revalidation;
 
   return Object.freeze({
     async resolve(request: ServerResolveRequest) {
@@ -134,6 +164,44 @@ export function createServerRouterHttpHandler<
       } catch (error) {
         if (error instanceof ServerArtifactResolutionError) {
           return json(503, { error: 'Navigation artifact unavailable.' });
+        }
+        throw error;
+      }
+    },
+
+    async configuration(request: ServerConfigurationRequest) {
+      if (!router.resolveConfiguration) {
+        return json(501, {
+          error: 'Navigation configuration refresh is not configured.',
+        });
+      }
+
+      try {
+        const configuration =
+          await router.resolveConfiguration(
+            request.principal,
+          );
+
+        const landingTargets =
+          revalidationOptions?.landingTargets ?? [];
+
+        const landing =
+          landingTargets.length > 0
+            ? await router.resolveLanding(
+                landingTargets,
+                request.principal,
+              )
+            : null;
+
+        return json(200, Object.freeze({
+          ...configuration,
+          landing: landing ?? undefined,
+        }));
+      } catch (error) {
+        if (error instanceof ServerArtifactResolutionError) {
+          return json(503, {
+            error: 'Navigation artifact unavailable.',
+          });
         }
         throw error;
       }

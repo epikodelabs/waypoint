@@ -1,4 +1,4 @@
-﻿import {
+import {
   AngularNodeAppEngine,
   createNodeRequestHandler,
   isMainModule,
@@ -48,6 +48,13 @@ const navigation = createExpressServerRouterHandlers<
       throw new Error(`Artifact "${artifact.artifactKey}" has no published file.`);
     }
     return resolveOutputPath(artifact.file);
+  },
+  revalidation: {
+    landingTargets: [
+      '/app/admin',
+      '/app/settings?section=access',
+      '/',
+    ],
   },
   reload: {
     publicLocation: '/?account=choose',
@@ -116,6 +123,7 @@ app.get('/api/ping', (_request, response) => {
 });
 
 app.post('/api/navigation/reload', navigation.reload);
+app.get('/api/navigation/configuration', navigation.configuration);
 app.get('/api/navigation/resolve', navigation.resolve);
 app.get('/api/navigation/modules/:artifactKey/:hash', navigation.module);
 
@@ -161,4 +169,3 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
 }
 
 export const reqHandler = createNodeRequestHandler(app);
-

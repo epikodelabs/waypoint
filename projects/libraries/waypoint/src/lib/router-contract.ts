@@ -10,14 +10,6 @@ import type {
   RouterState,
 } from './vanilla-router';
 
-export interface RouterRevalidationOptions {
-  /**
-   * Removes every route and contribution previously installed through
-   * server-driven resolution before revalidating the current URL.
-   */
-  readonly resetResolvedRoutes?: boolean;
-}
-
 export type RouterReloadReason =
   | 'reset'
   | 'principal-change';
@@ -63,7 +55,7 @@ export abstract class Router<TRoutes extends NavigationTree = any> {
     options?: NavigationOptions,
   ): Promise<boolean>;
   abstract href(target: NavigationTarget | null | undefined): string | null;
-  abstract revalidate(options?: RouterRevalidationOptions): Promise<boolean>;
+  abstract revalidate(): Promise<boolean>;
   abstract reload(options?: RouterReloadOptions): Promise<never>;
   abstract updateHistoryState(state: unknown): void;
   abstract preload(): Promise<void>;
