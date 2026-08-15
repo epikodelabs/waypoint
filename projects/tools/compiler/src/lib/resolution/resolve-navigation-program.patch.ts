@@ -1,17 +1,51 @@
 /*
-After the semantic program has been assembled from authored root navigation and
-discovered routesFor() exports:
+Replace root-export-centric resolution with navigation-module resolution.
 
-const implicit = addImplicitRootSlots(program);
-program = implicit.program;
+OLD conceptual flow:
+  entry file
+    -> select routesExport
+    -> evaluate one NavigationTree
+    -> separately discover contributions
 
-Optionally emit an info/profile diagnostic containing implicit.implicitSlotIds.
+NEW:
+  entry file
+    -> collectNavigationModuleProgram(program, entry)
+    -> evaluate every exported navigation tree
+    -> evaluate every exported routesFor contribution
+    -> merge trees into one authored root tree
+    -> keep contributions separate
+    -> addImplicitRootSlots()
+    -> continue semantic/IR pipeline
 
-IMPORTANT:
-This happens only after all explicit routeSlot() declarations are known.
-No explicit slot is replaced.
+Pseudo-code:
 
-Existing "unknown contribution slot" validation is therefore still useful:
-after synthesis, any remaining unknown target is a genuine compiler bug or an
-unsupported contribution source.
+const moduleProgram = collectNavigationModuleProgram(
+  tsProgram,
+  planned.entry,
+);
+
+const rootTrees = await Promise.all(
+  moduleProgram.trees.map(source =>
+    evaluateNavigationTreeExport(source),
+  ),
+);
+
+const contributions = await Promise.all(
+  moduleProgram.contributions.map(source =>
+    evaluateContributionExport(source),
+  ),
+);
+
+const rootTree = mergeRootNavigationTrees(rootTrees);
+
+program = createSemanticNavigationProgram(
+  rootTree,
+  contributions,
+);
+
+program = addImplicitRootSlots(program).program;
+
+`routesExport` is only retained temporarily for compatibility:
+if supplied, restrict collection to that explicit tree export plus all
+contribution exports.
 */

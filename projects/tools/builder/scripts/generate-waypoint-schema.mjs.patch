@@ -1,14 +1,19 @@
 /*
-For waypoint.routesExport:
+Remove `routesExport` from the normal generated Waypoint schema.
 
-- remove the default value;
-- describe it as an ambiguity override.
+If compatibility is required, keep it under an advanced/deprecated option:
 
-Example:
-
-routesExport: {
-  type: 'string',
-  description:
-    'Explicit root navigation export. Usually unnecessary; Waypoint auto-detects a single exported navigation root.',
+waypoint: {
+  properties: {
+    entry: ...,
+    profile: ...,
+    buildManifest: ...,
+    rootExport: {
+      type: 'string',
+      deprecated: true,
+      description:
+        'Compatibility override for selecting one root tree export. Normally unnecessary because the entry module export graph is collected automatically.'
+    }
+  }
 }
 */

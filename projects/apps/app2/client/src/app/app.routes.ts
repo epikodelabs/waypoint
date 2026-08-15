@@ -1,13 +1,11 @@
 /*
- * The client no longer has to repeat context-free route slots:
+ * Waypoint navigation module.
  *
- *   routeSlot('public')
- *   routeSlot('application')
+ * The compiler follows this module's export graph and collects:
+ *   - authored NavigationTree exports;
+ *   - routesFor() contribution exports.
  *
- * Those roots are implied by exported routesFor() contributions.
- *
- * Keep explicit routeSlot() declarations anywhere their placement carries
- * context (inside layouts, other route sets, policy/provider scopes, etc.).
+ * There is no privileged `routes` export.
  */
 
 export {

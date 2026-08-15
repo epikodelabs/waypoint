@@ -1,7 +1,16 @@
 export {
-  addImplicitRootSlots,
-} from './semantic/implicit-root-slots.js';
+  collectNavigationModuleProgram,
+} from './resolution/navigation-module.js';
 
 export {
-  validateImplicitRootSlots,
-} from './validation/validate-implicit-root-slots.js';
+  mergeRootNavigationTrees,
+} from './resolution/merge-root-navigation-trees.js';
+
+export {
+  validateNavigationModule,
+} from './validation/validate-navigation-module.js';
+
+export type {
+  NavigationModuleExport,
+  NavigationModuleProgram,
+} from './resolution/navigation-module.js';

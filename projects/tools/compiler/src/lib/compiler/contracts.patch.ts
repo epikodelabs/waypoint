@@ -1,15 +1,13 @@
 /*
-Change:
+Deprecate `routesExport`.
 
-  readonly routesExport: string;
-
-to:
-
+RouteCompilerOptions:
+  /** @deprecated Entry modules are navigation modules; explicit root export is rarely needed. */
   readonly routesExport?: string;
 
-in RouteCompilerOptions and PlannedCompilerOutputs.
+PlannedCompilerOutputs:
+  readonly routesExport?: string;
 
-Do not inject "routes" during normalization anymore.
-
-The compiler should discover the root when no explicit override exists.
+Do not expose routesExport in the default builder schema anymore after one
+compatibility cycle.
 */
