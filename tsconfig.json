@@ -52,7 +52,7 @@
       "path": "./projects/apps/shared/tsconfig.artifacts.json"
     },
     {
-      "path": "./projects/tools/compiler/tsconfig.json"
+      "path": "./projects/tools/builder/tsconfig.json"
     }
   ]
 }

@@ -1,3 +1,0 @@
-{
-  "_comment": "Add all dependencies previously required only by projects/tools/compiler to the builder package/project. The builder now owns TypeScript analysis, Angular AOT preparation and bundling."
-}

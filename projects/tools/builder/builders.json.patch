@@ -1,7 +1,0 @@
-{
-  "waypoint-build": {
-    "implementation": "./src/waypoint-build/index",
-    "schema": "./src/waypoint-build/schema.json",
-    "description": "Builds an Angular application with Waypoint privilege-aware partitioning."
-  }
-}
