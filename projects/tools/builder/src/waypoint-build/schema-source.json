@@ -1,0 +1,27 @@
+{
+  "$comment": "Do not edit schema.json manually. It is generated from the installed @angular/build application schema plus this Waypoint extension definition.",
+  "waypoint": {
+    "type": "object",
+    "description": "Waypoint privilege-aware build options.",
+    "additionalProperties": false,
+    "default": {},
+    "properties": {
+      "entry": {
+        "type": "string",
+        "default": "src/app/app.routes.ts"
+      },
+      "routesExport": {
+        "type": "string",
+        "default": "routes"
+      },
+      "profile": {
+        "type": "boolean",
+        "default": false
+      },
+      "buildManifest": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  }
+}

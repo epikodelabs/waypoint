@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "generate:schema": "node ./scripts/generate-waypoint-schema.mjs",
+    "prebuild": "npm run generate:schema"
+  }
+}
