@@ -1,3 +1,0 @@
-export {
-  validateAuthorizationMonotonicity,
-} from './validation/validate-authorization-monotonicity.js';

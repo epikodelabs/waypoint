@@ -1,36 +1,19 @@
 /*
-After protected bundle generation, before runtime publication:
+Replace:
 
-const usages =
-  await collectAngularDeclarationModuleUsages(
-    analysis.plan,
-    bundleResult,
-  );
+import {
+  analyze,
+  createBuildLayout,
+  prepareBuild,
+} from '../../compiler/src/lib/index.js';
 
-const declarationDiagnostics =
-  validateAngularDeclarationIsolation(
-    usages,
-  );
+With:
 
-reportDiagnostics(
-  declarationDiagnostics,
-  context,
-);
+import {
+  analyze,
+  createBuildLayout,
+  prepareBuild,
+} from '../compiler/index.js';
 
-if (
-  declarationDiagnostics.some(
-    diagnostic =>
-      diagnostic.level === 'error',
-  )
-) {
-  await build.rollback();
-
-  return {
-    success: false,
-    error:
-      'Angular declaration isolation validation failed.',
-  };
-}
-
-This must happen before publication.
+The builder is now the only public build surface.
 */
