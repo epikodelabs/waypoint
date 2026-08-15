@@ -1,10 +1,10 @@
 export {
-  analyze,
-} from './compiler/analyze.js';
-export type {
-  WaypointAnalysis,
-} from './compiler/analyze.js';
+  prepareBuild,
+} from './compiler/prepare-build.js';
 
-export {
-  analysisInspection,
-} from './compiler/analysis-inspection.js';
+export type {
+  PreparedHostBuild,
+  PreparedWaypointBuild,
+  PreparedWaypointBuildResult,
+  PrepareBuildOptions,
+} from './compiler/prepare-build.js';
