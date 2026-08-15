@@ -2,62 +2,77 @@ import path from 'node:path';
 
 import {
   createBuilder,
-  targetFromTargetString,
   type BuilderContext,
   type BuilderOutput,
 } from '@angular-devkit/architect';
 
 import {
   analyze,
-  prepareBuild,
   createBuildLayout,
+  prepareBuild,
 } from '../../compiler/src/lib/index.js';
 
-interface WaypointBuildOptions {
-  readonly buildTarget: string;
-  readonly entry?: string;
-  readonly routesExport?: string;
-  readonly profile?: boolean;
+interface WaypointBuildOptions extends Record<string, unknown> {
+  readonly waypoint?: {
+    readonly entry?: string;
+    readonly routesExport?: string;
+    readonly profile?: boolean;
+    readonly buildManifest?: boolean;
+  };
 }
 
+/**
+ * Waypoint is the application's actual build builder.
+ *
+ * All non-`waypoint` options are ordinary @angular/build:application options
+ * and are delegated directly to Angular after Waypoint injects its generated
+ * host navigation/runtime inputs.
+ */
 async function execute(
   options: WaypointBuildOptions,
   context: BuilderContext,
 ): Promise<BuilderOutput> {
   try {
-    const workspaceRoot = context.workspaceRoot;
-    const target = targetFromTargetString(
-      options.buildTarget,
-    );
+    if (!context.target) {
+      throw new Error(
+        'Waypoint build requires an Architect project target context.',
+      );
+    }
 
-    const metadata =
-      await context.getProjectMetadata(target.project);
+    const workspaceRoot = context.workspaceRoot;
+    const projectMetadata =
+      await context.getProjectMetadata(context.target.project);
+
     const projectRoot =
-      typeof metadata['root'] === 'string'
-        ? metadata['root']
+      typeof projectMetadata['root'] === 'string'
+        ? projectMetadata['root']
         : '';
 
-    const targetOptions =
-      await context.getTargetOptions(target);
-
+    const angularOptions = angularApplicationOptions(options);
     const outputPath = resolveOutputPath(
       workspaceRoot,
-      targetOptions['outputPath'],
+      angularOptions['outputPath'],
     );
 
     const layout = createBuildLayout(outputPath);
+    const waypoint = options.waypoint ?? {};
+
+    const entry = path.resolve(
+      workspaceRoot,
+      projectRoot,
+      waypoint.entry ?? 'src/app/app.routes.ts',
+    );
 
     const analysis = await analyze({
-      entry: path.resolve(
-        workspaceRoot,
-        projectRoot,
-        options.entry ?? 'src/app/app.routes.ts',
-      ),
+      entry,
       serverOutput: layout.serverRoot,
       artifactsOutput: layout.protectedRoot,
-      buildManifestOutput: layout.buildManifest,
-      routesExport: options.routesExport,
-      profile: options.profile,
+      buildManifestOutput:
+        waypoint.buildManifest === false
+          ? undefined
+          : layout.buildManifest,
+      routesExport: waypoint.routesExport,
+      profile: waypoint.profile,
     });
 
     reportDiagnostics(
@@ -80,55 +95,59 @@ async function execute(
     );
 
     try {
-      const replacements =
-        normalizeReplacements(
-          targetOptions['fileReplacements'],
-        );
+      const delegatedOptions = {
+        ...angularOptions,
 
-      replacements.push({
-        replace: analysis.planned.entry,
-        with: build.host.routesEntry,
-      });
+        fileReplacements: [
+          ...normalizeReplacements(
+            angularOptions['fileReplacements'],
+          ),
+          {
+            replace: analysis.planned.entry,
+            with: build.host.routesEntry,
+          },
+        ],
 
-      const polyfills =
-        normalizePolyfills(
-          targetOptions['polyfills'],
-        );
+        polyfills: [
+          ...normalizePolyfills(
+            angularOptions['polyfills'],
+          ),
+          build.host.runtimeEntry,
+        ],
+      };
 
-      polyfills.push(
-        build.host.runtimeEntry,
+      /*
+       * Delegate directly to Angular's builder implementation rather than
+       * scheduling another project target. This avoids a synthetic build-base
+       * target and avoids recursion into Waypoint's own build target.
+       */
+      const delegated = await context.scheduleBuilder(
+        '@angular/build:application',
+        delegatedOptions,
+        {
+          target: context.target,
+        },
       );
 
-      const scheduled =
-        await context.scheduleTarget(
-          target,
-          {
-            fileReplacements: replacements,
-            polyfills,
-          },
-        );
-
       try {
-        const angular =
-          await scheduled.result;
+        const angularResult = await delegated.result;
 
-        if (!angular.success) {
+        if (!angularResult.success) {
           await build.rollback();
-          return angular;
+          return angularResult;
         }
       } finally {
-        await scheduled.stop();
+        await delegated.stop();
       }
 
-      const result =
-        await build.publish();
+      const published = await build.publish();
 
       reportDiagnostics(
-        result.diagnostics,
+        published.diagnostics,
         context,
       );
 
-      return result.success
+      return published.success
         ? { success: true }
         : {
             success: false,
@@ -150,6 +169,17 @@ async function execute(
       error: message,
     };
   }
+}
+
+function angularApplicationOptions(
+  options: WaypointBuildOptions,
+): Record<string, unknown> {
+  const {
+    waypoint: _waypoint,
+    ...angular
+  } = options;
+
+  return angular;
 }
 
 function normalizeReplacements(
@@ -181,14 +211,12 @@ function normalizePolyfills(
     return [value];
   }
 
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter(
-    (item): item is string =>
-      typeof item === 'string',
-  );
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === 'string',
+      )
+    : [];
 }
 
 function resolveOutputPath(
@@ -217,7 +245,7 @@ function resolveOutputPath(
   }
 
   throw new Error(
-    'Underlying Angular target must define outputPath.',
+    'Waypoint build requires Angular application outputPath.',
   );
 }
 
@@ -247,6 +275,6 @@ function reportDiagnostics(
   }
 }
 
-export default createBuilder<
-  WaypointBuildOptions
->(execute);
+export default createBuilder<WaypointBuildOptions>(
+  execute,
+);

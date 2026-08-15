@@ -1,28 +1,31 @@
 {
-  "$schema": "http://json-schema.org/schema",
-  "title": "Waypoint build options",
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Waypoint Angular application build",
+  "description": "Angular application builder options plus an optional Waypoint configuration object.",
   "type": "object",
   "properties": {
-    "buildTarget": {
-      "type": "string",
-      "description": "Underlying Angular application build target."
-    },
-    "entry": {
-      "type": "string",
-      "default": "src/app/app.routes.ts",
-      "description": "Waypoint navigation entry relative to the Angular project root."
-    },
-    "routesExport": {
-      "type": "string",
-      "default": "routes"
-    },
-    "profile": {
-      "type": "boolean",
-      "default": false
+    "waypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "type": "string",
+          "default": "src/app/app.routes.ts"
+        },
+        "routesExport": {
+          "type": "string",
+          "default": "routes"
+        },
+        "profile": {
+          "type": "boolean",
+          "default": false
+        },
+        "buildManifest": {
+          "type": "boolean",
+          "default": true
+        }
+      }
     }
   },
-  "required": [
-    "buildTarget"
-  ],
-  "additionalProperties": false
+  "additionalProperties": true
 }
