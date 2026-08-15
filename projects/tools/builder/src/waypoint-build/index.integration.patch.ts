@@ -1,35 +1,58 @@
 /*
-The Angular builder gets an important benefit from the split:
+Builder now starts with the same compiler analysis:
+
+const analysis = await analyze({
+  entry,
+  serverOutput: layout.serverRoot,
+  artifactsOutput: layout.protectedRoot,
+  buildManifestOutput: layout.buildManifest,
+  routesExport: options.routesExport,
+  profile: options.profile,
+});
+
+report(analysis.diagnostics, context);
+
+if (!analysis.success || !analysis.plan) {
+  return {
+    success: false,
+    error: 'Waypoint analysis failed.',
+  };
+}
 
 const pipeline = await prepareBuildPipeline(
-  planned,
-  artifactPlan,
+  analysis.planned,
+  analysis.plan,
 );
 
 try {
-  // BuildSession resources remain alive here.
-  const runtimeEntry = await emitHostRuntimeEntry(
+  // builder-specific host phase
+  const hostRuntime = await emitHostRuntimeEntry(
     ...,
     pipeline.session.sources.hostRuntimeModules,
   );
 
-  const hostResult = await runAngularHost(...);
+  const hostEntry = planHostEntry(
+    analysis.plan,
+    ...,
+  );
 
-  if (!hostResult.success) {
+  const angular = await runAngularHost(...);
+
+  if (!angular.success) {
     await pipeline.publication.rollback();
-    return hostResult;
+    return angular;
   }
 
-  const waypoint = await pipeline.publish();
+  const published = await pipeline.publish();
   ...
 } finally {
   await pipeline.dispose();
 }
 
-The host build needs BuildSession, but it does not need PublicationTransaction
-internals.
+Builder and CLI/compiler now share the same:
+  analyze()
+  prepareBuildPipeline()
 
-This is the ownership split:
-  BuildSession            -> temporary/compiler lifetime
-  PublicationTransaction  -> deployment mutation lifetime
+Their only difference is that the builder inserts the Angular host build between
+preparation and publication.
 */

@@ -1,0 +1,52 @@
+/*
+compile() becomes composition, not the owner of analysis stages.
+
+BEFORE:
+  normalize options
+  resolve
+  evaluate
+  IR
+  validate
+  expand
+  plan
+  validate-plan
+  prepare/publish...
+
+AFTER:
+
+export async function compile(
+  options: RouteCompilerOptions,
+): Promise<RouteCompilerResult> {
+  const analysis = await analyze(options);
+
+  if (!analysis.success || !analysis.plan) {
+    return resultFromAnalysis(analysis);
+  }
+
+  const pipeline = await prepareBuildPipeline(
+    analysis.planned,
+    analysis.plan,
+  );
+
+  try {
+    const build = await pipeline.publish();
+
+    return Object.freeze({
+      planned: analysis.planned,
+      diagnostics: Object.freeze([
+        ...analysis.diagnostics,
+        ...build.diagnostics,
+      ]),
+      emitted: build.emitted,
+      implemented: true,
+      success: build.success,
+      timings: analysis.timings,
+      inspection: ...
+    });
+  } finally {
+    await pipeline.dispose();
+  }
+}
+
+All pre-plan stage orchestration moves out of compile.ts.
+*/

@@ -1,21 +1,10 @@
 export {
-  createBuildSession,
-} from './compiler/build-session.js';
+  analyze,
+} from './compiler/analyze.js';
 export type {
-  BuildSession,
-} from './compiler/build-session.js';
+  WaypointAnalysis,
+} from './compiler/analyze.js';
 
 export {
-  createPublicationTransaction,
-} from './compiler/publication-transaction.js';
-export type {
-  PublicationResult,
-  PublicationTransaction,
-} from './compiler/publication-transaction.js';
-
-export {
-  prepareBuildPipeline,
-} from './compiler/build-pipeline.js';
-export type {
-  PreparedBuildPipeline,
-} from './compiler/build-pipeline.js';
+  analysisInspection,
+} from './compiler/analysis-inspection.js';
