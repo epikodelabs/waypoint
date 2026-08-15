@@ -157,7 +157,7 @@
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "@angular/build:application",
+          "builder": "./builders:waypoint-build",
           "options": {
             "outputPath": "dist/app2-client",
             "browser": "projects/apps/app2/client/src/main.ts",
@@ -251,8 +251,7 @@
           "options": {
             "delegateTarget": ":application",
             "prerequisiteTargets": [
-              ":build-router-compiler",
-              ":compile-routes"
+              "app2-client:build"
             ]
           },
           "configurations": {
@@ -321,8 +320,7 @@
           "options": {
             "delegateTarget": ":dev-server",
             "prerequisiteTargets": [
-              ":build-router-compiler",
-              ":compile-routes"
+              "app2-client:build"
             ]
           },
           "configurations": {
@@ -350,37 +348,6 @@
           "options": {
             "port": 4300
           }
-        },
-        "build-router-compiler": {
-          "builder": "./builders:run-script",
-          "options": {
-            "script": "scripts/build-compiler.mjs",
-            "args": [
-              "--force"
-            ]
-          },
-          "configurations": {
-            "development": {},
-            "production": {}
-          },
-          "defaultConfiguration": "development"
-        },
-        "compile-routes": {
-          "builder": "./builders:run-script",
-          "options": {
-            "script": "scripts/compile-routes.mjs"
-          },
-          "configurations": {
-            "development": {},
-            "production": {
-              "args": [
-                "--output",
-                "dist/app2-server/waypoint",
-                "--profile"
-              ]
-            }
-          },
-          "defaultConfiguration": "development"
         }
       }
     }

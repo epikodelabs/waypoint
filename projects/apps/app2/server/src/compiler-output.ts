@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+﻿import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -54,7 +54,7 @@ const defaultOutputRoot =
     ? packagedOutputRoot
     : path.resolve(
         workspaceRoot,
-        'dist/waypoint-generated/server',
+        'dist/app2-client/.waypoint/server',
       );
 
 const outputRoot =
@@ -183,3 +183,4 @@ function delay(
     setTimeout(resolve, ms);
   });
 }
+
