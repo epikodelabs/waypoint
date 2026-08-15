@@ -1,13 +1,12 @@
 /*
-Keep generated artifact entries inside the AOT temp root:
-
-  const entriesRoot = path.join(outputRoot, '.waypoint-entries');
-
-but stop deriving outputRoot from planned.entriesOutput.
+The AOT temp root must be independent of any published entries path.
 
 Use:
   const outputRoot = await createWaypointTempRoot('aot');
 
-PreparedArtifactSources.dispose() removes the entire outputRoot, including all
-generated entry modules.
+Generated entry files stay under:
+  <outputRoot>/.waypoint-entries/
+
+and disappear with:
+  PreparedArtifactSources.dispose()
 */

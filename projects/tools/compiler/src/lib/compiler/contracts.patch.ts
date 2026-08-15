@@ -1,9 +1,23 @@
 /*
-Application/build contracts:
-  remove routesExport entirely.
+Final application/compiler contract cleanup.
 
-If CLI compatibility is required, model it as a CLI-only legacy option rather
-than carrying it through PlannedCompilerOutputs.
+Remove:
+  hostModules
+  entriesOutput
+  routesExport
+  manifestOutput
 
-The navigation-module collector now owns export discovery.
+Keep:
+  entry
+  artifactTsConfig?      // low-level override only, if still needed
+  serverOutput
+  artifactsOutput
+  buildManifestOutput?
+  cwd?
+  dryRun?
+  inspect?
+  profile?
+
+Generated route entries live only inside PreparedArtifactSources.
+Navigation exports are collected from the navigation module export graph.
 */

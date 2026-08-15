@@ -1,18 +1,18 @@
 /*
-Remove from ServerNavigationResolverOptions:
+Final public ServerNavigationResolverOptions:
 
-  readonly hostModules?: ServerNavigationHostModules;
+export interface ServerNavigationResolverOptions {
+  readonly endpoint?: string;
+  readonly fetch?: ServerNavigationFetch;
+  readonly importModule?: ServerNavigationModuleImporter;
+  readonly artifactRefreshRetries?: number;
+}
 
 Remove:
-  registerServerNavigationHostModules import
-  all "hostModules required" validation
-  registerServerNavigationHostModules(options.hostModules)
+  hostModules
+  ServerNavigationHostModules import
+  registerServerNavigationHostModules(...)
+  hostModules presence checks
 
-createServerNavigationResolver() becomes usable as:
-
-  createServerNavigationResolver()
-
-The runtime registry still exists internally because protected bundles use the
-generated bridge modules. It is populated automatically by the builder-generated
-host runtime entry before protected navigation can be resolved.
+The generated build-time runtime registrar now populates the internal bridge.
 */

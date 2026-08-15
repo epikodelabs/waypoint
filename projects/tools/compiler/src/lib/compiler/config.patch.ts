@@ -1,11 +1,12 @@
 /*
-Remove:
-
-  routesExport: options.routesExport ?? 'routes'
+Delete normalization of:
+  options.hostModules
+  options.entriesOutput
+  options.routesExport
+  options.manifestOutput
 
 Use:
+  buildManifestOutput?: string
 
-  routesExport: options.routesExport
-
-This preserves explicit overrides but makes discovery the normal path.
+Do not create an entries directory.
 */
