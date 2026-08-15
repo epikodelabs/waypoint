@@ -1,4 +1,4 @@
-import {
+﻿import {
   AngularNodeAppEngine,
   createNodeRequestHandler,
   isMainModule,
@@ -52,6 +52,23 @@ const navigation = createExpressServerRouterHandlers<
 
 app.use(express.json({ limit: '16kb' }));
 app.use(readPrincipal);
+
+app.post('/api/session/logout', (_request, response) => {
+  response
+    .status(200)
+    .set({
+      'Cache-Control': 'private, no-store',
+      Vary: 'Authorization, Cookie',
+      'Clear-Site-Data': '"cache"',
+    })
+    .clearCookie('identity', {
+      path: '/',
+      sameSite: 'lax',
+    })
+    .json({
+      location: '/?account=choose',
+    });
+});
 
 app.post('/api/session/principal', async (request, response, next) => {
   try {
@@ -145,3 +162,4 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
 }
 
 export const reqHandler = createNodeRequestHandler(app);
+

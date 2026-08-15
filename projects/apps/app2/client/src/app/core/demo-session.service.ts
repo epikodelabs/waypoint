@@ -1,11 +1,10 @@
-import {
+﻿import {
   inject,
   Injectable,
   InjectionToken,
   signal,
   type Provider,
 } from '@angular/core';
-import { Router } from '@epikodelabs/waypoint';
 
 export interface DemoUser {
   readonly id: string;
@@ -70,6 +69,28 @@ function readIdentityCookie(): string | null {
   } catch {
     return null;
   }
+}
+
+function readSafeLocation(payload: unknown): string {
+  if (
+    !payload
+    || typeof payload !== 'object'
+    || typeof (payload as { location?: unknown }).location !== 'string'
+  ) {
+    throw new Error('Server returned an invalid navigation response.');
+  }
+
+  const location =
+    (payload as { location: string }).location;
+
+  if (
+    !location.startsWith('/')
+    || location.startsWith('//')
+  ) {
+    throw new Error('Server returned an unsafe navigation response.');
+  }
+
+  return location;
 }
 
 function initialDemoUser(): DemoUser {
@@ -138,6 +159,36 @@ export class DemoSessionService {
       return;
     }
 
+    const currentIdentity = readIdentityCookie();
+
+    /*
+     * Replacing one authenticated principal with another is a browser-realm
+     * boundary. Previously imported protected modules cannot be unloaded from
+     * the current JavaScript realm, so clear the old session and replace the
+     * document before authenticating another principal.
+     */
+    if (currentIdentity && currentIdentity !== userId) {
+      const response = await fetch('/api/session/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to end principal "${currentIdentity}": ${response.status}.`,
+        );
+      }
+
+      const payload: unknown = await response.json();
+      const location = readSafeLocation(payload);
+
+      window.location.replace(location);
+      return;
+    }
+
     const response = await fetch('/api/session/principal', {
       method: 'POST',
       credentials: 'same-origin',
@@ -150,24 +201,13 @@ export class DemoSessionService {
 
     if (!response.ok) {
       throw new Error(
-        `Failed to switch principal "${userId}": ${response.status}.`,
+        `Failed to activate principal "${userId}": ${response.status}.`,
       );
     }
 
     const payload: unknown = await response.json();
-    if (
-      !payload
-      || typeof payload !== 'object'
-      || typeof (payload as { location?: unknown }).location !== 'string'
-      || !(payload as { location: string }).location.startsWith('/')
-      || (payload as { location: string }).location.startsWith('//')
-    ) {
-      throw new Error('Server returned an invalid principal landing response.');
-    }
-
-    window.location.replace((payload as { location: string }).location);
+    window.location.replace(readSafeLocation(payload));
   }
-
 
   setDraftDirty(value: boolean): void {
     this.draftDirty.set(value);
@@ -198,8 +238,6 @@ export function provideLocalDemoPrincipalSwitching(): Provider {
   return {
     provide: DEMO_PRINCIPAL_SWITCHER,
     useFactory: () => {
-      const router = inject(Router);
-
       return async (session: DemoSessionService, userId: string) => {
         const user = session.activateLocalUser(userId);
         const filters = user.focusFilters
@@ -211,8 +249,16 @@ export function provideLocalDemoPrincipalSwitching(): Provider {
           + `&page=1`
           + (filters ? `&${filters}` : '');
 
-        await router.navigate(target);
+        /*
+         * Cross the account boundary with a full document load so route state,
+         * resolved contributions, and view-local data from the previous
+         * principal do not remain live in memory.
+         */
+        document.cookie =
+          `identity=${encodeURIComponent(user.id)}; Path=/; SameSite=Lax`;
+        window.location.replace(target);
       };
     },
   };
 }
+

@@ -4,6 +4,9 @@ import path from 'node:path';
 import type {
   WaypointAnalysis,
 } from './analyze.js';
+import {
+  publishServerRouteOutput,
+} from './server-output.js';
 
 export interface PrepareBuildOptions {
   readonly metadataRoot: string;
@@ -41,24 +44,28 @@ export async function prepareBuild(
     );
   }
 
-  const metadataRoot = path.resolve(
-    options.metadataRoot,
-  );
+  const metadataRoot =
+    path.resolve(
+      options.metadataRoot,
+    );
 
-  const hostRoot = path.join(
-    metadataRoot,
-    'host',
-  );
+  const hostRoot =
+    path.join(
+      metadataRoot,
+      'host',
+    );
 
-  const routesEntry = path.join(
-    hostRoot,
-    'routes.ts',
-  );
+  const routesEntry =
+    path.join(
+      hostRoot,
+      'routes.ts',
+    );
 
-  const runtimeEntry = path.join(
-    hostRoot,
-    'runtime.js',
-  );
+  const runtimeEntry =
+    path.join(
+      hostRoot,
+      'runtime.js',
+    );
 
   await fs.mkdir(
     hostRoot,
@@ -68,11 +75,8 @@ export async function prepareBuild(
   );
 
   /*
-   * Minimal host stubs.
-   *
-   * These intentionally avoid importing protected authored routes.
-   * They exist so the builder can replace the authored route entry and inject
-   * a runtime polyfill without depending on the removed standalone compiler.
+   * Keep the browser host route source minimal. The protected contribution
+   * modules are deliberately absent from the initial application build.
    */
   await fs.writeFile(
     routesEntry,
@@ -91,13 +95,11 @@ export async function prepareBuild(
   await fs.writeFile(
     runtimeEntry,
     [
-      `// Waypoint builder runtime bootstrap.`,
+      `// Waypoint generated host runtime bootstrap.`,
       ``,
     ].join('\n'),
     'utf8',
   );
-
-  let published = false;
 
   return Object.freeze({
     host: Object.freeze({
@@ -106,45 +108,9 @@ export async function prepareBuild(
     }),
 
     async publish() {
-      const serverRoot =
-        path.resolve(
-          analysis.planned.serverOutput,
-        );
-
-      await fs.mkdir(
-        serverRoot,
-        {
-          recursive: true,
-        },
-      );
-
-      const serverIndex = path.join(
-        serverRoot,
-        'server-index.json',
-      );
-
-      /*
-       * Transitional builder-owned server index.
-       *
-       * This keeps the new output contract alive without reviving the old
-       * compiler project. Replace the empty shard/artifact arrays with the
-       * actual semantic/artifact planner output as those internal stages are
-       * reconnected.
-       */
-      await fs.writeFile(
-        serverIndex,
-        JSON.stringify(
-          {
-            version: 1,
-            generatedAt:
-              new Date().toISOString(),
-            shards: [],
-            artifacts: [],
-          },
-          null,
-          2,
-        ) + '\n',
-        'utf8',
+      await publishServerRouteOutput(
+        analysis.plan!,
+        analysis.planned.serverOutput,
       );
 
       if (
@@ -169,10 +135,19 @@ export async function prepareBuild(
               version: 1,
               entry:
                 analysis.planned.entry,
-              serverOutput:
-                analysis.planned.serverOutput,
-              artifactsOutput:
-                analysis.planned.artifactsOutput,
+              routeSets:
+                analysis.plan!.artifacts.map(
+                  artifact => ({
+                    artifactKey:
+                      artifact.artifactKey,
+                    routeSetId:
+                      artifact.routeSetId,
+                    dependencies:
+                      artifact.dependencies,
+                    branches:
+                      artifact.branchIds,
+                  }),
+                ),
             },
             null,
             2,
@@ -181,25 +156,13 @@ export async function prepareBuild(
         );
       }
 
-      published = true;
-
       return {
         success: true,
         diagnostics: [],
       };
     },
 
-    async rollback() {
-      if (!published) {
-        return;
-      }
-    },
-
-    async dispose() {
-      /*
-       * Keep generated metadata for the server.
-       * Host temp files live inside output/.waypoint and are safe to retain.
-       */
-    },
+    async rollback() {},
+    async dispose() {},
   });
 }

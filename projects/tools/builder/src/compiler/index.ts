@@ -1,4 +1,4 @@
-﻿export {
+export {
   analyze,
   type WaypointAnalysis,
 } from './analyze.js';
