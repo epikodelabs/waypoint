@@ -1,25 +1,36 @@
 /*
-Replace ad-hoc waypoint option reads with:
+After protected bundle generation, before runtime publication:
 
-const waypoint = resolveWaypointOptions(
-  projectRoot,
-  options.waypoint,
+const usages =
+  await collectAngularDeclarationModuleUsages(
+    analysis.plan,
+    bundleResult,
+  );
+
+const declarationDiagnostics =
+  validateAngularDeclarationIsolation(
+    usages,
+  );
+
+reportDiagnostics(
+  declarationDiagnostics,
+  context,
 );
 
-const analysis = await analyze({
-  entry: path.resolve(
-    workspaceRoot,
-    waypoint.entry,
-  ),
-  serverOutput: layout.serverRoot,
-  artifactsOutput: layout.protectedRoot,
-  buildManifestOutput:
-    waypoint.buildManifest
-      ? layout.buildManifest
-      : undefined,
-  routesExport: waypoint.routesExport,
-  profile: waypoint.profile,
-});
+if (
+  declarationDiagnostics.some(
+    diagnostic =>
+      diagnostic.level === 'error',
+  )
+) {
+  await build.rollback();
 
-This makes the entire `waypoint` object optional.
+  return {
+    success: false,
+    error:
+      'Angular declaration isolation validation failed.',
+  };
+}
+
+This must happen before publication.
 */
