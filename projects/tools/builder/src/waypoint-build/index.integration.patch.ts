@@ -1,53 +1,15 @@
 /*
-The Angular builder should now use exactly the same transaction.
+Builder derives runtime and debug destinations separately.
 
-const sources = await prepareArtifactSources(
-  compilerOutputs,
-  artifactPlan,
-);
+Runtime:
+  protectedRoot
+  serverRoot/index.json
+  serverRoot/shards/
 
-const transaction = await createBuildTransaction(
-  compilerOutputs,
-  artifactPlan,
-  sources,
-);
+Optional build/debug:
+  metadataRoot/build-manifest.json
 
-try {
-  // Before publish(), use transaction.sources for host integration.
-  const hostRuntime = await emitHostRuntimeEntry(
-    ...,
-    transaction.sources.hostRuntimeModules,
-  );
-
-  const hostEntry = await emitHostEntry(...);
-
-  const angular = await scheduleAngularHost({
-    hostEntry,
-    hostRuntime,
-  });
-
-  if (!angular.success) {
-    await transaction.rollback();
-    return angular;
-  }
-
-  const result = await transaction.publish();
-  report(result.diagnostics);
-
-  return result.success
-    ? { success: true }
-    : { success: false, error: 'Waypoint publication failed.' };
-} finally {
-  await transaction.dispose();
-}
-
-Now the builder never calls monolithic compile().
-
-Ownership is explicit:
-
-builder
-  owns WaypointBuildTransaction
-    owns PreparedArtifactSources
-    owns snapshots
-    owns publication lifetime
+The server output belongs to the deployable server application.
+`.waypoint/build-manifest.json` is optional tooling state and should never be
+served as part of protected module delivery.
 */

@@ -1,13 +1,9 @@
 export {
-  createBuildTransaction,
-} from './compiler/build-transaction.js';
-export type {
-  BuildTransactionResult,
-  WaypointBuildTransaction,
-} from './compiler/build-transaction.js';
+  finalizeRuntimeServerIndex,
+} from './planning/finalize-runtime-delivery.js';
 export {
-  snapshotDirectory,
-} from './compiler/output-snapshot.js';
-export type {
-  OutputSnapshot,
-} from './compiler/output-snapshot.js';
+  finalizeBuildManifest,
+} from './planning/finalize-build-manifest.js';
+export {
+  emitBuildManifest,
+} from './emitters/emit-build-manifest.js';
