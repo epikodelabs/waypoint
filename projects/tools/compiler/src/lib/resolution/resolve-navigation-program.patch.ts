@@ -1,19 +1,17 @@
 /*
-When loading the authored entry source:
+After the semantic program has been assembled from authored root navigation and
+discovered routesFor() exports:
 
-const sourceFile = program.getSourceFile(planned.entry);
-if (!sourceFile) ...
+const implicit = addImplicitRootSlots(program);
+program = implicit.program;
 
-const routesExport = selectNavigationExport(
-  sourceFile,
-  planned.routesExport,
-);
+Optionally emit an info/profile diagnostic containing implicit.implicitSlotIds.
 
-Use `routesExport` for the existing static evaluator/export lookup.
+IMPORTANT:
+This happens only after all explicit routeSlot() declarations are known.
+No explicit slot is replaced.
 
-`planned.routesExport` becomes optional. Selection order:
-
-1. explicit configured export;
-2. exactly one discovered navigation root;
-3. otherwise diagnostic/error.
+Existing "unknown contribution slot" validation is therefore still useful:
+after synthesis, any remaining unknown target is a genuine compiler bug or an
+unsupported contribution source.
 */

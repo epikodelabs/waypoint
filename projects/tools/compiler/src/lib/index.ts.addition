@@ -1,10 +1,7 @@
 export {
-  prepareBuild,
-} from './compiler/prepare-build.js';
+  addImplicitRootSlots,
+} from './semantic/implicit-root-slots.js';
 
-export type {
-  PreparedHostBuild,
-  PreparedWaypointBuild,
-  PreparedWaypointBuildResult,
-  PrepareBuildOptions,
-} from './compiler/prepare-build.js';
+export {
+  validateImplicitRootSlots,
+} from './validation/validate-implicit-root-slots.js';
