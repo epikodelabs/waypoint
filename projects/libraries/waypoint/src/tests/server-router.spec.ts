@@ -180,7 +180,6 @@ describe('server router', () => {
     );
 
     expect(resolution).toEqual({
-      version: 1,
       artifactKey: 'workspace',
       artifacts: [
         {
@@ -217,7 +216,6 @@ describe('server router', () => {
     });
 
     expect(await router.resolve('/legacy/hello%20world', principal)).toEqual({
-      version: 1,
       artifactKey: 'legacy',
       artifacts: [
         {
@@ -353,7 +351,7 @@ describe('server router', () => {
     expect(resolved?.artifactKey).toBe('workspace');
   });
 
-  it('rejects stale hashes without revealing another artifact version', async () => {
+  it('rejects stale hashes without revealing another artifact hash', async () => {
     const { router } = fixture();
 
     expect(await router.resolveModule(

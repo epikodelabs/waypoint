@@ -1,12 +1,10 @@
 import {
   isServerNavigationResolution,
-  WAYPOINT_SERVER_DELIVERY_VERSION,
   type ServerNavigationResolution,
 } from '../lib/server-delivery';
 
 describe('server delivery contract', () => {
   const valid: ServerNavigationResolution = {
-    version: WAYPOINT_SERVER_DELIVERY_VERSION,
     artifactKey: 'leaf',
     artifacts: [
       {
@@ -22,12 +20,8 @@ describe('server delivery contract', () => {
     ],
   };
 
-  it('accepts a versioned dependency-first resolution', () => {
+  it('accepts a dependency-first resolution', () => {
     expect(isServerNavigationResolution(valid)).toBeTrue();
-  });
-
-  it('rejects unknown protocol versions', () => {
-    expect(isServerNavigationResolution({ ...valid, version: 2 })).toBeFalse();
   });
 
   it('allows the requested artifact before redirect-followed artifacts', () => {
@@ -54,7 +48,6 @@ describe('server delivery contract', () => {
 
   it('does not accept route or authorization metadata as a substitute for delivery fields', () => {
     expect(isServerNavigationResolution({
-      version: 1,
       artifactKey: 'leaf',
       artifacts: [{
         artifactKey: 'leaf',

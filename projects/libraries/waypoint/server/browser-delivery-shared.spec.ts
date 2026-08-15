@@ -13,7 +13,6 @@ describe('browser shared artifact delivery', () => {
         status: 200,
         async json() {
           return {
-            version: 2,
             artifactKey: 'admin',
             artifacts: [
               {
@@ -56,7 +55,6 @@ describe('browser shared artifact delivery', () => {
         status: 200,
         async json() {
           return {
-            version: 2,
             artifactKey: 'route',
             artifacts: [
               {

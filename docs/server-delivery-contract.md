@@ -1,9 +1,9 @@
-# Waypoint Server Delivery Contract v1
+# Waypoint Server Delivery Contract
 
 ## Status
 
-**Version 1.** This document defines the browser/server delivery boundary for
-server-side routing in Waypoint.
+This document defines the browser/server delivery boundary for server-side
+routing in Waypoint.
 
 The contract is intentionally smaller than the compiler's server index. It is a
 public delivery protocol, not a serialization of Waypoint's semantic model or
@@ -25,7 +25,7 @@ server authorization
         ↓
 artifact dependency resolution
         ↓
-ServerNavigationResolution v1
+ServerNavigationResolution
         ↓
 browser module loading
         ↓
@@ -36,7 +36,6 @@ runtime contribution installation
 
 ```ts
 interface ServerNavigationResolution {
-  readonly version: 1;
   readonly artifactKey: string;
   readonly artifacts: readonly ServerArtifactDelivery[];
 }
@@ -47,11 +46,6 @@ interface ServerArtifactDelivery {
   readonly hash: string;
 }
 ```
-
-### `version`
-
-Identifies the wire contract. A client must reject versions it does not
-understand.
 
 ### `artifactKey`
 
@@ -197,7 +191,7 @@ The server router owns:
 - resolving transitive artifact dependencies in dependency-first order;
 - loading the branch provenance required to authorize those artifacts;
 - authorizing the complete artifact chain;
-- constructing `ServerNavigationResolution v1`;
+- constructing `ServerNavigationResolution`;
 - authorizing direct module delivery by `artifactKey + hash`.
 
 The transport adapter owns only transport concerns such as authentication input,
@@ -376,20 +370,12 @@ that less-privileged principals must receive.
 
 ## Relationship to SSR
 
-Server Delivery Contract v1 does not define server-side rendering.
+The Server Delivery Contract does not define server-side rendering.
 
 The same contract can be used by a browser-only Angular application, an Angular
 SSR application, or another HTTP server integration. "Server-side routing" in
 Waypoint refers to server ownership of route visibility, authorization, and
 route-code delivery.
-
-## Versioning
-
-Additive compiler metadata does not change this contract because compiler
-metadata is not sent over this boundary.
-
-A change requires a new delivery-contract version when an existing client could
-no longer safely interpret a server response according to these rules.
 
 ## Browser cancellation and publication rollover
 

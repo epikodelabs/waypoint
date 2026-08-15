@@ -496,7 +496,6 @@ describe('Router: flat routes and layouts', () => {
       status: 200,
       async json() {
         return {
-          version: 1,
           location: '/app/settings?section=access',
         };
       },
@@ -1296,7 +1295,10 @@ describe('Router: revalidation preserves active layout internals', () => {
       ],
       providers: [
         ...provideRouter(
-          configuredRoutes,
+          [
+            routeSlot('application'),
+            routeSlot('other'),
+          ] as const satisfies NavigationTree,
           {
             resolveRoutes,
           },

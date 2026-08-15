@@ -72,10 +72,8 @@ describe('server HTTP handler', () => {
 
   it('returns authorized resolution using private non-cacheable headers', async () => {
     const resolution = {
-      version: 2 as const,
       artifactKey: 'workspace',
       artifacts: [{
-        kind: 'route' as const,
         artifactKey: 'workspace',
         moduleUrl: '/modules/workspace/ABC123',
         hash: 'ABC123',
@@ -199,10 +197,8 @@ describe('server HTTP handler', () => {
         seenTargets.push(String(target));
         seenPrincipals.push(actual);
         return {
-          version: 2 as const,
           artifactKey: 'workspace',
           artifacts: [{
-            kind: 'route' as const,
             artifactKey: 'workspace',
             moduleUrl: '/modules/workspace/ABC123',
             hash: 'ABC123',
@@ -226,7 +222,6 @@ describe('server HTTP handler', () => {
       status: 200,
       headers: WAYPOINT_PRIVATE_NO_STORE_HEADERS,
       body: {
-        version: 1,
         location: '/workspace?tab=files',
       },
     });
@@ -279,7 +274,6 @@ describe('server HTTP handler', () => {
       status: 200,
       headers: WAYPOINT_PRIVATE_NO_STORE_HEADERS,
       body: {
-        version: 1,
         location: '/?account=choose',
       },
     });

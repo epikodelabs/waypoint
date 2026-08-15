@@ -130,6 +130,12 @@ function isNavigationTreeResolution(
   return Array.isArray(value);
 }
 
+function isResolvedNavigationConfiguration(
+  value: Exclude<RouteResolution, null | undefined>,
+): value is ResolvedNavigationConfiguration {
+  return !Array.isArray(value);
+}
+
 export interface RouteResolutionContext {
   readonly signal: AbortSignal;
 }
@@ -231,7 +237,6 @@ function readReloadLocation(payload: unknown): string {
   if (
     !payload
     || typeof payload !== 'object'
-    || (payload as { version?: unknown }).version !== 1
     || typeof (payload as { location?: unknown }).location !== 'string'
   ) {
     throw new Error('Server returned an invalid Waypoint reload response.');
@@ -468,13 +473,13 @@ function adaptFrameTransitions(
                   .sourceRoute
                 === primaryRoute,
             beforeLeave:
-              current.beforeLeave.map(
+              current.beforeLeave?.map(
                 handler =>
                   adaptFrameBeforeLeave(
                     handler,
                     injector,
                   ),
-              ),
+              ) ?? [],
           }),
         ),
       );
@@ -1230,14 +1235,21 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
      * the old fail-closed behavior until they migrate to the new full
      * configuration endpoint.
      */
-    if (
-      !resolveConfiguration
-      && options.resetResolvedRoutes
-    ) {
-      return this.revalidateLegacyResolvedRoutes();
-    }
-
+    /*
+     * Any server-driven router treats revalidate() as an authorization refresh.
+     *
+     * New integrations expose resolveConfiguration() and refresh the complete
+     * authorized ownership tree. Older integrations expose only resolveRoutes;
+     * for those, preserve the established fail-closed current-URL refresh.
+     *
+     * Only a purely local router has nothing server-owned to refresh, so only
+     * that case delegates directly to the engine.
+     */
     if (!resolveConfiguration) {
+      if (this.configuration.resolveRoutes) {
+        return this.revalidateLegacyResolvedRoutes();
+      }
+
       try {
         return await this.requireEngine()
           .revalidate();
@@ -1280,7 +1292,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
       if (
         resolved
-        && !Array.isArray(resolved)
+        && isResolvedNavigationConfiguration(
+          resolved,
+        )
         && resolved.revision
         && resolved.revision
           === this.resolvedConfigurationRevision
@@ -1295,7 +1309,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
       if (
         resolved
-        && !Array.isArray(resolved)
+        && isResolvedNavigationConfiguration(
+          resolved,
+        )
       ) {
         this.resolvedConfigurationRevision =
           resolved.revision;
@@ -1319,7 +1335,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
       const landing =
         resolved
-        && !Array.isArray(resolved)
+        && isResolvedNavigationConfiguration(
+          resolved,
+        )
           ? resolved.landing
           : undefined;
 

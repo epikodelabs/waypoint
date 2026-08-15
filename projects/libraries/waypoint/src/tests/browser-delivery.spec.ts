@@ -53,11 +53,10 @@ describe('browser server delivery', () => {
     const fetch: ServerNavigationFetch = async input => {
       requests.push(input);
       return response(200, {
-        version: 1,
         artifactKey: 'workspace',
         artifacts: [
-          { artifactKey: 'shell', moduleUrl: '/modules/shell.js', hash: 'SHELL', identity: 'v1:SHELL' },
-          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'WORK', identity: 'v1:WORK' },
+          { artifactKey: 'shell', moduleUrl: '/modules/shell.js', hash: 'SHELL' },
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'WORK' },
         ],
       });
     };
@@ -101,7 +100,6 @@ describe('browser server delivery', () => {
     let imports = 0;
     const resolve = createServerNavigationResolver({
       fetch: async () => response(200, {
-        version: 1,
         artifactKey: 'workspace',
         artifacts: [],
       }),
@@ -121,10 +119,9 @@ describe('browser server delivery', () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const fetch: ServerNavigationFetch = async () => response(200, {
-      version: 1,
       artifactKey: 'workspace',
       artifacts: [
-        { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
+        { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
       ],
     });
     const resolver = createServerNavigationResolver({
@@ -151,7 +148,6 @@ describe('browser server delivery', () => {
     const imports: string[] = [];
     const resolve = createServerNavigationResolver({
       fetch: async () => response(200, {
-        version: 1,
         artifactKey: 'workspace',
         artifacts: [{
           artifactKey: 'workspace',
@@ -180,10 +176,9 @@ describe('browser server delivery', () => {
     let attempts = 0;
     const resolve = createServerNavigationResolver({
       fetch: async () => response(200, {
-        version: 1,
         artifactKey: 'workspace',
         artifacts: [
-          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
         ],
       }),
       async importModule() {
@@ -203,10 +198,9 @@ describe('browser server delivery', () => {
   it('rejects modules that do not export a routesFor contribution', async () => {
     const resolve = createServerNavigationResolver({
       fetch: async () => response(200, {
-        version: 1,
         artifactKey: 'workspace',
         artifacts: [
-          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
         ],
       }),
       importModule: async () => ({ default: [] }),
@@ -256,10 +250,9 @@ describe('browser delivery hardening', () => {
         seenSignal = init.signal;
         await gate;
         return response(200, {
-          version: 1,
           artifactKey: 'workspace',
           artifacts: [
-            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
+            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
           ],
         });
       },
@@ -291,7 +284,6 @@ describe('browser delivery hardening', () => {
         resolution += 1;
         const hash = resolution === 1 ? 'OLD' : 'NEW';
         return response(200, {
-          version: 1,
           artifactKey: 'workspace',
           artifacts: [{
             artifactKey: 'workspace',
@@ -325,10 +317,9 @@ describe('browser delivery hardening', () => {
       async fetch() {
         resolutions += 1;
         return response(200, {
-          version: 1,
           artifactKey: 'workspace',
           artifacts: [
-            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
+            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
           ],
         });
       },
@@ -346,14 +337,11 @@ describe('browser delivery contribution identity', () => {
     const resolve =
       createServerNavigationResolver({
         fetch: async () => response(200, {
-          version: 2,
           artifactKey: 'workspace',
           artifacts: [{
-            kind: 'route',
             artifactKey: 'workspace',
             moduleUrl: '/modules/workspace.js',
             hash: 'HASH-A',
-          identity: 'v1:HASH-A',
           }],
         }),
         async importModule() {
@@ -374,7 +362,7 @@ describe('browser delivery contribution identity', () => {
     expect(
       result?.contributionIdentities,
     ).toEqual({
-      workspace: 'v1:HASH-A',
+      workspace: 'workspace:HASH-A',
     });
   });
 });

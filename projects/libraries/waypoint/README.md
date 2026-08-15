@@ -253,16 +253,15 @@ the complete protected route catalog to the client.
 
 ---
 
-# Server Delivery Contract v1
+# Server Delivery Contract
 
-The browser/server boundary is a small, versioned Waypoint protocol. A server
+The browser/server boundary is a small Waypoint protocol. A server
 resolution returns the artifact containing the requested destination and the
 dependency-first list of authorized browser modules needed to complete that
 navigation, including internal redirect targets when necessary.
 
 ```ts
 interface ServerNavigationResolution {
-  readonly version: 1;
   readonly artifactKey: string;
   readonly artifacts: readonly {
     readonly artifactKey: string;
@@ -274,7 +273,7 @@ interface ServerNavigationResolution {
 
 Server-only route metadata does not cross this boundary: policies, branch IDs,
 route-set ownership, source files, compiler shards, and artifact dependencies
-remain on the server. The browser validates the protocol version and shape,
+remain on the server. The browser validates the response shape,
 loads the already-authorized artifact plan in order, installs the resulting
 `routesFor()` contributions, and revalidates the current URL.
 

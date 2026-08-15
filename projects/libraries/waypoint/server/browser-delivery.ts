@@ -93,7 +93,7 @@ export class ServerNavigationArtifactLoadError extends Error {
 }
 
 /**
- * Browser half of Waypoint Server Delivery Contract v2.
+ * Browser half of the Waypoint server delivery contract.
  *
  * The server sends an already-authorized dependency-first artifact plan.
  * Shared artifacts are imported for their module side effects / ESM dependency

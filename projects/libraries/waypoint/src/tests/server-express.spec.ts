@@ -86,10 +86,8 @@ describe('Express server router adapter', () => {
       router: {
         async resolve() {
           return {
-            version: 2 as const,
             artifactKey: 'workspace',
             artifacts: [{
-              kind: 'route' as const,
               artifactKey: 'workspace',
               moduleUrl: '/modules/workspace/ABC123',
               hash: 'ABC123',
@@ -300,7 +298,6 @@ describe('Express server router adapter', () => {
       Vary: 'Authorization, Cookie',
     });
     expect(response.jsonBody).toEqual({
-      version: 1,
       location: '/?account=choose',
     });
     expect(resetBodies).toEqual([{

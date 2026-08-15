@@ -11,7 +11,6 @@ import {
   type ServerRouteBranch,
 } from './server-routing';
 import {
-  WAYPOINT_SERVER_DELIVERY_VERSION,
   type ServerConfigurationArtifactDelivery,
   type ServerNavigationConfiguration,
   type ServerNavigationResolution,
@@ -288,8 +287,6 @@ export function createServerRouter<
       });
 
     return Object.freeze({
-      version:
-        WAYPOINT_SERVER_DELIVERY_VERSION,
       revision:
         configurationRevision(
           artifacts,

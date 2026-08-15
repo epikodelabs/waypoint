@@ -1,5 +1,4 @@
 import {
-  WAYPOINT_SERVER_DELIVERY_VERSION,
   type ServerArtifactDelivery,
   type ServerNavigationResolution,
 } from './server-delivery';
@@ -222,7 +221,6 @@ export function createServerNavigationResolution<T extends ServerArtifactRecord>
   });
 
   return Object.freeze({
-    version: WAYPOINT_SERVER_DELIVERY_VERSION,
     artifactKey,
     artifacts: Object.freeze(delivery),
   });

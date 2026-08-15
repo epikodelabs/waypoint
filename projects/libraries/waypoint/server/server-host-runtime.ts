@@ -1,5 +1,5 @@
 export const WAYPOINT_SERVER_HOST_RUNTIME_SYMBOL_KEY =
-  '@epikodelabs/waypoint/server-navigation-host-runtime/v1' as const;
+  '@epikodelabs/waypoint/server-navigation-host-runtime' as const;
 
 export type ServerNavigationHostModule = Readonly<Record<string, unknown>>;
 export type ServerNavigationHostModules = Readonly<
@@ -7,7 +7,6 @@ export type ServerNavigationHostModules = Readonly<
 >;
 
 interface ServerNavigationHostRuntimeState {
-  readonly version: 1;
   readonly modules: Map<string, ServerNavigationHostModule>;
 }
 
@@ -33,7 +32,6 @@ export function registerServerNavigationHostModules(
 
   if (!state) {
     state = Object.freeze({
-      version: 1 as const,
       modules: new Map<string, ServerNavigationHostModule>(),
     });
     global[key] = state;

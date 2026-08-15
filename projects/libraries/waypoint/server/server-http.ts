@@ -63,7 +63,6 @@ export interface ServerReloadOptions<
 }
 
 export interface ServerReloadResult {
-  readonly version: 1;
   readonly location: string;
 }
 
@@ -277,7 +276,6 @@ export function createServerRouterHttpHandler<
 
         return location
           ? json(200, {
-              version: 1 as const,
               location,
             })
           : json(403, {

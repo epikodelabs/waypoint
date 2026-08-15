@@ -147,7 +147,7 @@ describe('server routing', () => {
     )).toBeFalse();
   });
 
-  it('creates a versioned wire response without leaking server routing metadata', () => {
+  it('creates a wire response without leaking server routing metadata', () => {
     const chain = [
       artifact('parent', [], ['parent-branch']),
       artifact('leaf', ['parent'], ['leaf-branch']),
@@ -159,7 +159,6 @@ describe('server routing', () => {
       item => `/modules/${item.artifactKey}.js`,
     );
 
-    expect(resolution.version).toBe(1);
     expect(resolution.artifactKey).toBe('leaf');
     expect(resolution.artifacts).toEqual([
       {

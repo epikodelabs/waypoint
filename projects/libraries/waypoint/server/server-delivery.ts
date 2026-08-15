@@ -1,12 +1,7 @@
-/** Stable wire protocol version for server-resolved Waypoint navigation. */
-export const WAYPOINT_SERVER_DELIVERY_VERSION = 1 as const;
-
 export type ServerArtifactDeliveryKind = 'route' | 'shared';
 
 /**
- * Existing v1 target-resolution descriptor.
- *
- * Keep this contract intentionally small and backward-compatible.
+ * Target-resolution descriptor.
  */
 export interface ServerArtifactDelivery {
   readonly artifactKey: string;
@@ -30,7 +25,6 @@ export interface ServerConfigurationArtifactDelivery
  * Complete server-authorized delivery plan for one requested destination.
  */
 export interface ServerNavigationResolution {
-  readonly version: typeof WAYPOINT_SERVER_DELIVERY_VERSION;
   readonly artifactKey: string;
   readonly artifacts: readonly ServerArtifactDelivery[];
 }
@@ -39,7 +33,6 @@ export interface ServerNavigationResolution {
  * Complete authorized executable navigation set used only by revalidate().
  */
 export interface ServerNavigationConfiguration {
-  readonly version: typeof WAYPOINT_SERVER_DELIVERY_VERSION;
   readonly revision: string;
   readonly artifacts: readonly ServerConfigurationArtifactDelivery[];
   readonly landing?: string;
@@ -53,8 +46,7 @@ export function isServerNavigationConfiguration(
   const candidate =
     value as Partial<ServerNavigationConfiguration>;
 
-  return candidate.version === WAYPOINT_SERVER_DELIVERY_VERSION
-    && nonEmptyString(candidate.revision)
+  return nonEmptyString(candidate.revision)
     && Array.isArray(candidate.artifacts)
     && candidate.artifacts.every(
       isServerConfigurationArtifactDelivery,
@@ -78,8 +70,7 @@ export function isServerNavigationResolution(
     value as Partial<ServerNavigationResolution>;
 
   if (
-    candidate.version !== WAYPOINT_SERVER_DELIVERY_VERSION
-    || !nonEmptyString(candidate.artifactKey)
+    !nonEmptyString(candidate.artifactKey)
     || !Array.isArray(candidate.artifacts)
     || !candidate.artifacts.every(isServerArtifactDelivery)
   ) {
