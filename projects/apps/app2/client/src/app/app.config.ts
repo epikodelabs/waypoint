@@ -5,18 +5,26 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
-import { provideRouter } from '@epikodelabs/waypoint';
+import {
+  provideRouter,
+} from '@epikodelabs/waypoint';
+import {
+  createServerNavigationResolver,
+} from '@epikodelabs/waypoint/server';
 
 import { routes } from './app.routes';
-import { loadProtectedRouteBranch } from './protected-route-loader';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    importProvidersFrom(ApplicationModule, BrowserModule),
+    importProvidersFrom(
+      ApplicationModule,
+      BrowserModule,
+    ),
     provideBrowserGlobalErrorListeners(),
     ...provideRouter(routes, {
       viewTransitions: true,
-      resolveRoutes: loadProtectedRouteBranch,
+      resolveRoutes:
+        createServerNavigationResolver(),
     }),
   ],
 };

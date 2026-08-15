@@ -1,19 +1,14 @@
 /*
-Remove `routesExport` from the normal generated Waypoint schema.
-
-If compatibility is required, keep it under an advanced/deprecated option:
+Final Waypoint-specific schema should contain only:
 
 waypoint: {
-  properties: {
-    entry: ...,
-    profile: ...,
-    buildManifest: ...,
-    rootExport: {
-      type: 'string',
-      deprecated: true,
-      description:
-        'Compatibility override for selecting one root tree export. Normally unnecessary because the entry module export graph is collected automatically.'
-    }
-  }
+  entry?: string;
+  profile?: boolean;
+  buildManifest?: boolean;
 }
+
+Remove routesExport/rootExport compatibility options from the builder schema.
+
+The compiler CLI may retain a deprecated low-level compatibility switch for one
+release if desired, but it should not be part of the application build surface.
 */

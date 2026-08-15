@@ -1,13 +1,9 @@
 /*
-Deprecate `routesExport`.
+Application/build contracts:
+  remove routesExport entirely.
 
-RouteCompilerOptions:
-  /** @deprecated Entry modules are navigation modules; explicit root export is rarely needed. */
-  readonly routesExport?: string;
+If CLI compatibility is required, model it as a CLI-only legacy option rather
+than carrying it through PlannedCompilerOutputs.
 
-PlannedCompilerOutputs:
-  readonly routesExport?: string;
-
-Do not expose routesExport in the default builder schema anymore after one
-compatibility cycle.
+The navigation-module collector now owns export discovery.
 */
