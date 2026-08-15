@@ -56,8 +56,8 @@ describe('browser server delivery', () => {
         version: 1,
         artifactKey: 'workspace',
         artifacts: [
-          { artifactKey: 'shell', moduleUrl: '/modules/shell.js', hash: 'SHELL' },
-          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'WORK' },
+          { artifactKey: 'shell', moduleUrl: '/modules/shell.js', hash: 'SHELL', identity: 'v1:SHELL' },
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'WORK', identity: 'v1:WORK' },
         ],
       });
     };
@@ -124,7 +124,7 @@ describe('browser server delivery', () => {
       version: 1,
       artifactKey: 'workspace',
       artifacts: [
-        { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+        { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
       ],
     });
     const resolver = createServerNavigationResolver({
@@ -183,7 +183,7 @@ describe('browser server delivery', () => {
         version: 1,
         artifactKey: 'workspace',
         artifacts: [
-          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
         ],
       }),
       async importModule() {
@@ -206,7 +206,7 @@ describe('browser server delivery', () => {
         version: 1,
         artifactKey: 'workspace',
         artifacts: [
-          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+          { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
         ],
       }),
       importModule: async () => ({ default: [] }),
@@ -259,7 +259,7 @@ describe('browser delivery hardening', () => {
           version: 1,
           artifactKey: 'workspace',
           artifacts: [
-            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
           ],
         });
       },
@@ -328,7 +328,7 @@ describe('browser delivery hardening', () => {
           version: 1,
           artifactKey: 'workspace',
           artifacts: [
-            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH' },
+            { artifactKey: 'workspace', moduleUrl: '/modules/workspace.js', hash: 'HASH', identity: 'v1:HASH' },
           ],
         });
       },
@@ -353,6 +353,7 @@ describe('browser delivery contribution identity', () => {
             artifactKey: 'workspace',
             moduleUrl: '/modules/workspace.js',
             hash: 'HASH-A',
+          identity: 'v1:HASH-A',
           }],
         }),
         async importModule() {
@@ -373,7 +374,7 @@ describe('browser delivery contribution identity', () => {
     expect(
       result?.contributionIdentities,
     ).toEqual({
-      workspace: 'workspace:HASH-A',
+      workspace: 'v1:HASH-A',
     });
   });
 });

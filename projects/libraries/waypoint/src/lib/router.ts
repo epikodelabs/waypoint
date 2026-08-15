@@ -100,6 +100,9 @@ export interface ResolvedNavigationConfiguration {
    */
   readonly contributionIdentities?: Readonly<Record<string, string>>;
 
+  /** Complete server-authorized configuration identity. */
+  readonly revision?: string;
+
   readonly landing?: string;
 }
 
@@ -328,43 +331,152 @@ function adaptFramePreparers(
 function adaptFrameTransitions(
   groups: readonly CompiledRouteGroup[],
   injector: EnvironmentInjector,
+  cache?: AdaptedTransitionCache,
 ): readonly NavigationTransitionDefinition[] {
-  const transitions: NavigationTransitionDefinition[] = [];
+  const transitions:
+    NavigationTransitionDefinition[] = [];
+
+  const resolveTransition = (
+    primaryRoute: RenderableRoute,
+    frame: FrameView<any>,
+    phase: 'enter' | 'leave',
+    factory: () =>
+      NavigationTransitionDefinition,
+  ): NavigationTransitionDefinition => {
+    const entries =
+      cache?.get(frame) ?? [];
+
+    const existing =
+      entries.find(
+        entry =>
+          entry.primaryRoute
+            === primaryRoute
+          && entry.phase === phase,
+      );
+
+    if (existing) {
+      return existing.transition;
+    }
+
+    const transition = factory();
+
+    if (cache) {
+      entries.push(
+        Object.freeze({
+          primaryRoute,
+          frame,
+          phase,
+          transition,
+        }),
+      );
+
+      cache.set(frame, entries);
+    }
+
+    return transition;
+  };
 
   for (const group of groups) {
-    const primaryRoute = group.primary.route;
+    const primaryRoute =
+      group.primary.route;
 
-    if (primaryRoute.kind === 'redirect') {
+    if (
+      primaryRoute.kind
+      === 'redirect'
+    ) {
       continue;
     }
 
-    const renderableRoute = primaryRoute;
-    const enterFrames = collectEnterFrames(group.layouts, renderableRoute);
-    const leaveFrames = collectLeaveFrames(group.layouts, renderableRoute);
+    const renderableRoute =
+      primaryRoute;
 
-    for (const current of enterFrames) {
-      if (!current.beforeEnter?.length && !current.afterEnter?.length) {
+    const enterFrames =
+      collectEnterFrames(
+        group.layouts,
+        renderableRoute,
+      );
+
+    const leaveFrames =
+      collectLeaveFrames(
+        group.layouts,
+        renderableRoute,
+      );
+
+    for (
+      const current
+      of enterFrames
+    ) {
+      if (
+        !current.beforeEnter?.length
+        && !current.afterEnter?.length
+      ) {
         continue;
       }
 
-      transitions.push({
-        to: (route) => route?.config.sourceRoute === primaryRoute,
-        beforeEnter: current.beforeEnter?.map((handler) =>
-          adaptFrameBeforeEnter(handler, injector),
+      transitions.push(
+        resolveTransition(
+          renderableRoute,
+          current,
+          'enter',
+          () => ({
+            to:
+              route =>
+                route?.config
+                  .sourceRoute
+                === primaryRoute,
+            beforeEnter:
+              current.beforeEnter?.map(
+                handler =>
+                  adaptFrameBeforeEnter(
+                    handler,
+                    injector,
+                  ),
+              ),
+            afterEnter:
+              current.afterEnter?.map(
+                handler =>
+                  adaptFrameAfterEnter(
+                    handler,
+                    injector,
+                  ),
+              ),
+          }),
         ),
-        afterEnter: current.afterEnter?.map((handler) => adaptFrameAfterEnter(handler, injector)),
-      });
+      );
     }
 
-    for (const current of leaveFrames) {
-      if (!current.beforeLeave?.length) {
+    for (
+      const current
+      of leaveFrames
+    ) {
+      if (
+        !current.beforeLeave?.length
+      ) {
         continue;
       }
 
-      transitions.push({
-        from: (route) => route?.config.sourceRoute === primaryRoute,
-        beforeLeave: current.beforeLeave.map((handler) => adaptFrameBeforeLeave(handler, injector)),
-      });
+      transitions.push(
+        resolveTransition(
+          renderableRoute,
+          current,
+          'leave',
+          () => ({
+            from:
+              route =>
+                route?.config
+                  .sourceRoute
+                === primaryRoute,
+            beforeLeave:
+              current.beforeLeave.map(
+                handler =>
+                  adaptFrameBeforeLeave(
+                    handler,
+                    injector,
+                  ),
+              ),
+          }),
+        ),
+      );
     }
   }
 
@@ -526,6 +638,20 @@ type AdaptedRouteCache =
   WeakMap<
     RouteDefinition,
     AdaptedRouteCacheEntry[]
+  >;
+
+
+interface AdaptedTransitionCacheEntry {
+  readonly primaryRoute: RenderableRoute;
+  readonly frame: FrameView<any>;
+  readonly phase: 'enter' | 'leave';
+  readonly transition: NavigationTransitionDefinition;
+}
+
+type AdaptedTransitionCache =
+  WeakMap<
+    FrameView<any>,
+    AdaptedTransitionCacheEntry[]
   >;
 
 function sameReferences<T>(
@@ -846,6 +972,11 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private readonly adaptedRouteCache:
     AdaptedRouteCache =
       new WeakMap();
+  private readonly adaptedTransitionCache:
+    AdaptedTransitionCache =
+      new WeakMap();
+  private resolvedConfigurationRevision:
+    string | undefined;
   private configurationResolutionController: AbortController | null = null;
   private resolutionGeneration = 0;
   private navigationRequestId = 0;
@@ -939,7 +1070,11 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
       preloading: this.configuration.preloading,
 
-      transitions: [...adaptFrameTransitions(this.registry.groups, this.injector)],
+      transitions: [...adaptFrameTransitions(
+        this.registry.groups,
+        this.injector,
+        this.adaptedTransitionCache,
+      )],
 
       viewTransitions: this.configuration.viewTransitions,
 
@@ -1126,10 +1261,28 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         return false;
       }
 
+      if (
+        resolved
+        && !Array.isArray(resolved)
+        && resolved.revision
+        && resolved.revision
+          === this.resolvedConfigurationRevision
+      ) {
+        return true;
+      }
+
       const changed =
         this.replaceResolvedNavigation(
           resolved,
         );
+
+      if (
+        resolved
+        && !Array.isArray(resolved)
+      ) {
+        this.resolvedConfigurationRevision =
+          resolved.revision;
+      }
 
       if (!changed) {
         /*
@@ -1472,6 +1625,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     this.resolvedContributionIdentityById
       .clear();
 
+    this.resolvedConfigurationRevision =
+      undefined;
+
     this.rebuildResolvedRegistry();
   }
 
@@ -1799,6 +1955,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         adaptFrameTransitions(
           this.registry.groups,
           this.injector,
+          this.adaptedTransitionCache,
         ),
     });
 
@@ -1933,7 +2090,11 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
       preloading: this.configuration.preloading,
 
-      transitions: [...adaptFrameTransitions(this.registry.groups, this.injector)],
+      transitions: [...adaptFrameTransitions(
+        this.registry.groups,
+        this.injector,
+        this.adaptedTransitionCache,
+      )],
 
       viewTransitions: this.configuration.viewTransitions,
 

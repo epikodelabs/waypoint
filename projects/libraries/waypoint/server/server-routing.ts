@@ -149,6 +149,39 @@ export function isServerArtifactChainAuthorized(
 }
 
 /**
+ * Effective executable identity of one artifact.
+ *
+ * The browser does not receive dependency metadata. The server therefore folds
+ * the dependency-first content-hash chain into one opaque identity.
+ */
+export function serverArtifactEffectiveIdentity<
+  T extends ServerArtifactRecord,
+>(
+  index: { readonly artifacts: readonly T[] },
+  artifactKey: string,
+): string {
+  const chain =
+    resolveServerArtifactChain(
+      index,
+      artifactKey,
+    );
+
+  const hashes =
+    chain.map(artifact => {
+      if (!artifact.hash) {
+        throw new ServerArtifactResolutionError(
+          'unavailable',
+          `Artifact "${artifact.artifactKey}" has not been published.`,
+        );
+      }
+
+      return artifact.hash;
+    });
+
+  return `v1:${hashes.join('.')}`;
+}
+
+/**
  * Converts an already-authorized dependency chain to the public wire contract.
  * No route, slot, policy, branch, source-file, or dependency metadata crosses
  * this boundary.
@@ -186,6 +219,11 @@ export function createServerNavigationResolution<T extends ServerArtifactRecord>
       artifactKey: artifact.artifactKey,
       moduleUrl,
       hash: artifact.hash,
+      identity:
+        serverArtifactEffectiveIdentity(
+          { artifacts },
+          artifact.artifactKey,
+        ),
     });
   });
 

@@ -404,3 +404,16 @@ resolution may refer to the previous hash just as the server publishes the next
 generation. The default browser resolver may re-resolve once after a module-load
 failure and use the new delivery identity. Deterministic protocol or module-shape
 errors are not retried.
+
+### Identity-preserving revalidation
+
+Server configuration refreshes include a configuration `revision` and an opaque
+effective `identity` for each delivered artifact. The effective identity folds
+the artifact content hash together with all transitive dependency content
+hashes. A route artifact is therefore considered unchanged only when both its
+own executable code and every executable dependency are unchanged.
+
+When the configuration revision is unchanged, `revalidate()` is a strict no-op.
+When only unrelated ownership units change, Waypoint preserves the exact
+runtime route and frame-transition identities for the active branch and does
+not recreate its layouts/pages or rerun prepare/enter/leave hooks.

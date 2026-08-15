@@ -47,6 +47,9 @@ export interface ServerNavigationResolverContext {
 export interface ServerResolvedNavigationConfiguration {
   readonly contributions: readonly RouteContributionDefinition[];
 
+  /** Complete authorized configuration identity when returned by refresh. */
+  readonly revision?: string;
+
   /**
    * Stable delivery identity for each route contribution.
    *
@@ -372,7 +375,10 @@ export function createServerNavigationResolver(
         plan.contributions,
       contributionIdentities:
         plan.contributionIdentities,
-      landing: payload.landing,
+      revision:
+        payload.revision,
+      landing:
+        payload.landing,
     });
   };
 
@@ -416,7 +422,7 @@ function resolutionRequestUrl(
 function deliveryIdentity(
   descriptor: ServerArtifactDelivery,
 ): string {
-  return `${descriptor.artifactKey}:${descriptor.hash}`;
+  return descriptor.identity;
 }
 
 function unwrapArtifactLoadError(

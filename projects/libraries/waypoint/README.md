@@ -527,3 +527,16 @@ meaning.
 # License
 
 MIT
+
+### Identity-preserving revalidation
+
+Server configuration refreshes include a configuration `revision` and an opaque
+effective `identity` for each delivered artifact. The effective identity folds
+the artifact content hash together with all transitive dependency content
+hashes. A route artifact is therefore considered unchanged only when both its
+own executable code and every executable dependency are unchanged.
+
+When the configuration revision is unchanged, `revalidate()` is a strict no-op.
+When only unrelated ownership units change, Waypoint preserves the exact
+runtime route and frame-transition identities for the active branch and does
+not recreate its layouts/pages or rerun prepare/enter/leave hooks.

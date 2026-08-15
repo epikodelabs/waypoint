@@ -9,6 +9,12 @@ export interface ServerArtifactDelivery {
   readonly artifactKey: string;
   readonly moduleUrl: string;
   readonly hash: string;
+
+  /**
+   * Effective executable identity of this artifact including its transitive
+   * dependency content identities. This is deliberately opaque to the browser.
+   */
+  readonly identity: string;
 }
 
 /**
@@ -25,6 +31,13 @@ export interface ServerNavigationResolution {
 
 export interface ServerNavigationConfiguration {
   readonly version: typeof WAYPOINT_SERVER_DELIVERY_VERSION;
+
+  /**
+   * Stable identity of the complete authorized executable navigation set.
+   * Equal revision means revalidation is a strict no-op.
+   */
+  readonly revision: string;
+
   readonly artifacts: readonly ServerArtifactDelivery[];
   readonly landing?: string;
 }
@@ -36,6 +49,7 @@ export function isServerNavigationConfiguration(
 
   const candidate = value as Partial<ServerNavigationConfiguration>;
   return candidate.version === WAYPOINT_SERVER_DELIVERY_VERSION
+    && nonEmptyString(candidate.revision)
     && Array.isArray(candidate.artifacts)
     && candidate.artifacts.every(isServerArtifactDelivery)
     && (
@@ -69,7 +83,8 @@ export function isServerArtifactDelivery(
   return (candidate.kind === 'route' || candidate.kind === 'shared')
     && nonEmptyString(candidate.artifactKey)
     && nonEmptyString(candidate.moduleUrl)
-    && nonEmptyString(candidate.hash);
+    && nonEmptyString(candidate.hash)
+    && nonEmptyString(candidate.identity);
 }
 
 function nonEmptyString(value: unknown): value is string {

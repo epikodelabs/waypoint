@@ -1088,3 +1088,259 @@ describe('Router: identity-preserving server revalidation', () => {
     ).toBe(1);
   });
 });
+
+
+describe('Router: revalidation preserves active layout internals', () => {
+  let outlet: HTMLElement;
+  let router: Router;
+
+  let layoutInstances = 0;
+  let pageInstances = 0;
+  let prepareCalls = 0;
+  let beforeEnterCalls = 0;
+  let afterEnterCalls = 0;
+  let beforeLeaveCalls = 0;
+
+  @Component({
+    standalone: true,
+    imports: [RouterOutlet],
+    template:
+      '<section data-preserved-layout><router-outlet /></section>',
+  })
+  class PreservedLayout {
+    constructor() {
+      layoutInstances++;
+    }
+  }
+
+  @Component({
+    standalone: true,
+    template: '<p data-preserved-page>preserved</p>',
+  })
+  class PreservedPage {
+    constructor() {
+      pageInstances++;
+    }
+  }
+
+  @Component({
+    standalone: true,
+    template: '<p>unrelated</p>',
+  })
+  class ChangedUnrelatedPage {}
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    layoutInstances = 0;
+    pageInstances = 0;
+    prepareCalls = 0;
+    beforeEnterCalls = 0;
+    afterEnterCalls = 0;
+    beforeLeaveCalls = 0;
+    window.history.replaceState(
+      null,
+      '',
+      '/',
+    );
+  });
+
+  afterEach(() => {
+    router?.dispose();
+    outlet?.remove();
+  });
+
+  it('keeps layout, page, prepared lifecycle and history untouched when only an unrelated artifact changes', async () => {
+    const stable = routesFor(
+      'application',
+      'application-core',
+      [
+        layout(
+          '/app',
+          frame(
+            PreservedLayout,
+            {
+              prepare: [() => {
+                prepareCalls++;
+                return {
+                  stable: true,
+                };
+              }],
+              beforeEnter: [() => {
+                beforeEnterCalls++;
+                return true;
+              }],
+              afterEnter: [() => {
+                afterEnterCalls++;
+              }],
+              beforeLeave: [() => {
+                beforeLeaveCalls++;
+                return true;
+              }],
+            },
+          ),
+          [
+            route(
+              '/stable',
+              PreservedPage,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    const oldUnrelated = routesFor(
+      'other',
+      'other-core',
+      [
+        route(
+          '/other',
+          SettingsComponent,
+        ),
+      ],
+    );
+
+    const newUnrelated = routesFor(
+      'other',
+      'other-core',
+      [
+        route(
+          '/other',
+          ChangedUnrelatedPage,
+        ),
+      ],
+    );
+
+    const resolveRoutes =
+      jasmine.createSpy(
+        'resolveRoutes',
+      ).and.resolveTo({
+        contributions: [
+          stable,
+          oldUnrelated,
+        ],
+        contributionIdentities: {
+          'application-core':
+            'v1:A1',
+          'other-core':
+            'v1:O1',
+        },
+      }) as jasmine.Spy
+        & RouterOptions['resolveRoutes'];
+
+    Object.assign(
+      resolveRoutes,
+      {
+        resolveConfiguration:
+          jasmine.createSpy(
+            'resolveConfiguration',
+          ).and.resolveTo({
+            revision: 'revision-2',
+            contributions: [
+              stable,
+              newUnrelated,
+            ],
+            contributionIdentities: {
+              'application-core':
+                'v1:A1',
+              'other-core':
+                'v1:O2',
+            },
+          }),
+      },
+    );
+
+    TestBed.configureTestingModule({
+      imports: [
+        RouterOutlet,
+        PreservedLayout,
+        PreservedPage,
+        SettingsComponent,
+        ChangedUnrelatedPage,
+      ],
+      providers: [
+        ...provideRouter(
+          [
+            routeSlot(
+              'application',
+            ),
+            routeSlot('other'),
+          ] as const
+            satisfies NavigationTree,
+          {
+            resolveRoutes,
+          },
+        ),
+      ],
+    });
+
+    outlet =
+      document.createElement('div');
+
+    router =
+      TestBed.inject(Router);
+
+    router.connect('', outlet);
+
+    await router.navigate(
+      '/app/stable',
+      {
+        state: {
+          preserved: 1,
+        },
+      },
+    );
+
+    await new Promise(
+      resolve =>
+        setTimeout(resolve, 0),
+    );
+
+    const layoutElement =
+      outlet.querySelector(
+        '[data-preserved-layout]',
+      );
+
+    const pageElement =
+      outlet.querySelector(
+        '[data-preserved-page]',
+      );
+
+    const historyState =
+      router.state.historyState;
+
+    expect(layoutInstances).toBe(1);
+    expect(pageInstances).toBe(1);
+    expect(prepareCalls).toBe(1);
+    expect(beforeEnterCalls).toBe(1);
+    expect(afterEnterCalls).toBe(1);
+    expect(beforeLeaveCalls).toBe(0);
+
+    expect(
+      await router.revalidate(),
+    ).toBeTrue();
+
+    expect(
+      outlet.querySelector(
+        '[data-preserved-layout]',
+      ),
+    ).toBe(layoutElement);
+
+    expect(
+      outlet.querySelector(
+        '[data-preserved-page]',
+      ),
+    ).toBe(pageElement);
+
+    expect(layoutInstances).toBe(1);
+    expect(pageInstances).toBe(1);
+    expect(prepareCalls).toBe(1);
+    expect(beforeEnterCalls).toBe(1);
+    expect(afterEnterCalls).toBe(1);
+    expect(beforeLeaveCalls).toBe(0);
+    expect(
+      router.state.historyState,
+    ).toBe(historyState);
+    expect(router.state.path)
+      .toBe('/app/stable');
+  });
+});

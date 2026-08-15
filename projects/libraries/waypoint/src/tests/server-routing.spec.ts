@@ -4,6 +4,7 @@ import {
   isServerArtifactChainAuthorized,
   requiredServerBranchIds,
   resolveServerArtifactChain,
+  serverArtifactEffectiveIdentity,
   type ServerArtifactIndex,
   type ServerArtifactRecord,
   type ServerPrincipal,
@@ -175,5 +176,52 @@ describe('server routing', () => {
     expect('dependencies' in resolution.artifacts[0]).toBeFalse();
     expect('branchIds' in resolution.artifacts[0]).toBeFalse();
     expect('routeSetId' in resolution.artifacts[0]).toBeFalse();
+  });
+});
+
+describe('server executable identity', () => {
+  it('changes route identity when a transitive dependency hash changes', () => {
+    const first = {
+      artifacts: [
+        {
+          artifactKey: 'shared',
+          routeSetId: 'shared',
+          dependencies: [],
+          branchIds: ['shared-branch'],
+          file: 'shared.js',
+          hash: 'S1',
+        },
+        {
+          artifactKey: 'route',
+          routeSetId: 'route',
+          dependencies: ['shared'],
+          branchIds: ['route-branch'],
+          file: 'route.js',
+          hash: 'R1',
+        },
+      ],
+    };
+
+    const second = {
+      artifacts: [
+        {
+          ...first.artifacts[0]!,
+          hash: 'S2',
+        },
+        first.artifacts[1]!,
+      ],
+    };
+
+    expect(
+      serverArtifactEffectiveIdentity(
+        first,
+        'route',
+      ),
+    ).not.toBe(
+      serverArtifactEffectiveIdentity(
+        second,
+        'route',
+      ),
+    );
   });
 });

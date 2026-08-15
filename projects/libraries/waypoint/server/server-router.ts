@@ -5,6 +5,7 @@ import {
   isServerPolicyAllowed,
   requiredServerBranchIds,
   resolveServerArtifactChain,
+  serverArtifactEffectiveIdentity,
   type ServerArtifactRecord,
   type ServerPrincipal,
   type ServerRouteBranch,
@@ -278,12 +279,23 @@ export function createServerRouter<
           artifactKey: artifact.artifactKey,
           moduleUrl,
           hash: artifact.hash,
+          identity:
+            serverArtifactEffectiveIdentity(
+              snapshot.index,
+              artifact.artifactKey,
+            ),
         });
       });
 
     return Object.freeze({
-      version: WAYPOINT_SERVER_DELIVERY_VERSION,
-      artifacts: Object.freeze(artifacts),
+      version:
+        WAYPOINT_SERVER_DELIVERY_VERSION,
+      revision:
+        configurationRevision(
+          artifacts,
+        ),
+      artifacts:
+        Object.freeze(artifacts),
     });
   }
 
@@ -373,6 +385,18 @@ export function createServerRouter<
     resolveArtifact,
     resolveModule,
   });
+}
+
+
+function configurationRevision(
+  artifacts: readonly ServerArtifactDelivery[],
+): string {
+  return `v1:${artifacts
+    .map(
+      artifact =>
+        `${artifact.artifactKey}=${artifact.identity}`,
+    )
+    .join('|')}`;
 }
 
 export function matchesRoutePattern(pattern: string, pathname: string): boolean {
