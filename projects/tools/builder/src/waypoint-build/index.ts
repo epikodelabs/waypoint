@@ -1,4 +1,4 @@
-import path from 'node:path';
+﻿import path from 'node:path';
 
 import {
   createBuilder,
@@ -10,7 +10,7 @@ import {
   analyze,
   createBuildLayout,
   prepareBuild,
-} from '../../compiler/src/lib/index.js';
+} from '../compiler/index.js';
 
 interface WaypointBuildOptions extends Record<string, unknown> {
   readonly waypoint?: {
@@ -103,8 +103,14 @@ async function execute(
             angularOptions['fileReplacements'],
           ),
           {
-            replace: analysis.planned.entry,
-            with: build.host.routesEntry,
+            replace: angularWorkspacePath(
+              workspaceRoot,
+              analysis.planned.entry,
+            ),
+            with: angularWorkspacePath(
+              workspaceRoot,
+              build.host.routesEntry,
+            ),
           },
         ],
 
@@ -112,7 +118,10 @@ async function execute(
           ...normalizePolyfills(
             angularOptions['polyfills'],
           ),
-          build.host.runtimeEntry,
+          angularWorkspacePath(
+            workspaceRoot,
+            build.host.runtimeEntry,
+          ),
         ],
       };
 
@@ -169,6 +178,30 @@ async function execute(
       error: message,
     };
   }
+}
+
+function angularWorkspacePath(
+  workspaceRoot: string,
+  absolutePath: string,
+): string {
+  const relative = path.relative(
+    workspaceRoot,
+    absolutePath,
+  );
+
+  if (
+    relative === '..'
+    || relative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relative)
+  ) {
+    throw new Error(
+      `Waypoint generated path "${absolutePath}" is outside workspace "${workspaceRoot}".`,
+    );
+  }
+
+  return relative
+    .split(path.sep)
+    .join('/');
 }
 
 function angularApplicationOptions(
@@ -278,3 +311,7 @@ function reportDiagnostics(
 export default createBuilder<WaypointBuildOptions>(
   execute,
 );
+
+
+
+

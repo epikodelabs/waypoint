@@ -1,42 +1,19 @@
 /*
-Branch on Angular's ordinary `watch` option.
+Replace:
 
-Pseudo-shape:
+import {
+  analyze,
+  createBuildLayout,
+  prepareBuild,
+} from '../../compiler/src/lib/index.js';
 
-const delegated = await context.scheduleBuilder(
-  '@angular/build:application',
-  delegatedOptions,
-  { target: context.target },
-);
+With:
 
-if (angularOptions['watch'] === true) {
-  return runWaypointWatch({
-    delegatedRun: delegated,
-    context,
-    analysisOptions: {
-      entry,
-      serverOutput: layout.serverRoot,
-      artifactsOutput: layout.protectedRoot,
-      buildManifestOutput:
-        waypoint.buildManifest === false
-          ? undefined
-          : layout.buildManifest,
-      profile: waypoint.profile,
-    },
-    metadataRoot: layout.metadataRoot,
-    reportDiagnostics,
-  });
-}
+import {
+  analyze,
+  createBuildLayout,
+  prepareBuild,
+} from '../compiler/index.js';
 
-try {
-  const angularResult = await delegated.result;
-  ...
-} finally {
-  await delegated.stop();
-}
-
-IMPORTANT:
-For a real Architect watch builder, execute() should return an Observable or
-AsyncIterable-compatible builder stream rather than collapsing the watch stream
-to `delegated.result`.
+Also remove routesExport from the builder-facing option shape.
 */

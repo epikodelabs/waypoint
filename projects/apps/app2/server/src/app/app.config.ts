@@ -1,4 +1,3 @@
-import * as angularCore from '@angular/core';
 import {
   type ApplicationConfig,
   ApplicationModule,
@@ -6,13 +5,14 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
-import * as waypoint from '@epikodelabs/waypoint';
 import {
-  createServerNavigationResolver,
   provideServerRouter,
 } from '@epikodelabs/waypoint/server';
 
 import { routes } from './app.routes';
+import { administrationRoutes } from '../../../client/src/app/routes/administration.routes';
+import { applicationRoutes } from '../../../client/src/app/routes/application.routes';
+import { publicRoutes } from '../../../client/src/app/routes/public.routes';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -20,12 +20,11 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     ...provideServerRouter(routes, {
       viewTransitions: true,
-      resolveRoutes: createServerNavigationResolver({
-        hostModules: {
-          '@angular/core': angularCore,
-          '@epikodelabs/waypoint': waypoint,
-        },
-      }),
+      contributions: [
+        publicRoutes,
+        applicationRoutes,
+        administrationRoutes,
+      ],
     }),
   ],
 };

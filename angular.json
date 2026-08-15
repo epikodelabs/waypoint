@@ -102,7 +102,11 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": {
+                "scripts": true,
+                "styles": true,
+                "vendor": false
+              }
             }
           },
           "defaultConfiguration": "production"
@@ -157,7 +161,7 @@
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "./builders:waypoint-build",
+          "builder": "@epikodelabs/waypoint-builder:waypoint-build",
           "options": {
             "outputPath": "dist/app2-client",
             "browser": "projects/apps/app2/client/src/main.ts",
