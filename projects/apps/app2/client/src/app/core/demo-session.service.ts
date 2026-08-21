@@ -5,6 +5,7 @@
   signal,
   type Provider,
 } from '@angular/core';
+import { Router } from '@epikodelabs/waypoint';
 
 export interface DemoUser {
   readonly id: string;
