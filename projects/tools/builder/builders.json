@@ -12,7 +12,7 @@
       "description": "Runs prerequisite targets before delegating to another target."
     },
     "waypoint-build": {
-      "implementation": "./src/waypoint-build/index.cjs",
+      "implementation": "./dist/waypoint-build/index.cjs",
       "schema": "./src/waypoint-build/schema.json",
       "description": "Compile Waypoint artifacts, then run the Angular client build."
     }

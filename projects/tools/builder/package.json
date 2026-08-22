@@ -4,6 +4,12 @@
   "private": true,
   "builders": "./builders.json",
   "dependencies": {
-    "@angular-devkit/architect": "^0.2100.0"
+    "@angular-devkit/architect": "^0.2100.0",
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "clean": "node scripts/clean.mjs",
+    "prepare": "npm run build"
   }
 }

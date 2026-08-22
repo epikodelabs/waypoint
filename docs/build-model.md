@@ -1,39 +1,54 @@
 # Waypoint build model
 
-A normal Angular application keeps an explicit route-module convention:
+Waypoint has one build owner: `@epikodelabs/waypoint-builder`.
+
+The TypeScript implementation lives under:
 
 ```text
-src/app/app.routes.ts
+projects/tools/builder/src/
+  compiler/
+  waypoint-build/
 ```
 
-The file itself may be only an aggregation module:
+`src/compiler` is an internal build pipeline, not a separately packaged compiler.
 
-```ts
-export { publicRoutes } from './routes/public.routes';
-export { applicationRoutes } from './routes/application.routes';
-export { administrationRoutes } from './routes/administration.routes';
+Before Angular invokes the custom builder, the builder package is compiled to one
+generated CommonJS entry:
+
+```text
+projects/tools/builder/dist/waypoint-build/index.cjs
 ```
 
-`app.config.ts` remains ordinary application code:
+`builders.json` points only at that generated entry. Generated JavaScript is not
+checked into `src`.
 
-```ts
-...provideRouter(routes, {
-  resolveRoutes: createServerNavigationResolver(),
-})
+The application build then performs:
+
+```text
+authored route definitions
+        ↓
+analyze + plan
+        ↓
+prepare generated host inputs
+        ↓
+Angular application build
+        ↓
+host-isolation check
+        ↓
+protected artifact build
+        ↓
+atomic artifact + server metadata publication
 ```
 
-Waypoint-specific build behavior begins at the builder boundary.
+For App2, one client build generation owns all related output:
 
-The builder:
+```text
+dist/app2-client/
+  browser/
+  protected/
+  .waypoint/
+    server/
+```
 
-1. analyzes `app.routes.ts`;
-2. prepares protected AOT sources;
-3. generates host-only navigation/runtime inputs;
-4. delegates the host build to Angular;
-5. bundles protected code by authorization domain;
-6. validates physical isolation;
-7. publishes server delivery metadata atomically.
-
-There is deliberately no automatic search for a route filename. Convention is
-more predictable than filesystem heuristics, and `waypoint.entry` remains the
-escape hatch for non-standard layouts.
+There is no parallel `dist/waypoint-generated` compiler output and no separate
+compiler CLI in the normal application build path.

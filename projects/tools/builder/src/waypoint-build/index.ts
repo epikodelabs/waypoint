@@ -18,7 +18,6 @@ import {
 interface WaypointBuildOptions extends Record<string, unknown> {
   readonly waypoint?: {
     readonly entry?: string;
-    readonly routesExport?: string;
     readonly profile?: boolean;
     readonly buildManifest?: boolean;
   };
