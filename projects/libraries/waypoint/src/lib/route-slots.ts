@@ -1,6 +1,7 @@
 import type {
   NavigationTree,
   RouteContributionDefinition,
+  RouteContributionLoader,
   RouteSlotDefinition,
 } from './navigation-definitions';
 
@@ -8,10 +9,24 @@ export function routeSlot<
   const TId extends string,
 >(
   id: TId,
-): RouteSlotDefinition<TId> {
+): RouteSlotDefinition<TId>;
+export function routeSlot<
+  const TId extends string,
+  const TContribution extends RouteContributionDefinition,
+>(
+  id: TId,
+  loadContribution: RouteContributionLoader<TContribution>,
+): RouteSlotDefinition<TId, TContribution>;
+export function routeSlot(
+  id: string,
+  loadContribution?: RouteContributionLoader,
+): RouteSlotDefinition {
   return Object.freeze({
     kind: 'route-slot',
-    id: normalizeRouteIdentity(id, 'Route slot') as TId,
+    id: normalizeRouteIdentity(id, 'Route slot'),
+    ...(loadContribution
+      ? { loadContribution }
+      : {}),
   });
 }
 

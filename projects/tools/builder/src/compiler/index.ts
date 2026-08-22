@@ -12,3 +12,6 @@ export {
   prepareBuild,
   type PreparedWaypointBuild,
 } from './prepare-build.js';
+export {
+  type PublishedRouteArtifact,
+} from './protected-artifacts.js';

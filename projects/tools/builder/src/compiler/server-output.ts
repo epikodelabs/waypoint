@@ -6,6 +6,9 @@ import {
   commonStaticPrefix,
   type ServerRoutePlan,
 } from './server-plan.js';
+import type {
+  PublishedRouteArtifact,
+} from './protected-artifacts.js';
 
 export interface PublishedServerOutput {
   readonly indexPath: string;
@@ -14,6 +17,8 @@ export interface PublishedServerOutput {
 export async function publishServerRouteOutput(
   plan: ServerRoutePlan,
   serverRoot: string,
+  publishedArtifacts:
+    readonly PublishedRouteArtifact[],
 ): Promise<PublishedServerOutput> {
   const absoluteRoot =
     path.resolve(serverRoot);
@@ -79,26 +84,51 @@ export async function publishServerRouteOutput(
     });
   }
 
+  const physicalByKey =
+    new Map(
+      publishedArtifacts.map(
+        artifact => [
+          artifact.artifactKey,
+          artifact,
+        ] as const,
+      ),
+    );
+
   const artifacts =
     plan.artifacts.map(
-      artifact => ({
-        kind: artifact.kind,
-        artifactKey:
-          artifact.artifactKey,
-        routeSetId:
-          artifact.routeSetId,
-        dependencies:
-          artifact.dependencies,
-        branchIds:
-          artifact.branchIds,
+      artifact => {
+        const physical =
+          physicalByKey.get(
+            artifact.artifactKey,
+          );
 
-        /*
-         * Browser artifact publication is a later builder phase. Keep file/hash
-         * absent until that phase supplies a real physical artifact. The server
-         * can still match and authorize routes from this metadata, and it will
-         * refuse module delivery until a physical artifact is published.
-         */
-      }),
+        if (!physical) {
+          throw new Error(
+            `Protected artifact "${artifact.artifactKey}" was not published.`,
+          );
+        }
+
+        return {
+          kind: artifact.kind,
+          artifactKey:
+            artifact.artifactKey,
+          routeSetId:
+            artifact.routeSetId,
+          dependencies:
+            artifact.dependencies,
+          branchIds:
+            artifact.branchIds,
+          file:
+            portableRelative(
+              absoluteRoot,
+              physical.outputPath,
+            ),
+          hash:
+            physical.hash,
+          bytes:
+            physical.bytes,
+        };
+      },
     );
 
   const index = {
@@ -159,6 +189,22 @@ export async function publishServerRouteOutput(
         'server-index.json',
       ),
   });
+}
+
+function portableRelative(
+  from: string,
+  to: string,
+): string {
+  let relative =
+    path.relative(from, to)
+      .split(path.sep)
+      .join('/');
+
+  if (!relative.startsWith('.')) {
+    relative = `./${relative}`;
+  }
+
+  return relative;
 }
 
 function safeFileName(

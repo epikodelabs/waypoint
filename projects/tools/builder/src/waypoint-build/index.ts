@@ -1,4 +1,4 @@
-﻿import path from 'node:path';
+import path from 'node:path';
 
 import {
   createBuilder,
@@ -11,6 +11,9 @@ import {
   createBuildLayout,
   prepareBuild,
 } from '../compiler/index.js';
+import {
+  assertNoRouteArtifactKeysInHost,
+} from '../compiler/host-isolation.js';
 
 interface WaypointBuildOptions extends Record<string, unknown> {
   readonly waypoint?: {
@@ -70,8 +73,7 @@ async function execute(
       buildManifestOutput:
         waypoint.buildManifest === false
           ? undefined
-          : layout.buildManifest,
-      routesExport: waypoint.routesExport,
+          : layout.manifest,
       profile: waypoint.profile,
     });
 
@@ -148,6 +150,19 @@ async function execute(
       } finally {
         await delegated.stop();
       }
+
+      /*
+       * Security boundary: no server-delivered routesFor() contribution may be
+       * reachable from the public Angular host graph. Contribution ids are
+       * stable runtime strings, so scanning the final browser output catches
+       * accidental imports even after Angular/esbuild transforms the modules.
+       */
+      await assertNoRouteArtifactKeysInHost(
+        layout.publicRoot,
+        analysis.plan.artifacts.map(
+          artifact => artifact.artifactKey,
+        ),
+      );
 
       const published = await build.publish();
 
@@ -311,9 +326,3 @@ function reportDiagnostics(
 export default createBuilder<WaypointBuildOptions>(
   execute,
 );
-
-
-
-
-
-

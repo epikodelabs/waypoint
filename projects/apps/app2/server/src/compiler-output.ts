@@ -1,4 +1,4 @@
-﻿import { existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -38,24 +38,55 @@ export interface ServerShard extends ServerRouterShard<Branch> {
   readonly branches: readonly Branch[];
 }
 
+/**
+ * Angular's Vite dev server executes application code with process.cwd()
+ * pointing at `.angular/vite-root`. Find the real workspace rather than
+ * treating the temporary Vite root as the repository root.
+ */
 const workspaceRoot =
-  path.resolve(process.cwd());
+  findAngularWorkspaceRoot(
+    process.cwd(),
+  );
+
+const clientBuildRoot =
+  path.resolve(
+    workspaceRoot,
+    'dist/app2-client',
+  );
+
+const clientServerOutputRoot =
+  path.join(
+    clientBuildRoot,
+    '.waypoint',
+    'server',
+  );
 
 const packagedOutputRoot =
-  path.resolve(import.meta.dirname, '../waypoint');
+  path.resolve(
+    import.meta.dirname,
+    '../waypoint',
+  );
 
+/**
+ * app2-client's Waypoint builder owns one atomic generation:
+ *
+ *   dist/app2-client/
+ *     browser/
+ *     protected/
+ *     .waypoint/server/
+ *
+ * app2-server consumes that generation. A packaged server-local generation is
+ * only a fallback when the client build output is not available.
+ */
 const defaultOutputRoot =
   existsSync(
     path.join(
-      packagedOutputRoot,
+      clientServerOutputRoot,
       'server-index.json',
     ),
   )
-    ? packagedOutputRoot
-    : path.resolve(
-        workspaceRoot,
-        'dist/app2-client/.waypoint/server',
-      );
+    ? clientServerOutputRoot
+    : packagedOutputRoot;
 
 const outputRoot =
   process.env['WAYPOINT_OUTPUT_ROOT']
@@ -75,49 +106,172 @@ const indexPath =
       );
 
 export function loadServerIndex(): Promise<ServerIndex> {
-  return readJson<ServerIndex>(indexPath);
+  return readJson<ServerIndex>(
+    indexPath,
+  );
 }
 
 export async function readServerOutputRevision(): Promise<string> {
-  const stat = await statWithRetry(indexPath);
+  const stat =
+    await statWithRetry(
+      indexPath,
+    );
+
   return `${stat.mtimeMs}:${stat.size}`;
 }
 
-export function resolveOutputPath(relative: string): string {
-  const root = path.resolve(path.dirname(indexPath));
-  const absolute = path.resolve(root, relative);
-  const relation = path.relative(root, absolute);
+export function resolveOutputPath(
+  relative: string,
+): string {
+  const serverRoot =
+    path.resolve(
+      path.dirname(indexPath),
+    );
+
+  /*
+   * Server metadata intentionally lives below `.waypoint/server` while
+   * protected browser artifacts live in the sibling top-level `protected`
+   * directory. Therefore a valid artifact record may contain:
+   *
+   *   ../../protected/<artifact>.js
+   *
+   * Confinement belongs at the complete Waypoint build root, not the
+   * server-index directory.
+   */
+  const buildRoot =
+    process.env['WAYPOINT_BUILD_ROOT']
+      ? path.resolve(
+          process.env['WAYPOINT_BUILD_ROOT'],
+        )
+      : inferBuildRoot(serverRoot);
+
+  const absolute =
+    path.resolve(
+      serverRoot,
+      relative,
+    );
+
+  const relation =
+    path.relative(
+      buildRoot,
+      absolute,
+    );
 
   if (
     relation === '..'
-    || relation.startsWith(`..${path.sep}`)
+    || relation.startsWith(
+      `..${path.sep}`,
+    )
     || path.isAbsolute(relation)
   ) {
     throw new Error(
-      `Compiler output path "${relative}" escapes "${root}".`,
+      `Compiler output path "${relative}" escapes Waypoint build root "${buildRoot}".`,
     );
   }
 
   return absolute;
 }
 
-export function loadShard(file: string): Promise<ServerShard> {
-  return readJson<ServerShard>(resolveOutputPath(file));
+export function loadShard(
+  file: string,
+): Promise<ServerShard> {
+  return readJson<ServerShard>(
+    resolveOutputPath(file),
+  );
 }
 
 /** Cached, atomically refreshable view of one published compiler generation. */
-export const compilerOutputSource = createServerRouterSnapshotSource<
-  ArtifactDescriptor,
-  Branch
->({
-  loadIndex: loadServerIndex,
-  loadShard,
-  revision: readServerOutputRevision,
-});
+export const compilerOutputSource =
+  createServerRouterSnapshotSource<
+    ArtifactDescriptor,
+    Branch
+  >({
+    loadIndex: loadServerIndex,
+    loadShard,
+    revision: readServerOutputRevision,
+  });
 
-async function readJson<T>(file: string): Promise<T> {
-  const contents = await readFileWithRetry(file);
-  return JSON.parse(contents) as T;
+export const compilerOutputDiagnostics =
+  Object.freeze({
+    workspaceRoot,
+    clientBuildRoot,
+    clientServerOutputRoot,
+    packagedOutputRoot,
+    outputRoot,
+    indexPath,
+  });
+
+function inferBuildRoot(
+  serverRoot: string,
+): string {
+  const parent =
+    path.dirname(serverRoot);
+
+  if (
+    path.basename(serverRoot) === 'server'
+    && path.basename(parent) === '.waypoint'
+  ) {
+    return path.resolve(
+      serverRoot,
+      '..',
+      '..',
+    );
+  }
+
+  /*
+   * Packaged/custom layouts may place server metadata in a named directory
+   * directly below their generation root. Allow sibling artifacts while still
+   * preventing escape from that generation.
+   */
+  return path.dirname(serverRoot);
+}
+
+function findAngularWorkspaceRoot(
+  start: string,
+): string {
+  let current =
+    path.resolve(start);
+
+  while (true) {
+    if (
+      existsSync(
+        path.join(
+          current,
+          'angular.json',
+        ),
+      )
+      && existsSync(
+        path.join(
+          current,
+          'package.json',
+        ),
+      )
+    ) {
+      return current;
+    }
+
+    const parent =
+      path.dirname(current);
+
+    if (parent === current) {
+      throw new Error(
+        `Could not locate Angular workspace root from "${start}".`,
+      );
+    }
+
+    current = parent;
+  }
+}
+
+async function readJson<T>(
+  file: string,
+): Promise<T> {
+  const contents =
+    await readFileWithRetry(file);
+
+  return JSON.parse(
+    contents,
+  ) as T;
 }
 
 const RETRY_DELAY_MS = 100;
@@ -147,6 +301,7 @@ async function retryMissingFile<T>(
 ): Promise<T> {
   const deadline =
     Date.now() + RETRY_TIMEOUT_MS;
+
   let lastError: unknown;
 
   while (Date.now() < deadline) {
@@ -162,9 +317,10 @@ async function retryMissingFile<T>(
     }
   }
 
-  throw lastError ?? new Error(
-    `Timed out waiting for compiler output "${file}".`,
-  );
+  throw lastError
+    ?? new Error(
+      `Timed out waiting for compiler output "${file}".`,
+    );
 }
 
 function isMissingFileError(
@@ -173,14 +329,18 @@ function isMissingFileError(
   return !!error
     && typeof error === 'object'
     && 'code' in error
-    && (error as NodeJS.ErrnoException).code === 'ENOENT';
+    && (
+      error as NodeJS.ErrnoException
+    ).code === 'ENOENT';
 }
 
 function delay(
   ms: number,
 ): Promise<void> {
   return new Promise(resolve => {
-    setTimeout(resolve, ms);
+    setTimeout(
+      resolve,
+      ms,
+    );
   });
 }
-

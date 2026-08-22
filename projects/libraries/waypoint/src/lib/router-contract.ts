@@ -10,12 +10,11 @@ import type {
   RouterState,
 } from './vanilla-router';
 
-/**
- * @deprecated Server-driven routers refresh the authorized tree by default.
- * Kept temporarily so existing callers can request the legacy explicit
- * authorization-boundary behavior while migrating.
- */
 export interface RouterRevalidationOptions {
+  /**
+   * Removes every route and contribution previously installed through
+   * server-driven resolution before revalidating the current URL.
+   */
   readonly resetResolvedRoutes?: boolean;
 }
 
@@ -24,17 +23,7 @@ export type RouterReloadReason =
   | 'principal-change';
 
 export interface RouterReloadOptions {
-  /**
-   * `reset` preserves the current principal while replacing the current
-   * browser realm. `principal-change` first crosses the server-controlled
-   * principal boundary before the new document is loaded.
-   */
   readonly reason?: RouterReloadReason;
-
-  /**
-   * Preferred destination after the new document is authorized. The server
-   * still validates and may replace this destination.
-   */
   readonly target?: string;
 }
 

@@ -210,11 +210,27 @@ export type LayoutDefinition<
     readonly frame?: TFrame;
   };
 
+export type RouteContributionLoader<
+  TContribution extends RouteContributionDefinition =
+    RouteContributionDefinition,
+> = Lazy<TContribution>;
+
 export interface RouteSlotDefinition<
   TId extends string = string,
+  TContribution extends RouteContributionDefinition =
+    RouteContributionDefinition,
 > {
   readonly kind: 'route-slot';
   readonly id: TId;
+
+  /**
+   * Authored ownership edge for a separately defined routesFor() contribution.
+   *
+   * In server-delivery builds the compiler consumes this loader as source
+   * metadata. The protected parent artifact does not bundle the child route set;
+   * the server remains responsible for authorizing and delivering it.
+   */
+  readonly loadContribution?: RouteContributionLoader<TContribution>;
 }
 
 export interface RouteContributionDefinition<
@@ -230,7 +246,7 @@ export interface RouteContributionDefinition<
 
 export type AnyRouteDefinition = RouteDefinition<any, any, any, any, any>;
 export type AnyLayoutDefinition = LayoutDefinition<any, any, any>;
-export type AnyRouteSlotDefinition = RouteSlotDefinition<any>;
+export type AnyRouteSlotDefinition = RouteSlotDefinition<any, any>;
 export type AnyRouteContributionDefinition = RouteContributionDefinition<any, any, any>;
 
 export type NavigationEntry =

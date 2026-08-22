@@ -7,6 +7,11 @@ import type {
 import {
   publishServerRouteOutput,
 } from './server-output.js';
+import {
+  buildProtectedRouteArtifacts,
+  publishProtectedRouteArtifacts,
+  removeStaleProtectedRouteArtifacts,
+} from './protected-artifacts.js';
 
 export interface PrepareBuildOptions {
   readonly metadataRoot: string;
@@ -108,9 +113,31 @@ export async function prepareBuild(
     }),
 
     async publish() {
+      const preparedArtifacts =
+        await buildProtectedRouteArtifacts(
+          analysis,
+        );
+
+      const publishedArtifacts =
+        await publishProtectedRouteArtifacts(
+          analysis.planned.artifactsOutput,
+          preparedArtifacts,
+        );
+
+      /*
+       * The old server index remains valid while the new content-hashed files
+       * are added. Only after every file is present do we atomically swap the
+       * server metadata to the new generation.
+       */
       await publishServerRouteOutput(
         analysis.plan!,
         analysis.planned.serverOutput,
+        publishedArtifacts,
+      );
+
+      await removeStaleProtectedRouteArtifacts(
+        analysis.planned.artifactsOutput,
+        publishedArtifacts,
       );
 
       if (
@@ -146,6 +173,18 @@ export async function prepareBuild(
                       artifact.dependencies,
                     branches:
                       artifact.branchIds,
+                    file:
+                      publishedArtifacts.find(
+                        item =>
+                          item.artifactKey
+                          === artifact.artifactKey,
+                      )?.fileName,
+                    hash:
+                      publishedArtifacts.find(
+                        item =>
+                          item.artifactKey
+                          === artifact.artifactKey,
+                      )?.hash,
                   }),
                 ),
             },

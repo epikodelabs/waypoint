@@ -1,57 +1,118 @@
-export const WAYPOINT_SERVER_HOST_RUNTIME_SYMBOL_KEY =
-  '@epikodelabs/waypoint/server-navigation-host-runtime' as const;
+export const WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY =
+  '__WAYPOINT_SERVER_NAVIGATION_HOST_RUNTIME_V1__' as const;
 
-export type ServerNavigationHostModule = Readonly<Record<string, unknown>>;
-export type ServerNavigationHostModules = Readonly<
-  Record<string, ServerNavigationHostModule>
->;
+export type ServerNavigationHostModule =
+  Readonly<Record<string, unknown>>;
 
-interface ServerNavigationHostRuntimeState {
-  readonly modules: Map<string, ServerNavigationHostModule>;
+export type ServerNavigationHostModules =
+  Readonly<
+    Record<
+      string,
+      ServerNavigationHostModule
+    >
+  >;
+
+export interface ServerNavigationHostRuntimeState {
+  readonly version: 1;
+  readonly modules:
+    Map<
+      string,
+      ServerNavigationHostModule
+    >;
 }
 
-type RuntimeGlobal = typeof globalThis & {
-  [key: symbol]: ServerNavigationHostRuntimeState | undefined;
-};
+type RuntimeGlobal =
+  typeof globalThis & {
+    [WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY]?:
+      ServerNavigationHostRuntimeState;
+  };
+
+export function readServerNavigationHostRuntime():
+  ServerNavigationHostRuntimeState | undefined {
+  return (
+    globalThis as RuntimeGlobal
+  )[
+    WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY
+  ];
+}
 
 /**
- * Registers package module namespaces that independently delivered artifacts
- * must share with the already-running application.
+ * Registers module namespaces shared by independently delivered artifacts.
  *
- * Angular packages and Waypoint itself are identity-sensitive: bundling a
- * second copy into an artifact can create different DI tokens, directives, or
- * framework runtime state. Re-registering the same module namespace is safe;
- * registering a different namespace for the same specifier is rejected.
+ * A plain global property is intentional. Protected route artifacts are built
+ * independently from the host application and may be evaluated by a different
+ * bundler/runtime wrapper in development. Both sides therefore rendezvous on
+ * one explicit browser-global property instead of module-local state.
  */
 export function registerServerNavigationHostModules(
   modules: ServerNavigationHostModules,
 ): void {
-  const global = globalThis as RuntimeGlobal;
-  const key = Symbol.for(WAYPOINT_SERVER_HOST_RUNTIME_SYMBOL_KEY);
-  let state = global[key];
+  const global =
+    globalThis as RuntimeGlobal;
+
+  let state =
+    global[
+      WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY
+    ];
 
   if (!state) {
-    state = Object.freeze({
-      modules: new Map<string, ServerNavigationHostModule>(),
-    });
-    global[key] = state;
+    state = {
+      version: 1,
+      modules:
+        new Map<
+          string,
+          ServerNavigationHostModule
+        >(),
+    };
+
+    global[
+      WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY
+    ] = state;
   }
 
-  for (const [specifier, module] of Object.entries(modules)) {
-    const normalized = specifier.trim();
-    if (!normalized) {
-      throw new Error('Server navigation host module specifier must not be empty.');
-    }
-    if (!module || typeof module !== 'object') {
-      throw new Error(`Server navigation host module ${JSON.stringify(normalized)} must be an object namespace.`);
-    }
+  for (
+    const [specifier, module]
+    of Object.entries(modules)
+  ) {
+    const normalized =
+      specifier.trim();
 
-    const existing = state.modules.get(normalized);
-    if (existing && existing !== module) {
+    if (!normalized) {
       throw new Error(
-        `Server navigation host module ${JSON.stringify(normalized)} was registered with a different module identity.`,
+        'Server navigation host module specifier must not be empty.',
       );
     }
-    state.modules.set(normalized, module);
+
+    if (
+      !module
+      || typeof module !== 'object'
+    ) {
+      throw new Error(
+        `Server navigation host module ${JSON.stringify(
+          normalized,
+        )} must be an object namespace.`,
+      );
+    }
+
+    const existing =
+      state.modules.get(
+        normalized,
+      );
+
+    if (
+      existing
+      && existing !== module
+    ) {
+      throw new Error(
+        `Server navigation host module ${JSON.stringify(
+          normalized,
+        )} was registered with a different module identity.`,
+      );
+    }
+
+    state.modules.set(
+      normalized,
+      module,
+    );
   }
 }

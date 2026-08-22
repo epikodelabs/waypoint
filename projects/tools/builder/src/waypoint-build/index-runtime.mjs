@@ -1,0 +1,175 @@
+import path from 'node:path';
+import { analyze, createBuildLayout, prepareBuild, } from '../compiler/index.mjs';
+import { assertNoRouteArtifactKeysInHost, } from '../compiler/host-isolation.mjs';
+/**
+ * Waypoint is the application's actual build builder.
+ *
+ * All non-`waypoint` options are ordinary @angular/build:application options
+ * and are delegated directly to Angular after Waypoint injects its generated
+ * host navigation/runtime inputs.
+ */
+export async function execute(options, context) {
+    try {
+        if (!context.target) {
+            throw new Error('Waypoint build requires an Architect project target context.');
+        }
+        const workspaceRoot = context.workspaceRoot;
+        const projectMetadata = await context.getProjectMetadata(context.target.project);
+        const projectRoot = typeof projectMetadata['root'] === 'string'
+            ? projectMetadata['root']
+            : '';
+        const angularOptions = angularApplicationOptions(options);
+        const outputPath = resolveOutputPath(workspaceRoot, angularOptions['outputPath']);
+        const layout = createBuildLayout(outputPath);
+        const waypoint = options.waypoint ?? {};
+        const entry = path.resolve(workspaceRoot, projectRoot, waypoint.entry ?? 'src/app/app.routes.ts');
+        const analysis = await analyze({
+            entry,
+            serverOutput: layout.serverRoot,
+            artifactsOutput: layout.protectedRoot,
+            buildManifestOutput: waypoint.buildManifest === false
+                ? undefined
+                : layout.manifest,
+            profile: waypoint.profile,
+        });
+        reportDiagnostics(analysis.diagnostics, context);
+        if (!analysis.success || !analysis.plan) {
+            return {
+                success: false,
+                error: 'Waypoint analysis failed.',
+            };
+        }
+        const build = await prepareBuild(analysis, {
+            metadataRoot: layout.metadataRoot,
+        });
+        try {
+            const delegatedOptions = {
+                ...angularOptions,
+                fileReplacements: [
+                    ...normalizeReplacements(angularOptions['fileReplacements']),
+                    {
+                        replace: angularWorkspacePath(workspaceRoot, analysis.planned.entry),
+                        with: angularWorkspacePath(workspaceRoot, build.host.routesEntry),
+                    },
+                ],
+                polyfills: [
+                    ...normalizePolyfills(angularOptions['polyfills']),
+                    angularWorkspacePath(workspaceRoot, build.host.runtimeEntry),
+                ],
+            };
+            /*
+             * Delegate directly to Angular's builder implementation rather than
+             * scheduling another project target. This avoids a synthetic build-base
+             * target and avoids recursion into Waypoint's own build target.
+             */
+            const delegated = await context.scheduleBuilder('@angular/build:application', delegatedOptions, {
+                target: context.target,
+            });
+            try {
+                const angularResult = await delegated.result;
+                if (!angularResult.success) {
+                    await build.rollback();
+                    return angularResult;
+                }
+            }
+            finally {
+                await delegated.stop();
+            }
+            /*
+             * Security boundary: no server-delivered routesFor() contribution may be
+             * reachable from the public Angular host graph. Contribution ids are
+             * stable runtime strings, so scanning the final browser output catches
+             * accidental imports even after Angular/esbuild transforms the modules.
+             */
+            await assertNoRouteArtifactKeysInHost(layout.publicRoot, analysis.plan.artifacts.map(artifact => artifact.artifactKey));
+            const published = await build.publish();
+            reportDiagnostics(published.diagnostics, context);
+            return published.success
+                ? { success: true }
+                : {
+                    success: false,
+                    error: 'Waypoint publication failed.',
+                };
+        }
+        finally {
+            await build.dispose();
+        }
+    }
+    catch (error) {
+        const message = error instanceof Error
+            ? error.message
+            : String(error);
+        context.logger.error(message);
+        return {
+            success: false,
+            error: message,
+        };
+    }
+}
+function angularWorkspacePath(workspaceRoot, absolutePath) {
+    const relative = path.relative(workspaceRoot, absolutePath);
+    if (relative === '..'
+        || relative.startsWith(`..${path.sep}`)
+        || path.isAbsolute(relative)) {
+        throw new Error(`Waypoint generated path "${absolutePath}" is outside workspace "${workspaceRoot}".`);
+    }
+    return relative
+        .split(path.sep)
+        .join('/');
+}
+function angularApplicationOptions(options) {
+    const { waypoint: _waypoint, ...angular } = options;
+    return angular;
+}
+function normalizeReplacements(value) {
+    if (!Array.isArray(value))
+        return [];
+    return value.flatMap(item => {
+        if (!item
+            || typeof item !== 'object'
+            || typeof item.replace !== 'string'
+            || typeof item.with !== 'string') {
+            return [];
+        }
+        return [{
+                replace: item.replace,
+                with: item.with,
+            }];
+    });
+}
+function normalizePolyfills(value) {
+    if (typeof value === 'string') {
+        return [value];
+    }
+    return Array.isArray(value)
+        ? value.filter((item) => typeof item === 'string')
+        : [];
+}
+function resolveOutputPath(workspaceRoot, value) {
+    if (typeof value === 'string'
+        && value.length > 0) {
+        return path.resolve(workspaceRoot, value);
+    }
+    if (value
+        && typeof value === 'object'
+        && typeof value.base === 'string') {
+        return path.resolve(workspaceRoot, value.base);
+    }
+    throw new Error('Waypoint build requires Angular application outputPath.');
+}
+function reportDiagnostics(diagnostics, context) {
+    for (const diagnostic of diagnostics) {
+        const text = diagnostic.code
+            ? `${diagnostic.code}: ${diagnostic.message}`
+            : diagnostic.message;
+        if (diagnostic.level === 'error') {
+            context.logger.error(text);
+        }
+        else if (diagnostic.level === 'warning') {
+            context.logger.warn(text);
+        }
+        else {
+            context.logger.info(text);
+        }
+    }
+}

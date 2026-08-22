@@ -4,15 +4,22 @@ import {
   importProvidersFrom,
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
+import * as angularCore from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
+import * as waypoint from '@epikodelabs/waypoint';
 import {
+  createServerNavigationResolver,
   provideServerRouter,
 } from '@epikodelabs/waypoint/server';
 
 import { routes } from './app.routes';
-import { administrationRoutes } from '../../../client/src/app/routes/administration.routes';
-import { applicationRoutes } from '../../../client/src/app/routes/application.routes';
-import { publicRoutes } from '../../../client/src/app/routes/public.routes';
+
+const resolveRoutes = createServerNavigationResolver({
+  hostModules: {
+    '@angular/core': angularCore,
+    '@epikodelabs/waypoint': waypoint,
+  },
+});
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -20,11 +27,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     ...provideServerRouter(routes, {
       viewTransitions: true,
-      contributions: [
-        publicRoutes,
-        applicationRoutes,
-        administrationRoutes,
-      ],
+      resolveRoutes,
     }),
   ],
 };
