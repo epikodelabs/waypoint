@@ -1,344 +1,475 @@
-# @epikodelabs/waypoint
+# Waypoint
 
-**Privacy-first routing for Angular.**
+**Server-authorized routing for Angular.**
 
-Waypoint lets the server decide not only whether a route can be activated, but whether the browser should receive that route and its code at all.
+Waypoint is an Angular router for applications where route authorization
+is also a **code-delivery boundary**.
 
-```bash
-npm install @epikodelabs/waypoint
+Most client routers answer:
+
+> Can the current user activate this route?
+
+Waypoint can additionally answer:
+
+> Should the browser receive this route and its implementation at all?
+
+That distinction drives the architecture.
+
+``` text
+                Waypoint Builder
+                      │
+             ┌────────┴────────┐
+             │                 │
+        public host      protected modules
+             │                 │
+             │                 ▼
+             │          Waypoint Server
+             │          authorization
+             │                 │
+             └──── Browser ◄───┘
+                       │
+                       ▼
+                 Waypoint Client
 ```
 
----
+**Builder isolates. Server authorizes. Client navigates.**
 
-## Why Waypoint?
+------------------------------------------------------------------------
 
-Traditional client-side routers usually ship the application's route graph to the browser and use guards to decide whether navigation may continue.
+## The idea
 
-That answers:
+Consider an application with public, user, and administrative areas:
 
-> Can this client activate this route?
-
-Waypoint can move the decision earlier:
-
-> Should this client receive this route at all?
-
-For many applications, those are very different questions.
-
-Consider an application with:
-
-```text
+``` text
+/
+/login
 /app
 /app/projects
-/app/reports
 /app/admin
-/app/internal-tools
 ```
 
-A client-side guard can prevent a user from entering `/app/admin`.
+With ordinary lazy loading, the administrative code can still be a
+publicly addressable deployment artifact even if a guard prevents
+navigation to it.
 
-But the browser may still know that `/app/admin` exists, and protected application code may still be represented somewhere in the client build.
+Waypoint allows the administrative branch to become a **protected build
+artifact** instead.
 
-Waypoint is designed for applications where route visibility and route-code delivery can be controlled by the server.
+The public browser application contains enough information to reach an
+ownership boundary, but not necessarily the protected route
+implementation behind it. When navigation reaches that boundary, the
+client asks the server to resolve the destination. The server evaluates
+the current principal and returns only the route artifacts that
+principal is allowed to receive.
 
-```text
-Authored navigation
+This is not a replacement for API authorization. Backend operations must
+still authorize every protected request independently.
+
+------------------------------------------------------------------------
+
+## Three parts, three responsibilities
+
+Waypoint deliberately separates build-time isolation, server
+authorization, and browser navigation.
+
+### Builder
+
+The builder understands route ownership and authorization while
+compiling the Angular application.
+
+It:
+
+-   analyzes authored navigation;
+-   validates authorization boundaries;
+-   separates protected branches from the public host;
+-   compiles Angular code for protected route artifacts;
+-   tracks artifact dependencies;
+-   verifies host isolation;
+-   publishes the resulting generation atomically.
+
+A typical output looks like:
+
+``` text
+dist/app/
+├── browser/
+│   └── ... public Angular application
+│
+├── protected/
+│   ├── application-core-<hash>.js
+│   ├── administration-core-<hash>.js
+│   └── ...
+│
+└── .waypoint/
+    └── server/
+        └── server-index.json
+```
+
+`protected/` is intentionally outside the normal public browser assets.
+
+The directory name itself provides no security. The deployment must
+expose those files only through the authorized server delivery path.
+
+### Server
+
+The server owns disclosure.
+
+Given a URL and a principal, it determines:
+
+``` text
+Which route matches?
         │
         ▼
-Waypoint compiler
+Which route contribution owns it?
         │
-        ├── server navigation metadata
+        ▼
+Which policy applies?
         │
-        └── independently deliverable browser artifacts
-                         │
-                         ▼
-                     Server
-                         │
-                  authorize request
-                         │
-                         ▼
-                allowed artifacts only
-                         │
-                         ▼
-                      Browser
+        ▼
+Which artifacts are required?
+        │
+        ▼
+Is the complete chain authorized?
+        │
+        ▼
+Return a delivery plan
 ```
 
-The browser does not need the complete protected navigation model up front.
+The server does not trust the browser to decide what it may load.
 
-This is **not server-side rendering**.
+### Client
 
-Angular can still render entirely in the browser, use SSR, or use another rendering strategy. Waypoint's server-side model concerns **route visibility, authorization, and artifact delivery**.
+The client owns navigation state.
 
----
+When a destination requires server-delivered configuration, it:
 
-## Route authoring stays simple
+1.  resolves the destination with the server;
+2.  loads the authorized artifact chain;
+3.  validates and installs the returned route contributions;
+4.  prepares the navigation;
+5.  commits the resulting UI atomically.
 
-Waypoint does not make ordinary routing look like infrastructure.
+Navigation remains cancellable while this happens. A stale request
+cannot finish later and replace a newer navigation.
 
-```ts
+------------------------------------------------------------------------
+
+# Authoring routes
+
+Waypoint keeps normal route definitions close to the component they
+describe.
+
+``` ts
 import {
-  frame,
   layout,
   route,
   s,
+  type NavigationTree,
 } from '@epikodelabs/waypoint';
 
 export const routes = [
   layout('/app', AppShellComponent, [
-    route(
-      '/projects/:projectId',
-      frame(ProjectPage, {
-        prepare: [
-          context => ({
-            project: inject(ProjectStore)
-              .load(context.params.projectId),
-          }),
-        ],
-      }),
-      {
-        paramsSchema: {
-          projectId: s.number(),
-        },
+    route('/projects/:projectId', ProjectPage, {
+      name: 'project',
+
+      paramsSchema: {
+        projectId: s.number({ min: 1 }),
       },
-    ),
+
+      querySchema: {
+        tab: s.string('overview'),
+      },
+    }),
   ]),
-];
+] as const satisfies NavigationTree;
 ```
 
-A destination can keep its URL, rendering, typed parameters, lifecycle, providers, policy, and identity together.
+Routes may describe rendering, identity, schemas, policy, providers, and
+navigation lifecycle without requiring separate guard or resolver
+classes for every destination.
 
-No resolver class for loading data.
+------------------------------------------------------------------------
 
-No guard class just to express navigation lifecycle.
+## Lifecycle
 
-No second representation of the same route merely because the server needs to understand it.
+`frame()` associates a component with route lifecycle behavior.
 
----
-
-## One navigation model
-
-Waypoint starts with authored TypeScript navigation.
-
-The compiler derives the representations required by the browser and server.
-
-```text
-TypeScript
-    │
-    ▼
-Semantic navigation model
-    │
-    ▼
-Navigation IR
-    │
-    ├── validation
-    ├── artifact planning
-    ├── server metadata
-    └── isolated browser artifacts
-```
-
-Application navigation remains the authored source of truth.
-
-The compiler does the splitting.
-
----
-
-## Layouts
-
-Layouts compose application structure without forcing routing behavior into components.
-
-```ts
-const routes = [
-  layout('/app', AppShellComponent, [
-    route('/projects', ProjectsPage),
-    route('/settings', SettingsPage),
-  ]),
-];
-```
-
-Layouts can contribute inherited navigation context such as rendering, providers, policy, and lifecycle.
-
-They can be nested when the application structure requires it.
-
----
-
-## Navigation lifecycle
-
-Waypoint uses functions for navigation lifecycle.
-
-```ts
-route(
+``` ts
+const projectRoute = route(
   '/projects/:projectId',
+
   frame(ProjectPage, {
     beforeEnter: [
-      context => {
-        // before activation
-      },
+      context =>
+        session.canOpenProject(
+          context.params.projectId,
+        ),
     ],
 
     prepare: [
       async context => ({
-        project: await loadProject(context.params.projectId),
+        project:
+          await projects.load(
+            context.params.projectId,
+          ),
       }),
     ],
 
     afterEnter: [
-      context => {
-        // committed
-      },
-    ],
-
-    beforeLeave: [
-      context => {
-        // leaving the destination
-      },
+      context =>
+        analytics.page(context.path),
     ],
   }),
+
+  {
+    name: 'project',
+
+    paramsSchema: {
+      projectId: s.number({ min: 1 }),
+    },
+  },
 );
 ```
 
-The core lifecycle is:
+Navigation is conceptually:
 
-```text
+``` text
 beforeLeave
+    ↓
 beforeEnter
+    ↓
 prepare
+    ↓
 commit
+    ↓
 afterEnter
 ```
 
-Lifecycle belongs to the destination being navigated, rather than being scattered across unrelated guard and resolver classes.
+Preparation happens before the new UI becomes active.
 
----
+------------------------------------------------------------------------
 
-## Typed URLs
+# Typed navigation
 
-Parameters and query state can be described with schemas.
+Named routes produce typed navigation helpers.
 
-```ts
-route('/projects/:projectId', ProjectPage, {
-  paramsSchema: {
-    projectId: s.number(),
+``` ts
+await router.navigateTo.project({
+  params: {
+    projectId: 42,
   },
 
-  searchSchema: {
-    page: s.number(),
-    archived: s.boolean(),
+  query: {
+    tab: 'activity',
   },
 });
 ```
 
-Navigation code receives parsed values rather than repeatedly converting URL strings throughout the application.
+URLs can be generated without navigating:
 
----
-
-## Route ownership
-
-Large applications should not require one enormous route file.
-
-Waypoint provides explicit ownership boundaries with `routeSlot()` and `routesFor()`.
-
-The application can declare where independently owned navigation belongs:
-
-```ts
-export const routes = [
-  layout('/app', AppShellComponent, [
-    route('/projects', ProjectsPage),
-
-    routeSlot('administration'),
-  ]),
-];
+``` ts
+const href = router.hrefTo.project({
+  params: {
+    projectId: 42,
+  },
+});
 ```
 
-Another feature can own that navigation:
+The route name, parameters, and query values are checked against the
+configured navigation tree.
 
-```ts
+Incoming URLs are validated through the same schema model rather than
+being exposed as untyped strings everywhere in the application.
+
+------------------------------------------------------------------------
+
+# Protected route ownership
+
+Protected navigation is organized with two concepts:
+
+``` text
+routeSlot()
+routesFor()
+```
+
+A `routeSlot()` declares an ownership point.
+
+A `routesFor()` contribution supplies navigation owned by that point.
+
+For example, the public host may contain only:
+
+``` ts
+export const routes = [
+  routeSlot('public'),
+  routeSlot('application'),
+] as const satisfies NavigationTree;
+```
+
+The application branch can then be authored independently:
+
+``` ts
+export const applicationRoutes = routesFor(
+  'application',
+  'application-core',
+  [
+    layout('/app', AppShellComponent, [
+      route('/projects', ProjectsPage),
+
+      routeSlot(
+        'administration',
+        () =>
+          import('./administration.routes')
+            .then(
+              module =>
+                module.administrationRoutes,
+            ),
+      ),
+    ]),
+  ],
+);
+```
+
+And administration can be a separate contribution:
+
+``` ts
 export const administrationRoutes = routesFor(
   'administration',
+  'administration-core',
   [
-    route('/users', UsersPage, {
+    route('/admin', AdminPage, {
+      name: 'admin',
+
       policy: {
         roles: ['admin'],
-      },
-    }),
-
-    route('/audit', AuditPage, {
-      policy: {
-        permissions: ['audit.read'],
+        permissions: ['admin:read'],
       },
     }),
   ],
 );
 ```
 
-`routeSlot()` and `routesFor()` describe **navigation ownership**.
+The important relationship is:
 
-They are not rendering outlets.
-
-This distinction lets the compiler preserve ownership while deriving independently deliverable artifacts and server authorization metadata.
-
----
-
-## Server-controlled navigation
-
-This is where Waypoint differs most from a conventional Angular router.
-
-Protected route sets can be compiled into independently deliverable browser artifacts.
-
-The server retains the information needed to resolve and authorize them:
-
-```text
-path
-policy
-ownership
-artifact identity
-dependencies
-redirect relationships
+``` text
+routeSlot('application')
+        │
+        ▼
+routesFor(
+  'application',
+  'application-core',
+  ...
+)
+        │
+        ▼
+routeSlot('administration', loader)
+        │
+        ▼
+routesFor(
+  'administration',
+  'administration-core',
+  ...
+)
 ```
 
-The browser does not need that complete protected catalog.
+The loader on a nested `routeSlot()` is not merely a conventional lazy
+import. It expresses the authored ownership edge that the builder uses
+when planning protected artifacts.
 
-When navigation reaches a destination that is not currently installed, the browser can ask the server to resolve it.
+A root slot can remain loader-less when its contribution is supplied
+through server delivery:
 
-```text
-Browser
-   │
-   │  /app/admin
-   ▼
-Server router
-   │
-   ├── match
-   ├── authorize
-   ├── resolve redirects
-   ├── authorize dependencies
-   └── build delivery plan
-   │
-   ▼
-Authorized artifacts
-   │
-   ▼
-Browser
-   │
-   ├── load
-   ├── validate
-   ├── install
-   └── revalidate
+``` ts
+routeSlot('application')
 ```
 
-Unknown and unauthorized protected destinations can therefore remain indistinguishable at the browser/server boundary.
+------------------------------------------------------------------------
 
----
+# Authorization follows ownership
 
-## Server router
+Waypoint does not treat policies as unrelated annotations on arbitrary
+chunks.
 
-Waypoint provides a framework-neutral server router.
+Protected ownership forms an authorization hierarchy.
 
-```ts
-const source = createServerRouterSnapshotSource({
-  loadIndex,
-  loadShard,
-  revision: readPublishedRevision,
-});
+A child contribution may preserve or strengthen the authorization
+inherited from its parent, but it must not weaken it.
 
-const serverRouter = createServerRouter({
+``` text
+application
+  authenticated user
+        │
+        ▼
+administration
+  authenticated user
+  + admin role
+        │
+        ▼
+security
+  authenticated user
+  + admin role
+  + security:manage
+```
+
+The builder uses this relationship to keep three things aligned:
+
+``` text
+route ownership
+      │
+      ▼
+artifact dependency
+      │
+      ▼
+authorization dependency
+```
+
+That is a core Waypoint invariant.
+
+A protected child cannot depend on its parent for delivery while
+simultaneously claiming a broader audience than that parent.
+
+------------------------------------------------------------------------
+
+# Why build-time analysis matters
+
+Separating route arrays is not enough to protect Angular code.
+
+Components, directives, providers, and other declarations introduce
+their own dependency graph. A shared Angular declaration can
+accidentally connect two authorization domains even when the route
+definitions themselves look correctly separated.
+
+Waypoint therefore checks the physical build graph as well as the
+logical route graph.
+
+The builder is responsible for detecting cases where protected
+implementation would:
+
+-   enter the public host;
+-   cross incompatible authorization domains;
+-   become reachable through an incorrectly shared declaration;
+-   create an invalid artifact dependency.
+
+The build fails instead of silently weakening the intended boundary.
+
+This is one of the main differences between Waypoint and a router that
+simply attaches role metadata to lazy routes.
+
+------------------------------------------------------------------------
+
+# Server delivery
+
+The server consumes the metadata produced by the client build.
+
+A server router is created from a coherent routing snapshot:
+
+``` ts
+const source =
+  createServerRouterSnapshotSource({
+    loadIndex,
+    loadShard,
+    revision: readPublishedRevision,
+  });
+
+const router = createServerRouter({
   loadSnapshot: source.loadSnapshot,
 
   moduleUrlFor: artifact =>
@@ -346,426 +477,500 @@ const serverRouter = createServerRouter({
 });
 ```
 
-Resolve navigation for the current principal:
+A destination is resolved against the current principal:
 
-```ts
-const resolution = await serverRouter.resolve(
+``` ts
+const result = await router.resolve(
   requestedPath,
   principal,
 );
 ```
 
-The server router owns:
+Resolution includes both route authorization and artifact dependencies.
 
-- path matching
-- shard selection
-- route-set resolution
-- authorization
-- internal redirect resolution
-- dependency ordering
-- complete-chain authorization
-- browser delivery planning
+The server must authorize the **complete required chain**, not only the
+final route artifact.
 
-Authorization applies to the complete required artifact chain before the delivery plan is returned.
-
----
-
-## Express integration
-
-Waypoint also provides an Express adapter.
-
-```ts
-const navigation = createExpressServerRouterHandlers({
-  router: serverRouter,
-
-  principalFrom: request =>
-    request.principal,
-
-  artifactPathFor: artifact =>
-    resolveOutputPath(artifact.file),
-});
-
-app.get(
-  '/api/navigation/resolve',
-  navigation.resolve,
-);
-
-app.get(
-  '/api/navigation/modules/:artifactKey/:hash',
-  navigation.module,
-);
+``` text
+application-core
+       │
+       ▼
+administration-core
+       │
+       ▼
+security-core
 ```
 
-Express itself is not a runtime dependency of the Waypoint package.
+If `/app/admin/security` requires all three, all three must be valid for
+the principal before the server returns the delivery plan.
 
-The adapter targets only the request/response surface it needs, leaving authentication middleware, Express version, filesystem layout, and application composition to the host.
+------------------------------------------------------------------------
 
----
+## Coherent server generations
 
-## Browser delivery
+Waypoint treats generated routing metadata as one published generation.
 
-The browser counterpart is `createServerNavigationResolver()`.
+The server snapshot source loads the required metadata before exposing
+the new snapshot. A failed or interrupted refresh should leave the
+previous valid generation active rather than combining old and new
+routing data.
 
-```ts
+The same principle exists in the builder:
+
+``` text
+write new artifacts
+       ↓
+write new metadata
+       ↓
+publish authoritative index
+       ↓
+clean stale output
+```
+
+A server should never observe an index that points to an artifact
+generation that has not been published successfully.
+
+------------------------------------------------------------------------
+
+## Protected module responses
+
+Protected module delivery should not reveal unnecessary information
+about the protected catalog.
+
+An unauthorized artifact, an unknown artifact, and a stale artifact can
+all appear externally as:
+
+``` text
+404 Not Found
+```
+
+This is not the authorization mechanism. The server still performs real
+authorization.
+
+The uniform response simply avoids turning the endpoint into an
+artifact-discovery oracle.
+
+Principal-sensitive module responses should also avoid shared caching:
+
+``` text
+Cache-Control: private, no-store
+Vary: Authorization, Cookie
+```
+
+------------------------------------------------------------------------
+
+# Browser delivery
+
+The client installs a server resolver into the router:
+
+``` ts
 import * as angularCore from '@angular/core';
 import * as waypoint from '@epikodelabs/waypoint';
 
 const resolveRoutes =
-  waypoint.createServerNavigationResolver({
+  createServerNavigationResolver({
     hostModules: {
       '@angular/core': angularCore,
       '@epikodelabs/waypoint': waypoint,
     },
   });
 
-provideRouter(routes, {
-  resolveRoutes,
-});
+export const appConfig: ApplicationConfig = {
+  providers: [
+    ...provideRouter(routes, {
+      resolveRoutes,
+      viewTransitions: true,
+    }),
+  ],
+};
 ```
 
-The resolver:
+When the current configuration cannot resolve a destination, the server
+resolver can extend it with authorized route contributions.
 
-1. asks the server to resolve the destination;
-2. validates the returned delivery plan;
-3. loads authorized artifacts in dependency order;
-4. validates their `routesFor()` contributions;
-5. installs the navigation atomically;
-6. continues navigation against the resulting configuration.
+``` text
+navigate('/app/admin')
+        │
+        ▼
+not installed locally
+        │
+        ▼
+server resolve
+        │
+        ▼
+authorized artifact plan
+        │
+        ▼
+load modules
+        │
+        ▼
+install routesFor() contributions
+        │
+        ▼
+continue navigation
+```
 
-Artifacts are content-addressed by artifact identity and hash.
+------------------------------------------------------------------------
 
-Shared runtime modules such as Angular and Waypoint itself remain owned by the host application so independently delivered artifacts do not create duplicate framework runtimes or identity-sensitive DI tokens.
+# One Angular runtime
 
----
+Protected artifacts are independently delivered, but they are not
+independent Angular applications.
 
-## Runtime configuration
+They must use the same important runtime identities as the host.
 
-Navigation delivered by the server becomes runtime configuration.
+Waypoint therefore provides a host-module bridge so protected artifacts
+can use the host's Angular and Waypoint modules instead of embedding
+private copies.
 
-Waypoint keeps configuration replacement and navigation revalidation separate.
+``` text
+Browser host
+├── Angular
+├── Waypoint
+└── shared runtime modules
+        ▲
+        │
+        │ host bridge
+        │
+protected artifact
+```
 
-```ts
-const changed = router.replaceConfiguration({
-  routes,
-  transitions,
-});
+This preserves framework identity and avoids duplicating large runtime
+dependencies in every protected artifact.
+
+------------------------------------------------------------------------
+
+# Navigation remains transactional
+
+Server delivery makes route discovery asynchronous.
+
+That means a navigation can be superseded while it is:
+
+-   resolving with the server;
+-   downloading an artifact;
+-   installing configuration;
+-   preparing components.
+
+Waypoint treats cancellation as part of the navigation transaction.
+
+``` text
+navigation A
+    │
+    ├── server request
+    │
+navigation B starts
+    │
+    ├── A aborted
+    │
+    ▼
+B prepares and commits
+```
+
+Navigation A is not allowed to complete later and replace B.
+
+The same transaction model applies to history and named outlets.
+
+If several outlets belong to one navigation, they prepare before the
+navigation commits. A failure should not leave one outlet showing the
+new destination while another still shows the old one.
+
+------------------------------------------------------------------------
+
+# Revalidation and revocation
+
+Authorization can change while the application is running.
+
+Waypoint makes configuration replacement and revalidation explicit:
+
+``` ts
+const changed =
+  router.replaceConfiguration({
+    routes,
+    transitions,
+  });
 
 if (changed) {
   await router.revalidate();
 }
 ```
 
-`replaceConfiguration()` changes the active navigation model atomically.
+This can be used when:
 
-`revalidate()` explicitly rematches the current URL.
+-   permissions change;
+-   a licensed feature is enabled or removed;
+-   tenant context changes;
+-   the server returns a different navigation set.
 
-This is useful when:
+There is an important limitation:
 
-- permissions change;
-- licensing changes;
-- server-delivered navigation changes;
-- tenant state changes;
-- feature availability changes.
+> JavaScript already delivered to a browser cannot be meaningfully
+> undownloaded.
 
-Configuration updates therefore do not need to cause an implicit navigation at an arbitrary point in application state.
+Waypoint can revoke a route contribution from active navigation, but it
+cannot erase bytes already received by the browser.
 
----
+For a complete principal or tenant replacement, a full document
+navigation can be used to establish a fresh JavaScript realm.
 
-## Revocation
+------------------------------------------------------------------------
 
-Delivered routes are active navigation configuration, not permanent membership in the application.
+# Lazy loading is different
 
-When authorization changes:
+Waypoint still supports ordinary lazy routes:
 
-```ts
-await router.revalidate();
+``` ts
+const reports = lazyRoute(
+  '/reports',
+  () =>
+    import('./reports.page')
+      .then(module => module.ReportsPage),
+  {
+    name: 'reports',
+  },
+);
 ```
 
-Waypoint can discard server-delivered route contributions, preserve authored navigation, resolve the current destination again, and install the newly authorized configuration atomically.
+But lazy loading and protected delivery answer different questions:
 
-There is an important distinction:
+``` text
+lazy route
+    When should the browser load this code?
 
-```text
-artifact delivery
-    → whether code may enter the browser
-
-route revocation
-    → whether delivered code participates
-      in navigation now
+protected route contribution
+    Is this browser authorized to receive this code?
 ```
 
-JavaScript already downloaded by a browser cannot meaningfully be "undownloaded."
+A protected artifact may also be lazy in practical terms, but its
+defining property is server-authorized delivery.
 
-Waypoint does not pretend otherwise.
+------------------------------------------------------------------------
 
-Instead, it controls delivery before code enters the browser and controls whether previously delivered route contributions remain part of the active navigation model.
+# Building
 
----
+Waypoint uses one build owner:
 
-## Principal and tenant changes
-
-Changing permissions for the same principal and replacing the principal are different security boundaries.
-
-For permission changes:
-
-```text
-same principal
-    ↓
-authorization changed
-    ↓
-revoke + revalidate
+``` text
+@epikodelabs/waypoint-builder
 ```
 
-For a new user or tenant, the recommended boundary is stronger:
+The builder's TypeScript source contains the complete internal
+compilation pipeline. Generated builder JavaScript is build output, not
+a parallel implementation.
 
-```text
-server session switch
-        ↓
-resolve authorized landing destination
-        ↓
-full document navigation
-        ↓
-fresh JavaScript realm
+For the application:
+
+``` text
+Waypoint builder
+       ↓
+client build
+       ↓
+browser + protected + server metadata
+       ↓
+server build
 ```
 
-This avoids treating a completely different authorization identity as merely another incremental route update.
+Build in that order:
 
----
-
-## Atomic publication
-
-Compiler output can be exposed to the server through immutable routing snapshots.
-
-```ts
-const source = createServerRouterSnapshotSource({
-  loadIndex,
-  loadShard,
-  revision: readPublishedRevision,
-});
+``` bash
+npm run build:builder
+npm run build:client
+npm run build:server
 ```
 
-A snapshot represents one routing generation.
+The client build comes before the server because it owns the Waypoint
+artifact generation consumed by the server.
 
-Waypoint loads the required compiler metadata before publishing that generation. If refresh fails, the previous valid snapshot remains active.
+------------------------------------------------------------------------
 
-That prevents navigation from observing a partially published compiler output.
+# What Waypoint guarantees
 
----
+Waypoint is designed around a few strong invariants.
 
-## Navigation results
+### The public host is actually public
 
-Waypoint distinguishes ordinary routing outcomes from execution failures.
+Protected route implementation should not accidentally remain reachable
+from the host bundle.
 
-```ts
-const navigated = await router.navigate(...);
+### Authorization becomes no weaker through protected ownership
+
+Nested contributions preserve or strengthen inherited authorization.
+
+### Delivery is server-authorized
+
+Knowing or guessing an artifact URL does not grant access to it.
+
+### Artifact dependencies are authorized together
+
+A leaf cannot be delivered through an unauthorized dependency chain.
+
+### Published generations are coherent
+
+The builder and server avoid exposing mixtures of old and new artifact
+metadata.
+
+### Navigation commits coherently
+
+Cancelled, failed, or superseded work does not become visible
+application state.
+
+------------------------------------------------------------------------
+
+# What Waypoint does not guarantee
+
+Waypoint does not replace application security outside routing.
+
+It does not secure an unprotected backend API.
+
+It does not make downloaded JavaScript secret forever.
+
+It does not make content hashes authorization tokens.
+
+It does not mean every application needs protected frontend modules.
+
+If the complete client application is intentionally public and route
+guards are sufficient, a conventional router is simpler.
+
+------------------------------------------------------------------------
+
+# Assessment
+
+Waypoint is more infrastructure than a conventional Angular router
+because it solves a larger problem.
+
+## Builder --- highly sophisticated
+
+The builder is the most unusual part of the system.
+
+It must understand both the logical navigation model and the physical
+Angular dependency graph. Authorization policy is useful only if the
+resulting code artifacts preserve the same boundary.
+
+The combination of authorization monotonicity, declaration isolation,
+host isolation, dependency-aware artifacts, content hashing, and atomic
+publication makes the builder closer to an **authorization-aware
+application linker** than a route configuration generator.
+
+## Server --- robust and deliberately narrow
+
+The server does not duplicate the browser router.
+
+Its job is to transform:
+
+``` text
+URL + principal + published generation
 ```
 
-The promise resolves `true` when navigation commits.
+into:
 
-It resolves `false` for expected non-commit outcomes such as:
-
-- blocked navigation
-- not found
-- cancelled or superseded navigation
-- ignored same-URL navigation
-
-It rejects when navigation itself fails, including failures during:
-
-- route loading
-- parsing
-- preparation
-- rendering or commit
-- external dispatch
-- server delivery
-
-Server-resolution failures remain failures rather than being silently converted into "not found." An unavailable authorization service should not accidentally become an authorization decision.
-
----
-
-## Highlights
-
-- Privacy-first server-controlled route delivery
-- Independently deliverable route artifacts
-- Server-side authorization metadata
-- Typed params and query state
-- Layout composition
-- Function-based lifecycle
-- `prepare()` data loading
-- Route ownership with `routeSlot()` / `routesFor()`
-- Named outlets
-- Lazy loading
-- Route-specific providers
-- Atomic runtime configuration
-- Explicit revalidation and revocation
-- Framework-neutral server router
-- Express adapter
-- Standalone Angular support
-
----
-
-## Core API
-
-### `route()`
-
-Defines a navigable destination.
-
-```ts
-route('/projects/:id', ProjectPage);
+``` text
+authorized delivery plan
 ```
 
----
+Coherent snapshots, complete-chain authorization, non-disclosing
+failures, and framework-neutral HTTP integration make that boundary
+comparatively easy to reason about.
 
-### `frame()`
+## Client --- asynchronous without becoming nondeterministic
 
-Associates rendering with navigation lifecycle.
+The client has to combine a normal router's responsibilities with
+configuration that may arrive during navigation.
 
-```ts
-frame(ProjectPage, {
-  beforeEnter,
-  prepare,
-  afterEnter,
-  beforeLeave,
-});
+The important achievement is not simply dynamic route installation. It
+is preserving cancellation, history, outlet, and commit consistency
+while doing so.
+
+## Overall
+
+Waypoint's architecture addresses three independent failure modes:
+
+``` text
+protected code leaks during build
+              ↓
+        Builder isolation
+
+unauthorized code is delivered
+              ↓
+       Server authorization
+
+stale/partial navigation commits
+              ↓
+        Client transaction
 ```
 
----
+That separation is the system's strongest architectural property.
 
-### `layout()`
+------------------------------------------------------------------------
 
-Composes inherited application structure.
+# When Waypoint fits
 
-```ts
-layout('/app', AppShell, [
-  route('/projects', ProjectsPage),
-]);
-```
+Waypoint is particularly suited to applications with:
 
----
+-   administrative areas;
+-   permission-specific frontend capabilities;
+-   multi-tenant navigation;
+-   licensed modules;
+-   internal tooling;
+-   server-composed route branches;
+-   frontend code whose disclosure is itself part of the
+    security/privacy model.
 
-### `routeSlot()`
+The central question is:
 
-Declares a navigation ownership boundary.
+> **Is what the browser is allowed to know part of the architecture?**
 
-```ts
-routeSlot('administration');
-```
+If the answer is yes, Waypoint provides a routing model built around
+that boundary.
 
----
+------------------------------------------------------------------------
 
-### `routesFor()`
+## Core concepts
 
-Contributes separately owned navigation to a slot.
+  -----------------------------------------------------------------------
+  API                                 Purpose
+  ----------------------------------- -----------------------------------
+  `route()`                           Define a destination
 
-```ts
-routesFor('administration', [
-  route('/users', UsersPage),
-]);
-```
+  `layout()`                          Define inherited route structure
 
----
+  `frame()`                           Attach rendering lifecycle
 
-### `revalidate()`
+  `lazyRoute()`                       Lazy-load ordinary route code
 
-Explicitly reevaluates the current destination against the current authorization and navigation configuration.
+  `routeSlot()`                       Declare a navigation ownership
+                                      boundary
 
-```ts
-await router.revalidate();
-```
+  `routesFor()`                       Contribute routes to an ownership
+                                      boundary
 
----
+  `router.navigateTo.*`               Typed named navigation
 
-## What Waypoint does not claim
+  `router.hrefTo.*`                   Typed URL generation
 
-Waypoint improves control over **route discovery and code delivery**.
+  `router.replaceConfiguration()`     Replace runtime navigation
+                                      configuration
 
-It is not a substitute for server-side authorization of application data or APIs.
+  `router.revalidate()`               Reevaluate the current destination
+  -----------------------------------------------------------------------
 
-A route being absent from the browser does not make an unprotected backend endpoint secure.
+------------------------------------------------------------------------
 
-Applications should still authorize every protected server operation independently.
+## Design principles
 
-Waypoint also cannot erase JavaScript that has already been downloaded by a browser. Revocation removes delivered navigation from the active route model; principal replacement should use a fresh document realm when that distinction matters.
+-   The server is authoritative for protected delivery.
+-   Do not ship protected implementation to a principal that cannot use
+    it.
+-   Authorization may become stricter through nested ownership, not
+    weaker.
+-   Protect the physical code graph, not only route metadata.
+-   Authorize the complete artifact chain.
+-   Do not use hashes as secrets.
+-   Publish complete generations.
+-   Commit complete navigations.
+-   Stale asynchronous work never wins.
+-   Share framework runtime identities across delivered artifacts.
+-   Keep backend authorization independent from frontend routing.
 
----
-
-## When should I use Waypoint?
-
-Waypoint is particularly useful for applications with:
-
-- administration areas
-- role- or permission-specific functionality
-- multi-tenant navigation
-- licensed features
-- independently owned application branches
-- server-composed applications
-- route structures that should not be globally exposed
-- protected frontend code that should be delivered selectively
-
-If your entire route map is intentionally public and ordinary client-side guards are sufficient, a conventional router may be simpler.
-
-Waypoint is for applications where **what the browser is allowed to know** is part of the architecture.
-
----
-
-## Examples
-
-The repository contains two complementary examples.
-
-### Client
-
-Demonstrates the standalone browser runtime:
-
-- layouts
-- lifecycle
-- lazy loading
-- named outlets
-- typed navigation
-
-### Server
-
-Demonstrates server-controlled navigation:
-
-```text
-public application shell
-        ↓
-unresolved protected destination
-        ↓
-server authorization
-        ↓
-authorized compiler artifact
-        ↓
-runtime route installation
-```
-
----
-
-## Design philosophy
-
-Waypoint keeps application navigation declarative and pushes delivery complexity into infrastructure designed to handle it.
-
-**Author navigation once.**
-
-Let the compiler derive what the browser and server need.
-
-Keep authorization on the server.
-
-Keep runtime installation atomic.
-
-Make revalidation explicit.
-
-And do not send the browser navigation it does not need to know about.
-
----
-
-## Documentation
-
-For protocol-level details, see:
-
-- `docs/server-delivery-contract.md`
-
-It defines the normative server/browser delivery protocol, artifact resolution behavior, HTTP semantics, authorization requirements, and publication model.
-
----
+------------------------------------------------------------------------
 
 ## License
 
