@@ -1,13 +1,20 @@
-import type { RouteContributionDefinition } from '@epikodelabs/waypoint';
+import type { RouteContributionDefinition } from './navigation-definitions';
 import {
   readServerNavigationHostRuntime,
   registerServerNavigationHostModules,
   type ServerNavigationHostModules,
 } from './server-host-runtime';
-import {
-  isServerNavigationResolution,
-  type ServerArtifactDelivery,
-} from './server-delivery';
+interface ServerArtifactDelivery {
+  readonly artifactKey: string;
+  readonly moduleUrl: string;
+  readonly hash: string;
+  readonly kind?: 'route' | 'shared';
+}
+
+interface ServerNavigationResolution {
+  readonly artifactKey: string;
+  readonly artifacts: readonly ServerArtifactDelivery[];
+}
 
 export interface ServerNavigationFetchResponse {
   readonly ok: boolean;
@@ -64,6 +71,32 @@ export type ServerNavigationResolver = (
 
 interface RouteModule {
   readonly default?: unknown;
+}
+
+function isServerNavigationResolution(
+  value: unknown,
+): value is ServerNavigationResolution {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Partial<ServerNavigationResolution>;
+  if (
+    typeof candidate.artifactKey !== 'string'
+    || candidate.artifactKey.trim().length === 0
+    || !Array.isArray(candidate.artifacts)
+  ) {
+    return false;
+  }
+
+  return candidate.artifacts.every(artifact =>
+    typeof artifact?.artifactKey === 'string'
+    && artifact.artifactKey.trim().length > 0
+    && typeof artifact.moduleUrl === 'string'
+    && artifact.moduleUrl.trim().length > 0
+    && typeof artifact.hash === 'string'
+    && artifact.hash.trim().length > 0,
+  ) && candidate.artifacts.some(
+    artifact => artifact.artifactKey === candidate.artifactKey,
+  );
 }
 
 /**

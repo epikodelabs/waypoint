@@ -13,7 +13,7 @@ import path from 'node:path';
 import {
   createExpressServerRouterHandlers,
   createServerRouter,
-} from '@epikodelabs/waypoint/server';
+} from './waypoint-server/public-api.js';
 
 import {
   compilerOutputSource,

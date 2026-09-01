@@ -2,7 +2,7 @@ import {
   registerServerNavigationHostModules,
   readServerNavigationHostRuntime,
   WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY,
-} from '../../server/server-host-runtime';
+} from '../lib/server-host-runtime';
 
 describe('server navigation host bridge timing', () => {
   afterEach(() => {

@@ -1,6 +1,6 @@
 import {
   createServerNavigationResolver,
-} from './browser-delivery';
+} from '../lib/browser-delivery';
 
 describe('browser shared artifact delivery', () => {
   it('loads shared modules but returns only route contributions', async () => {

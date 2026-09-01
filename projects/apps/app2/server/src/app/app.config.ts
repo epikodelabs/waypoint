@@ -10,7 +10,7 @@ import * as waypoint from '@epikodelabs/waypoint';
 import {
   createServerNavigationResolver,
   provideServerRouter,
-} from '@epikodelabs/waypoint/server';
+} from '@epikodelabs/waypoint';
 
 import { routes } from './app.routes';
 

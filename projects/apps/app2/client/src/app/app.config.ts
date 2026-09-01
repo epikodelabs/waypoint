@@ -12,7 +12,7 @@ import {
 import * as waypoint from '@epikodelabs/waypoint';
 import {
   createServerNavigationResolver,
-} from '@epikodelabs/waypoint/server';
+} from '@epikodelabs/waypoint';
 
 import { routes } from './app.routes';
 import { provideLocalDemoPrincipalSwitching } from './core/demo-session.service';

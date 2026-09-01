@@ -1,11 +1,11 @@
 {
   "srcDirs": [
     "projects/libraries/waypoint/src/lib",
-    "projects/libraries/waypoint/server"
+    "templates/server-node-ts/src/waypoint-server"
   ],
   "testDirs": [
     "projects/libraries/waypoint/src/tests",
-    "projects/libraries/waypoint/server"
+    "templates/server-node-ts/src/waypoint-server"
   ],
   "exclude": [
     "**/node_modules/**"

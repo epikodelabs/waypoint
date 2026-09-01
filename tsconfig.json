@@ -3,12 +3,6 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "@epikodelabs/waypoint/client": [
-        "./projects/libraries/waypoint/client/public-api.ts"
-      ],
-      "@epikodelabs/waypoint/server": [
-        "./projects/libraries/waypoint/server/public-api.ts"
-      ],
       "@epikodelabs/waypoint": [
         "./projects/libraries/waypoint/src/public-api.ts"
       ]

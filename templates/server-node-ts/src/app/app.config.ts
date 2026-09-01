@@ -5,7 +5,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
-import { provideServerRouter } from '@epikodelabs/waypoint/server';
+import { provideServerRouter } from '@epikodelabs/waypoint';
 
 import { routes } from './app.routes';
 import { loadProtectedRouteBranch } from './protected-route-loader';

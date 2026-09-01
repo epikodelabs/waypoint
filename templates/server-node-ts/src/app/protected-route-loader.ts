@@ -1,6 +1,6 @@
 import * as angularCore from '@angular/core';
 import * as waypoint from '@epikodelabs/waypoint';
-import { createServerNavigationResolver } from '@epikodelabs/waypoint/server';
+import { createServerNavigationResolver } from '@epikodelabs/waypoint';
 
 /**
  * Resolves authorized route branches and their browser artifacts from the

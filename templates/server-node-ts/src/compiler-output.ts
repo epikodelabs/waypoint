@@ -2,14 +2,14 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { createServerRouterSnapshotSource } from '@epikodelabs/waypoint/server';
+import { createServerRouterSnapshotSource } from './waypoint-server/public-api.js';
 import type {
   ServerRouterIndex,
   ServerRouterShard,
   ServerArtifactRecord,
   ServerRouteBranch,
   ServerRoutePolicy,
-} from '@epikodelabs/waypoint/server';
+} from './waypoint-server/public-api.js';
 
 export interface Branch extends ServerRouteBranch {
   readonly id: string;
