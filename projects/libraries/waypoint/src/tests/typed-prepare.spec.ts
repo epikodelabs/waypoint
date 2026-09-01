@@ -2,7 +2,6 @@ import type { Type } from '@angular/core';
 
 import {
   frame,
-  lazyFrame,
   route,
 } from '../lib/route-builders';
 import type {
@@ -40,8 +39,34 @@ describe('typed frame preparation', () => {
     expect(second).toEqual({ permissions: ['read'] });
   });
 
+
+  it('normalizes direct route lifecycle hooks without requiring frame()', async () => {
+    const project: Project = {
+      id: 9,
+      name: 'Direct route hooks',
+    };
+
+    const definition = route('/projects/:projectId', ProjectPage, {
+      prepare: async () => ({ project }),
+      beforeLeave: active => active.data.project.id === project.id,
+    });
+
+    const prepared = await definition.frame?.prepare?.[0]?.({} as never);
+
+    expect(prepared).toEqual({ project });
+    expect(definition.frame?.beforeLeave?.length).toBe(1);
+  });
+
+  it('treats a loader passed to route() as a lazy view', () => {
+    const loader = async () => ProjectPage;
+    const definition = route('/lazy-project', loader);
+
+    expect(definition.component).toBeUndefined();
+    expect(definition.loadComponent).toBe(loader);
+  });
+
   it('supports the same inference for lazy frames', () => {
-    const view = lazyFrame(
+    const view = frame(
       async () => ProjectPage,
       {
         prepare: [

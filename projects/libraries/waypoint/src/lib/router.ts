@@ -396,10 +396,8 @@ export {
 };
 
 export {
+  frame,
   layout,
-  lazyLayout,
-  lazyRoute,
-  redirectRoute,
+  redirect,
   route,
 } from './route-builders';
-

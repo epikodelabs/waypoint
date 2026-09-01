@@ -1,4 +1,4 @@
-import { redirectRoute, route, routesFor, type NavigationTree } from '@epikodelabs/waypoint';
+import { redirect, route, routesFor, type NavigationTree } from '@epikodelabs/waypoint';
 
 import { IntroPage } from '../pages/demo-pages';
 
@@ -6,7 +6,7 @@ export const introRoute = route('/', IntroPage, {
   name: 'intro',
 });
 
-export const legacyRoute = redirectRoute(
+export const legacyRoute = redirect(
   '/legacy',
   '/app/workspace/101?view=activity&page=2&filters=legacy',
   {

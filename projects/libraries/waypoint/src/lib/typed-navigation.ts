@@ -41,7 +41,7 @@ export type ExtractRouteNames<TRoutes extends NavigationTree> =
   RouteName<LeafRouteDefinitions<TRoutes>>;
 
 /**
- * Infers route path parameter types from paramsSchema or path template tokens.
+ * Infers route path parameter types from params or path template tokens.
  */
 export type InferRouteParams<TRoute> =
   TRoute extends RouteDefinition<
@@ -58,7 +58,7 @@ export type InferRouteParams<TRoute> =
     : Record<string, unknown>;
 
 /**
- * Infers route query parameter types from querySchema or searchSchema.
+ * Infers route query parameter types from query or searchSchema.
  */
 export type InferRouteQuery<TRoute> =
   TRoute extends RouteDefinition<

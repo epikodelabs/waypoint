@@ -11,6 +11,7 @@ import type {
 
 export type MaybePromise<T> = T | PromiseLike<T>;
 export type Lazy<T> = () => MaybePromise<T | { readonly default: T }>;
+export type View = Type<unknown> | Lazy<Type<unknown>>;
 
 export type NavigationProvider = Provider | EnvironmentProviders;
 export type NavigationProviders = readonly NavigationProvider[];
@@ -27,14 +28,11 @@ export type RouteRedirect = {
 };
 
 export type EmptyRouteData = Readonly<Record<string, never>>;
-
 export type FramePrepareResult = void | RouteData;
 
 export type FramePrepareFn<
   TResult extends FramePrepareResult = FramePrepareResult,
-> = (
-  context: NavigationContext,
-) => MaybePromise<TResult>;
+> = (context: NavigationContext) => MaybePromise<TResult>;
 
 type AwaitedPrepareResult<TPrepare> =
   TPrepare extends (...args: never[]) => infer TResult
@@ -43,46 +41,38 @@ type AwaitedPrepareResult<TPrepare> =
 
 type UnionToIntersection<T> =
   (T extends unknown ? (value: T) => void : never) extends
-    (value: infer TIntersection) => void
-      ? TIntersection
-      : never;
+    (value: infer TIntersection) => void ? TIntersection : never;
 
-type Simplify<T> = {
-  readonly [TKey in keyof T]: T[TKey];
-};
+type Simplify<T> = { readonly [TKey in keyof T]: T[TKey] };
 
-/**
- * Merges the object results of all prepare handlers in a frame.
- * A handler returning void contributes no keys.
- */
+export type HookList<T> = T | readonly T[];
+
 export type InferPreparedData<
-  TPrepare extends readonly FramePrepareFn[] | undefined,
-> = [TPrepare] extends [readonly FramePrepareFn[]]
-  ? [AwaitedPrepareResult<TPrepare[number]>] extends [never]
-    ? Readonly<Record<string, never>>
-    : Simplify<UnionToIntersection<AwaitedPrepareResult<TPrepare[number]>>>
+  TPrepare extends HookList<FramePrepareFn> | undefined,
+> = [TPrepare] extends [HookList<FramePrepareFn>]
+  ? [AwaitedPrepareResult<
+      TPrepare extends readonly FramePrepareFn[] ? TPrepare[number] : TPrepare
+    >] extends [never]
+    ? EmptyRouteData
+    : Simplify<UnionToIntersection<AwaitedPrepareResult<
+        TPrepare extends readonly FramePrepareFn[] ? TPrepare[number] : TPrepare
+      >>>
   : EmptyRouteData;
 
-export type FrameAfterEnterFn<
-  TData extends RouteData = RouteData,
-> = (
-  route: ActivatedRoute<TData>,
-) => MaybePromise<void>;
+export type FrameAfterEnterFn<TData extends RouteData = RouteData> =
+  (route: ActivatedRoute<TData>) => MaybePromise<void>;
 
-export type FrameBeforeLeaveFn<
-  TData extends RouteData = RouteData,
-> = (
-  route: DeactivationContext<TData>,
-) => MaybePromise<GuardResult>;
+export type FrameBeforeLeaveFn<TData extends RouteData = RouteData> =
+  (route: DeactivationContext<TData>) => MaybePromise<GuardResult>;
 
 export interface FrameHooks<
-  TPrepare extends readonly FramePrepareFn[] | undefined =
-    readonly FramePrepareFn[] | undefined,
+  TPrepare extends HookList<FramePrepareFn> | undefined =
+    HookList<FramePrepareFn> | undefined,
 > {
-  readonly beforeEnter?: readonly RouterCanActivateFn[];
-  readonly beforeLeave?: readonly FrameBeforeLeaveFn<InferPreparedData<TPrepare>>[];
+  readonly beforeEnter?: HookList<RouterCanActivateFn>;
+  readonly beforeLeave?: HookList<FrameBeforeLeaveFn<InferPreparedData<TPrepare>>>;
   readonly prepare?: TPrepare;
-  readonly afterEnter?: readonly FrameAfterEnterFn<InferPreparedData<TPrepare>>[];
+  readonly afterEnter?: HookList<FrameAfterEnterFn<InferPreparedData<TPrepare>>>;
 }
 
 export interface EagerViewDefinition {
@@ -97,20 +87,17 @@ export interface LazyViewDefinition {
 
 export type ViewDefinition = EagerViewDefinition | LazyViewDefinition;
 
-export type FrameView<
-  TData extends RouteData = EmptyRouteData,
-> = ViewDefinition & {
-  readonly kind: 'frame';
-  readonly beforeEnter?: readonly RouterCanActivateFn[];
-  readonly beforeLeave?: readonly FrameBeforeLeaveFn<TData>[];
-  readonly prepare?: readonly FramePrepareFn[];
-  readonly afterEnter?: readonly FrameAfterEnterFn<TData>[];
-};
+export type FrameView<TData extends RouteData = EmptyRouteData> =
+  ViewDefinition & {
+    readonly kind: 'frame';
+    readonly beforeEnter?: readonly RouterCanActivateFn[];
+    readonly beforeLeave?: readonly FrameBeforeLeaveFn<TData>[];
+    readonly prepare?: readonly FramePrepareFn[];
+    readonly afterEnter?: readonly FrameAfterEnterFn<TData>[];
+  };
 
 export type InferFrameData<TFrame> =
-  TFrame extends FrameView<infer TData>
-    ? TData
-    : EmptyRouteData;
+  TFrame extends FrameView<infer TData> ? TData : EmptyRouteData;
 
 export interface RouteDefinitionBase<
   TPath extends string = string,
@@ -120,32 +107,37 @@ export interface RouteDefinitionBase<
   readonly name?: TName;
   readonly data?: Readonly<Record<string, unknown>>;
   readonly providers?: NavigationProviders;
-  /** Server authorization metadata consumed by the Waypoint compiler. */
   readonly policy?: RoutePolicy;
 }
+
+export type RouteOutlets = Readonly<Record<string, View | FrameView<any>>>;
 
 export interface RenderableRouteDefinitionBase<
   TPath extends string = string,
   TName extends string | undefined = string | undefined,
-  TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
-  TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
+  TParams extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
+  TQuery extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
 > extends RouteDefinitionBase<TPath, TName> {
   readonly kind: 'route';
+  /** Internal compiled outlet identity. Use `outlets` when authoring routes. */
   readonly outlet?: string;
   readonly preload?: boolean;
   readonly viewTransition?: boolean;
-  readonly paramsSchema?: TParamsSchema;
-  readonly querySchema?: TQuerySchema;
+  readonly params?: TParams;
+  readonly query?: TQuery;
+  readonly outlets?: RouteOutlets;
 }
 
 export type RouteOptions<
   TName extends string | undefined = string | undefined,
-  TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
-  TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
+  TParams extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
+  TQuery extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
+  TPrepare extends HookList<FramePrepareFn> | undefined =
+    HookList<FramePrepareFn> | undefined,
 > = Omit<
-  RenderableRouteDefinitionBase<string, TName, TParamsSchema, TQuerySchema>,
+  RenderableRouteDefinitionBase<string, TName, TParams, TQuery>,
   'kind' | 'path'
->;
+> & FrameHooks<TPrepare>;
 
 export interface RedirectRouteDefinition<
   TPath extends string = string,
@@ -158,10 +150,10 @@ export interface RedirectRouteDefinition<
 export type RenderableRoute<
   TPath extends string = string,
   TName extends string | undefined = string | undefined,
-  TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
-  TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
+  TParams extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
+  TQuery extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
   TFrame extends FrameView<any> | undefined = FrameView<any> | undefined,
-> = RenderableRouteDefinitionBase<TPath, TName, TParamsSchema, TQuerySchema> &
+> = RenderableRouteDefinitionBase<TPath, TName, TParams, TQuery> &
   ViewDefinition & {
     readonly frame?: TFrame;
     readonly redirectTo?: never;
@@ -170,18 +162,16 @@ export type RenderableRoute<
 export type RouteDefinition<
   TPath extends string = string,
   TName extends string | undefined = string | undefined,
-  TParamsSchema extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
-  TQuerySchema extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
+  TParams extends ParamSchemaRecord | undefined = ParamSchemaRecord | undefined,
+  TQuery extends QuerySchemaRecord | undefined = QuerySchemaRecord | undefined,
   TFrame extends FrameView<any> | undefined = FrameView<any> | undefined,
 > =
   | RedirectRouteDefinition<TPath, TName>
-  | RenderableRoute<TPath, TName, TParamsSchema, TQuerySchema, TFrame>;
+  | RenderableRoute<TPath, TName, TParams, TQuery, TFrame>;
 
 export type InferRoutePreparedData<TRoute> =
   TRoute extends RenderableRoute<string, string | undefined, any, any, infer TFrame>
-    ? TFrame extends FrameView<any>
-      ? InferFrameData<TFrame>
-      : Readonly<Record<string, never>>
+    ? TFrame extends FrameView<any> ? InferFrameData<TFrame> : EmptyRouteData
     : EmptyRouteData;
 
 export interface LayoutDefinitionBase<
@@ -192,44 +182,31 @@ export interface LayoutDefinitionBase<
   readonly path: TPath;
   readonly entries: TEntries;
   readonly providers?: NavigationProviders;
-  /** Server authorization metadata inherited by descendant navigation. */
   readonly policy?: RoutePolicy;
 }
 
-export type LayoutOptions = Omit<
-  LayoutDefinitionBase,
-  'kind' | 'path' | 'entries'
->;
+export type LayoutOptions<
+  TPrepare extends HookList<FramePrepareFn> | undefined =
+    HookList<FramePrepareFn> | undefined,
+> = Omit<LayoutDefinitionBase, 'kind' | 'path' | 'entries'> & FrameHooks<TPrepare>;
 
 export type LayoutDefinition<
   TPath extends string = string,
   TEntries extends NavigationTree = NavigationTree,
   TFrame extends FrameView<any> | undefined = FrameView<any> | undefined,
 > = LayoutDefinitionBase<TPath, TEntries> &
-  ViewDefinition & {
-    readonly frame?: TFrame;
-  };
+  ViewDefinition & { readonly frame?: TFrame };
 
 export type RouteContributionLoader<
-  TContribution extends RouteContributionDefinition =
-    RouteContributionDefinition,
+  TContribution extends RouteContributionDefinition = RouteContributionDefinition,
 > = Lazy<TContribution>;
 
 export interface RouteSlotDefinition<
   TId extends string = string,
-  TContribution extends RouteContributionDefinition =
-    RouteContributionDefinition,
+  TContribution extends RouteContributionDefinition = RouteContributionDefinition,
 > {
   readonly kind: 'route-slot';
   readonly id: TId;
-
-  /**
-   * Authored ownership edge for a separately defined routesFor() contribution.
-   *
-   * In server-delivery builds the compiler consumes this loader as source
-   * metadata. The protected parent artifact does not bundle the child route set;
-   * the server remains responsible for authorizing and delivering it.
-   */
   readonly loadContribution?: RouteContributionLoader<TContribution>;
 }
 

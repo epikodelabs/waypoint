@@ -5,12 +5,10 @@ import { TestBed } from '@angular/core/testing';
 import {
   frame,
   layout,
-  lazyLayout,
-  lazyRoute,
-  provideRouter,
-  redirectRoute,
-  RouterOutlet,
   route,
+  provideRouter,
+  redirect,
+  RouterOutlet,
   routeSlot,
   routesFor,
   type RouterOptions,
@@ -160,7 +158,7 @@ describe('Router: flat routes and layouts', () => {
 
   it('renders an eager layout around a lazy leaf route', async () => {
     const routes = [
-      layout('/admin', ParentComponent, [lazyRoute('/lazy-child', async () => ChildComponent)]),
+      layout('/admin', ParentComponent, [route('/lazy-child', async () => ChildComponent)]),
     ] as const satisfies NavigationTree;
 
     bootstrap(routes);
@@ -173,7 +171,7 @@ describe('Router: flat routes and layouts', () => {
 
   it('renders a lazy layout around an eager leaf route', async () => {
     const routes = [
-      lazyLayout('/admin', async () => ParentComponent, [route('/child', ChildComponent)]),
+      layout('/admin', async () => ParentComponent, [route('/child', ChildComponent)]),
     ] as const satisfies NavigationTree;
 
     bootstrap(routes);
@@ -186,8 +184,8 @@ describe('Router: flat routes and layouts', () => {
 
   it('renders a lazy layout around a lazy leaf route', async () => {
     const routes = [
-      lazyLayout('/admin', async () => ParentComponent, [
-        lazyRoute('/lazy-child', async () => ChildComponent),
+      layout('/admin', async () => ParentComponent, [
+        route('/lazy-child', async () => ChildComponent),
       ]),
     ] as const satisfies NavigationTree;
 
@@ -371,7 +369,7 @@ describe('Router: flat routes and layouts', () => {
     const legacyRoutes = routesFor(
       'legacy',
       'legacy-core',
-      [redirectRoute('/legacy', '/target')],
+      [redirect('/legacy', '/target')],
     );
     const targetRoutes = routesFor(
       'target',

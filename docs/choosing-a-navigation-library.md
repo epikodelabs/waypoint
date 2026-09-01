@@ -104,7 +104,7 @@ Although the navigation models differ, the ecosystem deliberately shares the sam
 route(...)
 layout(...)
 frame(...)
-lazyRoute(...)
+route(...)
 redirect(...)
 ```
 

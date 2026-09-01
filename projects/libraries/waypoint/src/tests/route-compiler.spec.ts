@@ -1,6 +1,6 @@
 import {
   layout,
-  redirectRoute,
+  redirect,
   route,
   s,
 } from '@epikodelabs/waypoint';
@@ -23,39 +23,39 @@ describe('route compiler parameter validation', () => {
     );
   });
 
-  it('rejects paramsSchema keys that are absent from the compiled path', () => {
+  it('rejects params keys that are absent from the compiled path', () => {
     const routes = [
       route('/users/:userId', TestPage, {
-        paramsSchema: {
+        params: {
           id: s.number(),
         },
       }),
     ] as const;
 
     expect(() => createRouteRegistry(routes)).toThrowError(
-      /paramsSchema declares "id".*does not contain ":id"/,
+      /params declares "id".*does not contain ":id"/,
     );
   });
 
-  it('requires every path parameter to be declared when paramsSchema is present', () => {
+  it('requires every path parameter to be declared when params is present', () => {
     const routes = [
       route('/teams/:teamId/users/:userId', TestPage, {
-        paramsSchema: {
+        params: {
           teamId: s.number(),
         },
       }),
     ] as const;
 
     expect(() => createRouteRegistry(routes)).toThrowError(
-      /contains ":userId", but paramsSchema does not declare it/,
+      /contains ":userId", but params does not declare it/,
     );
   });
 
-  it('accepts an exact paramsSchema for the compiled path', () => {
+  it('accepts an exact params for the compiled path', () => {
     const routes = [
       layout('/teams/:teamId', TestLayout, [
         route('/users/:userId', TestPage, {
-          paramsSchema: {
+          params: {
             teamId: s.number(),
             userId: s.number(),
           },
@@ -83,32 +83,38 @@ describe('route compiler parameter validation', () => {
   });
 
   it('compiles redirects into a complete discriminated runtime record', () => {
-    const redirect = redirectRoute('/legacy', '/app/home');
-    const registry = createRouteRegistry([redirect]);
+    const legacy = redirect('/legacy', '/app/home');
+    const registry = createRouteRegistry([legacy]);
     const compiled = registry.groups[0]?.primary;
 
-    expect(compiled?.route).toBe(redirect);
+    expect(compiled?.route).toBe(legacy);
     expect(compiled?.path).toBe('/legacy');
     expect(compiled?.redirectTo).toBe('/app/home');
   });
 
   it('rejects empty redirect targets during compilation', () => {
-    const redirect = redirectRoute('/legacy', '');
+    const legacy = redirect('/legacy', '');
 
-    expect(() => createRouteRegistry([redirect])).toThrowError(
+    expect(() => createRouteRegistry([legacy])).toThrowError(
       /Redirect target must not be empty/,
     );
   });
 
-  it('keeps named outlets on a renderable compiled route group', () => {
-    const primary = route('/workspace', TestPage);
-    const sidebar = route('/workspace', TestPage, { outlet: 'sidebar' });
-    const registry = createRouteRegistry([primary, sidebar]);
+  it('expands authored outlets into the compiled route group', () => {
+    class Sidebar {}
+
+    const primary = route('/workspace', TestPage, {
+      outlets: {
+        sidebar: Sidebar,
+      },
+    });
+    const registry = createRouteRegistry([primary]);
     const group = registry.groups[0];
 
     expect(group?.primary.route).toBe(primary);
     expect(group?.outlets.length).toBe(1);
-    expect(group?.outlets[0]?.route).toBe(sidebar);
+    expect(group?.outlets[0]?.route.outlet).toBe('sidebar');
+    expect(group?.outlets[0]?.route.component).toBe(Sidebar);
   });
 
 });

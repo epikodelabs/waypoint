@@ -134,8 +134,8 @@ const projectRoute = route(
   ProjectPage,
   {
     name: 'project',
-    paramsSchema: { projectId: s.number({ min: 1 }) },
-    querySchema: { tab: s.string('overview') },
+    params: { projectId: s.number({ min: 1 }) },
+    query: { tab: s.string('overview') },
   },
 );
 ```
@@ -263,10 +263,10 @@ Waypoint is for the other case: **when what the browser is allowed to know is pa
 
 | API | Role |
 |-----|------|
-| `route()` | Define a destination |
-| `layout()` | Compose route structure |
-| `frame()` | Attach navigation lifecycle |
-| `lazyRoute()` | Ordinary lazy route code |
+| `route()` | Define an eager or lazy destination |
+| `layout()` | Compose eager or lazy route structure |
+| `frame()` | Define reusable navigation lifecycle |
+| `redirect()` | Define a redirect |
 | `routeSlot()` | Declare ownership boundary |
 | `routesFor()` | Contribute routes to a boundary |
 | `navigateTo` / `hrefTo` | Typed named navigation |

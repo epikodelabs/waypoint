@@ -109,18 +109,46 @@ function compileEntries(
       contributionId: provenance?.contributionId,
     } as const;
 
-    context.output.push(
-      entry.kind === 'redirect'
-        ? {
-            ...compiledBase,
-            route: entry,
-            redirectTo: compileRedirect(parentPath, entry.redirectTo),
-          }
-        : {
-            ...compiledBase,
-            route: entry,
-          },
-    );
+    if (entry.kind === 'redirect') {
+      context.output.push({
+        ...compiledBase,
+        route: entry,
+        redirectTo: compileRedirect(parentPath, entry.redirectTo),
+      });
+      continue;
+    }
+
+    context.output.push({
+      ...compiledBase,
+      route: entry,
+    });
+
+    for (const [outlet, view] of Object.entries(entry.outlets ?? {})) {
+      const outletRoute: RenderableRoute = {
+        kind: 'route',
+        path: entry.path,
+        outlet,
+        ...(
+          typeof view === 'function'
+          && !('ɵcmp' in view)
+          && !('ɵdir' in view)
+          && !/^class\s/.test(Function.prototype.toString.call(view))
+            ? { loadComponent: view as any }
+            : 'kind' in (view as any) && (view as any).kind === 'frame'
+              ? (
+                  'component' in (view as any)
+                    ? { component: (view as any).component, frame: view as any }
+                    : { loadComponent: (view as any).loadComponent, frame: view as any }
+                )
+              : { component: view as any }
+        ),
+      };
+
+      context.output.push({
+        ...compiledBase,
+        route: outletRoute,
+      });
+    }
   }
 }
 
@@ -232,9 +260,9 @@ function assertNamedOutlet(
       `"${primary.path}", outlet: "${outletName}"`,
     );
   }
-  if (route.route.paramsSchema || route.route.querySchema) {
+  if (route.route.params || route.route.query) {
     throw new Error(
-      'Named outlet routes cannot define paramsSchema or querySchema.',
+      'Named outlet routes cannot define params or query.',
     );
   }
   if (route.route.viewTransition !== undefined) {
@@ -379,7 +407,7 @@ function validateCompiledRouteParams(
     seen.add(name);
   }
 
-  const schema = route.paramsSchema;
+  const schema = route.params;
   if (!schema) {
     return;
   }
@@ -388,7 +416,7 @@ function validateCompiledRouteParams(
   for (const name of schemaNames) {
     if (!seen.has(name)) {
       throw new Error(
-        `paramsSchema declares "${name}", but compiled route "${path}" ` +
+        `params declares "${name}", but compiled route "${path}" ` +
         `does not contain ":${name}".`,
       );
     }
@@ -398,8 +426,8 @@ function validateCompiledRouteParams(
   for (const name of paramNames) {
     if (!declared.has(name)) {
       throw new Error(
-        `Compiled route "${path}" contains ":${name}", but paramsSchema ` +
-        'does not declare it. Declare every path parameter when paramsSchema is present.',
+        `Compiled route "${path}" contains ":${name}", but params ` +
+        'does not declare it. Declare every path parameter when params is present.',
       );
     }
   }

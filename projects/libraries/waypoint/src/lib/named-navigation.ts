@@ -16,16 +16,16 @@ import {
 export interface NamedRouteDefinition {
   readonly name: string;
   readonly path: string;
-  readonly paramsSchema?: ParamSchemaRecord;
-  readonly querySchema?: QuerySchemaRecord;
+  readonly params?: ParamSchemaRecord;
+  readonly query?: QuerySchemaRecord;
 }
 
 export interface NamedRouteRecord {
   readonly path: string;
   readonly route: {
     readonly kind?: 'route' | 'redirect';
-    readonly paramsSchema?: ParamSchemaRecord;
-    readonly querySchema?: QuerySchemaRecord;
+    readonly params?: ParamSchemaRecord;
+    readonly query?: QuerySchemaRecord;
   };
 }
 
@@ -69,7 +69,7 @@ export class NamedNavigationCatalog {
     const path = interpolateNamedPath(
       record.path,
       target.params ?? {},
-      record.route.paramsSchema,
+      record.route.params,
     );
 
     if (!path) {
@@ -77,9 +77,9 @@ export class NamedNavigationCatalog {
     }
 
     const query =
-      record.route.querySchema && target.query
+      record.route.query && target.query
         ? serializeQuery(
-            record.route.querySchema,
+            record.route.query,
             target.query,
           )
         : '';
@@ -106,8 +106,8 @@ export class NamedNavigationCatalog {
     return {
       path: deferred.path,
       route: {
-        paramsSchema: deferred.paramsSchema,
-        querySchema: deferred.querySchema,
+        params: deferred.params,
+        query: deferred.query,
       },
     };
   }

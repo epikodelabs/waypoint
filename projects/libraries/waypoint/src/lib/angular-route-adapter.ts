@@ -236,7 +236,7 @@ function adaptParamsParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
 ): ParseRouteParams | undefined {
-  const schema = route.paramsSchema;
+  const schema = route.params;
   if (!schema) return undefined;
 
   return (params, _url, _signal) =>
@@ -250,7 +250,7 @@ function adaptQueryParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
 ): ParseRouteQuery | undefined {
-  const schema = route.querySchema;
+  const schema = route.query;
   if (!schema) return undefined;
 
   return (url, _signal) =>

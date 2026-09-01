@@ -12,10 +12,10 @@ class SettingsPage {}
 
 const dashboardRoute = route('/dashboard/:projectId', DashboardPage, {
   name: 'dashboard',
-  paramsSchema: {
+  params: {
     projectId: s.number({ min: 1 }),
   },
-  querySchema: {
+  query: {
     tab: s.string('overview'),
     page: s.number({ default: 1, min: 1 }),
     filters: s.array(),
@@ -25,7 +25,7 @@ const dashboardRoute = route('/dashboard/:projectId', DashboardPage, {
 
 const settingsRoute = route('/settings', SettingsPage, {
   name: 'settings',
-  querySchema: {
+  query: {
     section: s.string('general'),
   },
 });

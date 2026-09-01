@@ -19,7 +19,7 @@ import { RouterLink } from '@epikodelabs/waypoint';
         <article class="panel">
           <h3>What to verify</h3>
           <p>
-            This page is loaded through <code>lazyRoute()</code> while the
+            This page is loaded through <code>route()</code> while the
             paired sidebar route remains eager.
           </p>
         </article>
