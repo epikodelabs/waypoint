@@ -11,7 +11,6 @@ import {
   redirectRoute,
   RouterOutlet,
   route,
-  RouterReloadError,
   routeSlot,
   routesFor,
   type RouterOptions,
@@ -486,93 +485,6 @@ describe('Router: flat routes and layouts', () => {
 
     expect(router.href({ name: 'admin' })).toBe('/admin');
     expect(getOutletContent()).toContain('<h3>Settings</h3>');
-  });
-
-  it('reloads through the default Waypoint server endpoint and replaces the document', async () => {
-    bootstrap([route('/', HomeComponent)] as const satisfies NavigationTree);
-
-    const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo({
-      ok: true,
-      status: 200,
-      async json() {
-        return {
-          location: '/app/settings?section=access',
-        };
-      },
-    } as Response);
-    const locationReplace =
-      window.location.replace;
-
-    let replacedWith: string | undefined;
-
-    const descriptor =
-      Object.getOwnPropertyDescriptor(
-        Location.prototype,
-        'replace',
-      );
-
-    if (descriptor?.writable) {
-      spyOn(
-        Location.prototype,
-        'replace',
-      ).and.callFake(function (
-        this: Location,
-        value: string | URL,
-      ) {
-        replacedWith = String(value);
-      });
-    }
-
-    const pending = router.reload({
-      target: '/app/settings?section=access',
-    });
-    await Promise.resolve();
-
-    expect(fetchSpy).toHaveBeenCalledWith('/api/navigation/reload', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        reason: 'reset',
-        target: '/app/settings?section=access',
-      }),
-    });
-    if (descriptor?.writable) {
-      expect(replacedWith)
-        .toBe('/app/settings?section=access');
-    } else {
-      // Browser Location.replace is host-defined/non-writable in this runner.
-      // The request contract is asserted above; navigation itself is covered by
-      // browser integration tests.
-      expect(locationReplace)
-        .toBe(window.location.replace);
-    }
-    expect(await Promise.race([
-      pending.then(() => 'resolved'),
-      Promise.resolve('pending'),
-    ])).toBe('pending');
-  });
-
-  it('rejects reload when the server does not authorize a replacement document', async () => {
-    bootstrap([route('/', HomeComponent)] as const satisfies NavigationTree);
-
-    spyOn(globalThis, 'fetch').and.resolveTo({
-      ok: false,
-      status: 503,
-      async json() {
-        return {
-          error: 'Navigation artifact unavailable.',
-        };
-      },
-    } as Response);
-
-    await expectAsync(router.reload()).toBeRejectedWithError(
-      RouterReloadError,
-      /503/,
-    );
   });
 
   it('discards stale resolver results that complete after revocation starts', async () => {

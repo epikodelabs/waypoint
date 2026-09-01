@@ -1070,10 +1070,13 @@ idescribe('Router', () => {
             router.start();
             router.navigate('/about');
             await delay(50);
-            // Simulate popstate
+
+            const popstate = new Promise<void>((resolve) => {
+                window.addEventListener('popstate', () => resolve(), { once: true });
+            });
+
             window.history.back();
-            const popstateEvent = new PopStateEvent('popstate');
-            window.dispatchEvent(popstateEvent);
+            await popstate;
             await delay(50);
             expect(router.state.current?.path).toBe('/');
         });
