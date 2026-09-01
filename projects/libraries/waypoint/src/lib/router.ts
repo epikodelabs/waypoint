@@ -46,7 +46,6 @@ import type {
 } from './navigation-definitions';
 
 import type { TypedHref, TypedNavigate } from './typed-navigation';
-import type { RouteRuntime } from './route-runtime';
 
 import {
   ROUTE,
@@ -80,6 +79,8 @@ import {
   type NavigationContext,
   type NavigationOptions,
   type NavigationTransitionDefinition,
+  type ParseRouteParams,
+  type ParseRouteQuery,
   type PrepareRouteDataFn,
   type PreloadingStrategy,
   type Route,
@@ -365,7 +366,7 @@ function adaptFrameTransitions(
 function adaptParamsParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): RouteRuntime['parseParams'] {
+): ParseRouteParams {
   const schema = route.paramsSchema;
   if (!schema) return undefined;
 
@@ -376,7 +377,7 @@ function adaptParamsParser(
 function adaptQueryParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): RouteRuntime['parseQuery'] {
+): ParseRouteQuery {
   const schema = route.querySchema;
   if (!schema) return undefined;
 
