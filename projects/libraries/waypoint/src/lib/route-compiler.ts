@@ -28,25 +28,9 @@ export interface CompiledRouteGroup {
   readonly outlets: readonly CompiledRoute[];
 }
 
-export interface CompiledRouteSlot {
-  readonly id: string;
-  readonly parentPath: string;
-  readonly layouts: readonly LayoutDefinition[];
-  readonly definition: RouteSlotDefinition;
-}
-
-export interface CompiledRouteContribution {
-  readonly id: string;
-  readonly slotId: string;
-  readonly definition: RouteContributionDefinition;
-  readonly routes: readonly CompiledRoute[];
-}
-
 export interface RouteRegistry {
   readonly namedRoutes: ReadonlyMap<string, CompiledRoute>;
   readonly groups: readonly CompiledRouteGroup[];
-  readonly slots: ReadonlyMap<string, CompiledRouteSlot>;
-  readonly contributions: ReadonlyMap<string, CompiledRouteContribution>;
 }
 
 interface CompileContext {
@@ -54,10 +38,7 @@ interface CompileContext {
     string,
     readonly RouteContributionDefinition[]
   >;
-  readonly contributionIds: Set<string>;
-  readonly activeContributionIds: Set<string>;
-  readonly slots: Map<string, CompiledRouteSlot>;
-  readonly contributions: Map<string, CompiledRouteContribution>;
+  readonly slots: Set<string>;
   readonly output: CompiledRoute[];
 }
 
@@ -138,12 +119,7 @@ function compileSlot(
     );
   }
 
-  context.slots.set(id, Object.freeze({
-    id,
-    parentPath,
-    layouts,
-    definition,
-  }));
+  context.slots.add(id);
 
   for (const contribution of context.contributionsBySlot.get(id) ?? []) {
     compileContribution(contribution, parentPath, layouts, context);
@@ -162,42 +138,13 @@ function compileContribution(
     `Route contribution "${id}" slot`,
   );
 
-  if (context.contributionIds.has(id)) {
-    throw new Error(
-      `Duplicate route contribution id "${id}". ` +
-      'Route contribution ids must be globally unique.',
-    );
-  }
-
-  if (context.activeContributionIds.has(id)) {
-    throw new Error(
-      `Recursive route contribution "${id}" was detected.`,
-    );
-  }
-
-  context.contributionIds.add(id);
-  context.activeContributionIds.add(id);
-
-  const start = context.output.length;
-  try {
-    compileEntries(
-      definition.entries,
-      parentPath,
-      layouts,
-      context,
-      { slotId, contributionId: id },
-    );
-  } finally {
-    context.activeContributionIds.delete(id);
-  }
-
-  const routes = Object.freeze(context.output.slice(start));
-  context.contributions.set(id, Object.freeze({
-    id,
-    slotId,
-    definition,
-    routes,
-  }));
+  compileEntries(
+    definition.entries,
+    parentPath,
+    layouts,
+    context,
+    { slotId, contributionId: id },
+  );
 }
 
 function indexContributions(
@@ -277,10 +224,7 @@ export function createRouteRegistry(
 ): RouteRegistry {
   const context: CompileContext = {
     contributionsBySlot: indexContributions(contributions),
-    contributionIds: new Set(),
-    activeContributionIds: new Set(),
-    slots: new Map(),
-    contributions: new Map(),
+    slots: new Set(),
     output: [],
   };
 
@@ -347,8 +291,6 @@ export function createRouteRegistry(
   return {
     namedRoutes,
     groups,
-    slots: context.slots,
-    contributions: context.contributions,
   };
 }
 

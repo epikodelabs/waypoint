@@ -22,7 +22,7 @@ class UsersPage {}
 @Component({ template: '' })
 class RolesPage {}
 
-describe('Waypoint retained route slots', () => {
+describe('Waypoint route slots', () => {
   it('compiles contributions relative to the declared slot position', () => {
     const routes = [
       layout('/app', AppLayout, [
@@ -50,7 +50,7 @@ describe('Waypoint retained route slots', () => {
       .toBe('/app/admin/roles');
   });
 
-  it('retains empty slots in the registry', () => {
+  it('allows empty slots without adding runtime route state', () => {
     const routes = [
       layout('/app', AppLayout, [
         route('/home', HomePage, { name: 'home' }),
@@ -59,15 +59,11 @@ describe('Waypoint retained route slots', () => {
     ] as const;
 
     const registry = createRouteRegistry(routes);
-    const slot = registry.slots.get('optional-features');
-
     expect(registry.namedRoutes.get('home')?.path).toBe('/app/home');
     expect(registry.groups.length).toBe(1);
-    expect(slot?.parentPath).toBe('/app');
-    expect(slot?.layouts.map(layout => layout.path)).toEqual(['/app']);
   });
 
-  it('retains contribution identity and compiled route provenance', () => {
+  it('retains contribution provenance on compiled routes', () => {
     const routes = [
       layout('/app', AppLayout, [
         routeSlot('administration'),
@@ -80,14 +76,8 @@ describe('Waypoint retained route slots', () => {
     );
 
     const registry = createRouteRegistry(routes, [contribution]);
-    const compiledContribution = registry.contributions.get('admin-users');
     const namedRoute = registry.namedRoutes.get('adminUsers');
 
-    expect(compiledContribution?.slotId).toBe('administration');
-    expect(compiledContribution?.routes.length).toBe(1);
-    expect(compiledContribution?.routes[0].path).toBe('/app/users');
-    expect(compiledContribution?.routes[0].slotId).toBe('administration');
-    expect(compiledContribution?.routes[0].contributionId).toBe('admin-users');
     expect(namedRoute?.slotId).toBe('administration');
     expect(namedRoute?.contributionId).toBe('admin-users');
   });
