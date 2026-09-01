@@ -13,9 +13,19 @@ import {
 import type { NamedNavigationTarget, NavigationTarget } from './navigation-targets';
 
 import {
-  adaptFrameTransitions,
-  adaptRoutes,
-} from './angular-route-adapter';
+  NamedNavigationCatalog,
+  type NamedRouteDefinition,
+} from './named-navigation';
+
+export type { NamedRouteDefinition } from './named-navigation';
+
+import { RouteResolutionCoordinator } from './route-resolution-coordinator';
+
+import {
+  createAngularRouterEngine,
+  renderRouterStartupError,
+  replaceAngularRouterConfiguration,
+} from './angular-router-engine';
 
 import {
   ResolvedNavigationState,
@@ -31,9 +41,6 @@ export type {
   RouteResolutionContext,
 } from './resolved-navigation';
 
-type CompiledRoute =
-  RouteRegistry['groups'][number]['primary'];
-
 interface RouteConfigurationResolver {
   resolveConfiguration?: () =>
     Promise<ResolvedNavigationConfiguration>;
@@ -41,7 +48,6 @@ interface RouteConfigurationResolver {
 
 import type {
   LayoutOptions,
-  RenderableRoute,
   RouteDefinition,
   RouteOptions,
   NavigationTree,
@@ -59,21 +65,10 @@ import {
   type RouterRevalidationOptions,
 } from './router-contract';
 
-import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-events';
-
 import { getRouterLocation, isPathInsideBase, resolveRouterUrl, routerHref, stripBaseHref } from './router-url';
 
 import {
-  serializeParams,
-  serializeQuery,
-  type InferParamType,
-  type ParamSchemaRecord,
-  type QuerySchemaRecord,
-} from './query-schema';
-
-import {
   type CanDeactivateFn,
-  createRouter,
   type ActivatedRoute,
   type NavigationContext,
   type NavigationOptions,
@@ -98,12 +93,6 @@ export interface RouterOptions {
   readonly contributions?: readonly RouteContributionDefinition[];
 }
 
-export interface NamedRouteDefinition {
-  readonly name: string;
-  readonly path: string;
-  readonly paramsSchema?: ParamSchemaRecord;
-  readonly querySchema?: QuerySchemaRecord;
-}
 
 interface RouterConfiguration<
   TRoutes extends NavigationTree = NavigationTree,
@@ -158,62 +147,6 @@ function readReloadLocation(payload: unknown): string {
   return location;
 }
 
-function replaceChildNodes(
-  target: Node & {
-    replaceChildren?: (...nodes: Node[]) => void;
-    firstChild: ChildNode | null;
-    removeChild(node: ChildNode): void;
-    appendChild<T extends Node>(node: T): T;
-  },
-  ...nodes: Node[]
-): void {
-  if (typeof target.replaceChildren === 'function') {
-    target.replaceChildren(...nodes);
-    return;
-  }
-
-  while (target.firstChild) {
-    target.removeChild(target.firstChild);
-  }
-
-  for (const node of nodes) {
-    target.appendChild(node);
-  }
-}
-
-function interpolateNamedPath(
-  template: string,
-  params: Readonly<Record<string, unknown>>,
-  schema: ParamSchemaRecord | undefined,
-): string | null {
-  const serialized = schema
-    ? serializeParams(schema, params as unknown as InferParamType<ParamSchemaRecord>)
-    : Object.fromEntries(
-        Object.entries(params)
-          .filter(([, value]) => value !== undefined && value !== null)
-          .map(([key, value]) => [key, String(value)]),
-      );
-
-  const missing = new Set<string>();
-
-  const path = template.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, (_match, key: string) => {
-    const value = serialized[key];
-
-    if (value === undefined) {
-      missing.add(key);
-      return `:${key}`;
-    }
-
-    return encodeURIComponent(value);
-  });
-
-  if (missing.size > 0) {
-    return null;
-  }
-
-  return path;
-}
-
 export class ServerRouter<TRoutes extends NavigationTree = any>
   extends RouterContract<TRoutes> {
   private readonly appRef: ApplicationRef;
@@ -224,14 +157,10 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private readonly appBaseHref: string;
   private readonly resolvedNavigation:
     ResolvedNavigationState<TRoutes>;
-  private readonly namedRouteCatalog =
-    new Map<string, NamedRouteDefinition>();
-  private readonly resolvingRouteKeys = new Map<string, Promise<boolean>>();
-  private readonly resolvingRouteControllers = new Map<string, AbortController>();
+  private readonly namedNavigation: NamedNavigationCatalog;
+  private readonly routeResolution: RouteResolutionCoordinator;
   private readonly preResolvedNavigationKeys = new Set<string>();
   private preResolvingNavigationCount = 0;
-  private readonly unresolvedRouteKeys = new Set<string>();
-  private resolutionGeneration = 0;
   private navigationRequestId = 0;
   private engine: VanillaRouter | null = null;
   private engineStartupTask: Promise<void> | null = null;
@@ -260,9 +189,13 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         this.configuration.routes,
         this.configuration.contributions,
       );
-    for (const route of this.configuration.namedRoutes ?? []) {
-      this.namedRouteCatalog.set(route.name, route);
-    }
+    this.namedNavigation = new NamedNavigationCatalog(
+      this.configuration.namedRoutes,
+    );
+    this.routeResolution = new RouteResolutionCoordinator(
+      this.resolvedNavigation,
+      this.configuration.resolveRoutes,
+    );
     this.navigateTo = this.createNavigateProxy();
 
     this.hrefTo = this.createHrefProxy();
@@ -386,12 +319,8 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   }
 
   private async revalidateByRevocation(): Promise<boolean> {
-    this.resolutionGeneration++;
     this.navigationRequestId++;
-    this.resolvedNavigation.reset();
-    this.unresolvedRouteKeys.clear();
-    this.abortResolvedRouteRequests();
-    this.resolvingRouteKeys.clear();
+    this.routeResolution.invalidate({ resetState: true });
 
     const location = getRouterLocation(this.document);
     const url = resolveRouterUrl(
@@ -425,11 +354,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private async revalidateResolvedConfiguration(
     resolveConfiguration: () => Promise<ResolvedNavigationConfiguration>,
   ): Promise<boolean> {
-    const generation = ++this.resolutionGeneration;
     this.navigationRequestId++;
-    this.abortResolvedRouteRequests();
-    this.resolvingRouteKeys.clear();
-    this.unresolvedRouteKeys.clear();
+    this.routeResolution.invalidate();
+    const generation = this.routeResolution.generation;
 
     const activeContributionId = this.currentContributionId();
     const activeIdentity = activeContributionId
@@ -438,7 +365,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
     try {
       const resolved = await resolveConfiguration();
-      if (generation !== this.resolutionGeneration) {
+      if (generation !== this.routeResolution.generation) {
         return false;
       }
 
@@ -497,10 +424,8 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   dispose(): void {
     const engine = this.engine;
 
-    this.resolutionGeneration++;
     this.navigationRequestId++;
-    this.abortResolvedRouteRequests();
-    this.resolvingRouteKeys.clear();
+    this.routeResolution.invalidate();
     this.engineStartupTask = null;
     this.notFoundRecoveryTasks.clear();
     this.engine = null;
@@ -544,33 +469,14 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     return routerHref(resolveRouterUrl(target, this.baseHref, getRouterLocation(this.document), 'href'));
   }
 
-  private generateNamedHref(target: NamedNavigationTarget): string | null {
-    const record = this.readNamedRouteRecord(target.name);
-
-    if (!record) {
-      return null;
-    }
-
-    if ('kind' in record.route && record.route.kind === 'redirect') {
-      return null;
-    }
-
-    const path = interpolateNamedPath(
-      record.path,
-      target.params ?? {},
-      record.route.paramsSchema,
+  private generateNamedHref(
+    target: NamedNavigationTarget,
+  ): string | null {
+    return this.namedNavigation.href(
+      target,
+      this.registry,
+      (href) => this.resolveHref(href),
     );
-
-    if (!path) {
-      return null;
-    }
-
-    const query =
-      record.route.querySchema && target.query
-        ? serializeQuery(record.route.querySchema, target.query)
-        : '';
-
-    return this.resolveHref(`${path}${query}`);
   }
 
   private async navigateResolved(
@@ -580,7 +486,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     this.preResolvingNavigationCount++;
     try {
       const requestId = ++this.navigationRequestId;
-      const resolutionGeneration = this.resolutionGeneration;
+      const resolutionGeneration = this.routeResolution.generation;
       const href = this.href(target);
 
       if (href === null) {
@@ -594,13 +500,13 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       let resolved = false;
 
       if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
-        this.abortResolvedRouteRequests(key);
+        this.routeResolution.abort(key);
         resolved = await this.resolveRoutesForUrl(url, { install: false });
       }
 
       if (
         requestId !== this.navigationRequestId
-        || resolutionGeneration !== this.resolutionGeneration
+        || resolutionGeneration !== this.routeResolution.generation
       ) {
         return false;
       }
@@ -609,7 +515,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
       if (
         requestId !== this.navigationRequestId
-        || resolutionGeneration !== this.resolutionGeneration
+        || resolutionGeneration !== this.routeResolution.generation
       ) {
         return false;
       }
@@ -619,7 +525,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
         if (
           requestId !== this.navigationRequestId
-          || resolutionGeneration !== this.resolutionGeneration
+          || resolutionGeneration !== this.routeResolution.generation
         ) {
           return false;
         }
@@ -648,124 +554,22 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     return this.requireEngine();
   }
 
-  private readNamedRouteRecord(name: string):
-    | CompiledRoute
-    | {
-        readonly route: Pick<RenderableRoute, 'paramsSchema' | 'querySchema'>;
-        readonly path: string;
-      }
-    | undefined {
-    const existing = this.registry.namedRoutes.get(name);
-
-    if (existing) {
-      return existing;
-    }
-
-    const deferred = this.namedRouteCatalog.get(name);
-
-    if (!deferred) {
-      return undefined;
-    }
-
-    return {
-      path: deferred.path,
-      route: {
-        paramsSchema: deferred.paramsSchema,
-        querySchema: deferred.querySchema,
-      },
-    };
-  }
-
-  private matchesRegisteredRoute(url: URL): boolean {
-    const path = stripBaseHref(url.pathname, this.baseHref);
-
-    return this.resolvedNavigation.matchesPath(path);
-  }
-
   private async resolveRoutesForUrl(
     url: URL,
     options: Readonly<{ force?: boolean; install?: boolean }> = {},
   ): Promise<boolean> {
-    if (!this.configuration.resolveRoutes) {
-      return false;
-    }
-
-    if (!options.force && this.matchesRegisteredRoute(url)) {
-      return false;
-    }
-
     const key = stripBaseHref(url.pathname, this.baseHref);
+    const resolved = await this.routeResolution.resolve(
+      url,
+      key,
+      { force: options.force },
+    );
 
-    if (!options.force && this.unresolvedRouteKeys.has(key)) {
-      return false;
+    if (resolved && options.install !== false) {
+      await this.installCurrentRegistry();
     }
 
-    const pending = this.resolvingRouteKeys.get(key);
-
-    if (pending && !options.force) {
-      return pending;
-    }
-
-    if (options.force) {
-      this.resolvingRouteControllers.get(key)?.abort();
-    }
-
-    const controller = new AbortController();
-    this.resolvingRouteControllers.set(key, controller);
-    const generation = this.resolutionGeneration;
-    let resolution!: Promise<boolean>;
-    resolution = Promise.resolve(this.configuration.resolveRoutes(url, {
-      signal: controller.signal,
-    }))
-      .then(async (resolved) => {
-        if (
-          controller.signal.aborted
-          || generation !== this.resolutionGeneration
-        ) {
-          return false;
-        }
-
-        if (!resolved || !this.resolvedNavigation.merge(resolved)) {
-          this.unresolvedRouteKeys.add(key);
-          return false;
-        }
-
-        this.unresolvedRouteKeys.delete(key);
-        if (options.install !== false) {
-          await this.installCurrentRegistry();
-        }
-        return true;
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) {
-          return false;
-        }
-        // A transport/import failure is not evidence that the route does not
-        // exist. Do not poison the negative-resolution cache; a later
-        // navigation should be allowed to retry without an authorization reset.
-        throw error;
-      })
-      .finally(() => {
-        if (this.resolvingRouteKeys.get(key) === resolution) {
-          this.resolvingRouteKeys.delete(key);
-        }
-        if (this.resolvingRouteControllers.get(key) === controller) {
-          this.resolvingRouteControllers.delete(key);
-        }
-      });
-
-    this.resolvingRouteKeys.set(key, resolution);
-
-    return resolution;
-  }
-
-
-  private abortResolvedRouteRequests(exceptKey?: string): void {
-    for (const [key, controller] of this.resolvingRouteControllers) {
-      if (key === exceptKey) continue;
-      controller.abort();
-      this.resolvingRouteControllers.delete(key);
-    }
+    return resolved;
   }
 
   private currentContributionId(): string | undefined {
@@ -788,18 +592,13 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       return false;
     }
 
-    engine.replaceConfiguration({
-      routes: adaptRoutes(
-        this.registry.groups,
-        this.appRef,
-        this.document,
-        this.injector,
-      ),
-      transitions: adaptFrameTransitions(
-        this.registry.groups,
-        this.injector,
-      ),
-    });
+    replaceAngularRouterConfiguration(
+      engine,
+      this.registry,
+      this.appRef,
+      this.document,
+      this.injector,
+    );
 
     if (options.revalidate === false) {
       return true;
@@ -893,7 +692,11 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       .catch((error) => {
         if (this.engineStartupTask === task) {
           this.recordNavigationError(error);
-          this.renderStartupError(error);
+          renderRouterStartupError(
+            this.document,
+            this.getOutlet(''),
+            error,
+          );
         }
       })
       .finally(() => {
@@ -903,118 +706,26 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       });
   }
 
-  private renderStartupError(error: unknown): void {
-    console.error('Waypoint router startup failed.', error);
-
-    const target = this.getOutlet('');
-    if (!target) {
-      return;
-    }
-
-    const container = this.document.createElement('section');
-    container.setAttribute('data-waypoint-startup-error', '');
-
-    const heading = this.document.createElement('h1');
-    heading.textContent = 'Page failed to load';
-
-    const details = this.document.createElement('pre');
-    details.textContent =
-      error instanceof Error
-        ? error.message
-        : String(error);
-
-    container.append(heading, details);
-    replaceChildNodes(target, container);
-  }
-
   private createEngine(): VanillaRouter {
-    return createRouter({
-      routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
-
+    return createAngularRouterEngine({
+      registry: this.registry,
+      appRef: this.appRef,
+      injector: this.injector,
+      document: this.document,
       baseHref: this.baseHref,
-
       enableTracing: this.configuration.enableTracing,
-
       maxRedirects: this.configuration.maxRedirects,
-
       onSameUrlNavigation: this.configuration.onSameUrlNavigation,
-
       scrollRestoration: this.configuration.scrollRestoration,
-
       preloading: this.configuration.preloading,
-
-      transitions: [...adaptFrameTransitions(this.registry.groups, this.injector)],
-
       viewTransitions: this.configuration.viewTransitions,
-
-      render: (targetName, node) => {
-        const target = this.getOutlet(targetName);
-
-        if (!target) {
-          throw new Error(`Router outlet "${targetName}" is not connected.`);
-        }
-
-        replaceChildNodes(target, node);
-      },
-
-      commit: (outlets) => {
-        for (const outlet of outlets) {
-          if (!this.outlets.has(outlet.name)) {
-            throw new Error(`Router outlet "${outlet.name}" is not connected.`);
-          }
-        }
-
-        for (const outlet of outlets) {
-          const target = this.getOutlet(outlet.name);
-
-          if (!target) {
-            throw new Error(`Router outlet "${outlet.name}" is not connected.`);
-          }
-
-          replaceChildNodes(target, outlet.node);
-          dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, outlet.component);
-        }
-      },
-
-      renderNotFound: (targetName, url, _router) => {
-        const target = this.getOutlet(targetName);
-
-        if (!target) {
-          return;
-        }
-
-        const heading = this.document.createElement('h1');
-
-        heading.textContent = '404 — Page Not Found';
-
-        replaceChildNodes(target, heading);
-
-        if (this.shouldResolveNotFoundUrl(url)) {
-          this.scheduleNotFoundRecovery(url);
-        }
-      },
-
-      renderError: (targetName, _error, _router) => {
-        const target = this.getOutlet(targetName);
-
-        if (!target) {
-          return;
-        }
-
-        const heading = this.document.createElement('h1');
-
-        heading.textContent = 'Page failed to load';
-
-        replaceChildNodes(target, heading);
-      },
-
+      getOutlet: (name) => this.getOutlet(name),
+      hasOutlet: (name) => this.outlets.has(name.trim()),
+      shouldRecoverNotFound: (url) => this.shouldResolveNotFoundUrl(url),
+      recoverNotFound: (url) => this.scheduleNotFoundRecovery(url),
       onStateChange: (state) => {
         this.currentState = snapshotRouterState(state);
         this.requestTick();
-      },
-
-      onOutletActivate: (target, component) => {
-        dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, component);
       },
     });
   }
