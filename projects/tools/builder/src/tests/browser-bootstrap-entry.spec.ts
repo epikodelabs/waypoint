@@ -24,14 +24,21 @@ describe('Waypoint browser bootstrap entry', () => {
         bootstrap,
       );
 
-    const imports = source
-      .split('\n')
-      .filter(line =>
-        line.startsWith('import '));
-
-    expect(imports).toEqual([
+    expect(source).toContain(
       'import "./host-runtime.mjs";',
-      'import "../src/main.ts";',
-    ]);
+    );
+    expect(source).toContain(
+      'await import("../src/main.ts");',
+    );
+
+    expect(
+      source.indexOf(
+        'import "./host-runtime.mjs";',
+      ),
+    ).toBeLessThan(
+      source.indexOf(
+        'await import("../src/main.ts");',
+      ),
+    );
   });
 });

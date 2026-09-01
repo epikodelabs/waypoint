@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -49,6 +50,27 @@ async function execute(
       typeof projectMetadata['root'] === 'string'
         ? projectMetadata['root']
         : '';
+    const sourceRoot = projectMetadata['sourceRoot'];
+
+    if (typeof sourceRoot !== 'string') {
+      throw new Error(
+        'Waypoint build requires an Angular application sourceRoot.',
+      );
+    }
+
+    // Artifact analysis runs before the replacement entry is regenerated.
+    // Remove the previous generated entry so it cannot leak into that program.
+    await fs.rm(
+      path.join(
+        workspaceRoot,
+        sourceRoot,
+        'waypoint.generated',
+      ),
+      {
+        recursive: true,
+        force: true,
+      },
+    );
 
     const angularOptions = angularApplicationOptions(options);
     const outputPath = resolveOutputPath(
@@ -92,13 +114,14 @@ async function execute(
       analysis,
       {
         metadataRoot: layout.metadataRoot,
-        browserEntry:
-          angularWorkspacePathToAbsolute(
-            workspaceRoot,
-            requireBrowserEntry(
-              angularOptions['browser'],
-            ),
-          ),
+        browserEntry: path.resolve(
+          workspaceRoot,
+          String(angularOptions['browser']),
+        ),
+        browserBootstrapRoot: path.resolve(
+          workspaceRoot,
+          sourceRoot,
+        ),
       },
     );
 
@@ -106,15 +129,20 @@ async function execute(
       const delegatedOptions = {
         ...angularOptions,
 
-        browser: angularWorkspacePath(
-          workspaceRoot,
-          build.host.browserEntry,
-        ),
 
         fileReplacements: [
           ...normalizeReplacements(
             angularOptions['fileReplacements'],
           ),
+          {
+            replace: String(
+              angularOptions['browser'],
+            ),
+            with: angularWorkspacePath(
+              workspaceRoot,
+              build.host.browserEntry,
+            ),
+          },
           {
             replace: angularWorkspacePath(
               workspaceRoot,
@@ -258,30 +286,6 @@ function normalizeReplacements(
 }
 
 
-function requireBrowserEntry(
-  value: unknown,
-): string {
-  if (
-    typeof value !== 'string'
-    || value.trim().length === 0
-  ) {
-    throw new Error(
-      'Waypoint build requires Angular option "browser" to be a source entry path.',
-    );
-  }
-
-  return value;
-}
-
-function angularWorkspacePathToAbsolute(
-  workspaceRoot: string,
-  value: string,
-): string {
-  return path.resolve(
-    workspaceRoot,
-    value.replace(/\//g, path.sep),
-  );
-}
 
 function normalizePolyfills(
   value: unknown,

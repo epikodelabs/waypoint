@@ -30,6 +30,95 @@ export type ServerNavigationModuleImporter = (
   moduleUrl: string,
 ) => Promise<unknown>;
 
+
+export type ServerNavigationHostModule =
+  Readonly<Record<string, unknown>>;
+
+export type ServerNavigationHostModules =
+  Readonly<
+    Record<
+      string,
+      ServerNavigationHostModule
+    >
+  >;
+
+const WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY =
+  '__WAYPOINT_SERVER_NAVIGATION_HOST_RUNTIME_V1__';
+
+interface ServerNavigationHostRuntimeState {
+  readonly version: 1;
+  readonly modules:
+    Map<
+      string,
+      ServerNavigationHostModule
+    >;
+}
+
+type RuntimeGlobal =
+  typeof globalThis & {
+    [WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY]?:
+      ServerNavigationHostRuntimeState;
+  };
+
+function registerServerNavigationHostModules(
+  modules: ServerNavigationHostModules,
+): void {
+  const global =
+    globalThis as RuntimeGlobal;
+
+  let runtime =
+    global[
+      WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY
+    ];
+
+  if (!runtime) {
+    runtime = {
+      version: 1,
+      modules:
+        new Map<
+          string,
+          ServerNavigationHostModule
+        >(),
+    };
+
+    global[
+      WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY
+    ] = runtime;
+  }
+
+  for (
+    const [specifier, module]
+    of Object.entries(modules)
+  ) {
+    const normalized = specifier.trim();
+
+    if (!normalized) {
+      throw new Error(
+        'Server navigation host module specifier must not be empty.',
+      );
+    }
+
+    const existing =
+      runtime.modules.get(normalized);
+
+    if (
+      existing
+      && existing !== module
+    ) {
+      throw new Error(
+        `Server navigation host module ${JSON.stringify(
+          normalized,
+        )} was registered with a different module identity.`,
+      );
+    }
+
+    runtime.modules.set(
+      normalized,
+      module,
+    );
+  }
+}
+
 export interface ServerNavigationResolverOptions {
   /**
    * Endpoint used to resolve a browser destination on the server.
@@ -42,6 +131,12 @@ export interface ServerNavigationResolverOptions {
   readonly importModule?: ServerNavigationModuleImporter;
   /** Re-resolve once when an artifact URL becomes stale during publication. */
   readonly artifactRefreshRetries?: number;
+  /**
+   * Exact host module namespaces shared with independently delivered artifacts.
+   * Protected artifacts must observe the same Angular and Waypoint identities
+   * as the application that loads them.
+   */
+  readonly hostModules?: ServerNavigationHostModules;
 }
 
 export interface ServerNavigationResolverContext {
@@ -99,6 +194,30 @@ function isServerNavigationResolution(
 export function createServerNavigationResolver(
   options: ServerNavigationResolverOptions = {},
 ): ServerNavigationResolver {
+  if (!options.importModule) {
+    if (!options.hostModules) {
+      throw new Error(
+        'Native server navigation imports require hostModules.',
+      );
+    }
+
+    if (
+      !options.hostModules[
+        '@epikodelabs/waypoint'
+      ]
+    ) {
+      throw new Error(
+        'Native server navigation imports require hostModules["@epikodelabs/waypoint"].',
+      );
+    }
+  }
+
+  if (options.hostModules) {
+    registerServerNavigationHostModules(
+      options.hostModules,
+    );
+  }
+
   const endpoint = normalizeEndpoint(options.endpoint ?? '/api/navigation/resolve');
   const fetchNavigation = options.fetch ?? defaultFetch;
   const importModule = options.importModule ?? defaultImportModule;
@@ -125,6 +244,12 @@ export function createServerNavigationResolver(
     const pending = (async () => {
       let loaded: RouteModule;
       try {
+        if (options.hostModules) {
+          registerServerNavigationHostModules(
+            options.hostModules,
+          );
+        }
+
         loaded = await importModule(
           descriptor.moduleUrl,
         ) as RouteModule;

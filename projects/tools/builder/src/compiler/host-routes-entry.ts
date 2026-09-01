@@ -2,11 +2,7 @@ import {
   WAYPOINT_HOST_RUNTIME_GLOBAL_KEY,
 } from './host-runtime-plugin.js';
 
-/**
- * Generates the browser bootstrap that publishes the host application's exact
- * framework module namespaces for independently delivered route artifacts.
- */
-export function createHostRuntimeSource(
+export function createHostRoutesSource(
   specifiers: readonly string[],
 ): string {
   const modules = [
@@ -27,7 +23,7 @@ export function createHostRuntimeSource(
   );
 
   return [
-    `// Waypoint generated host runtime bootstrap.`,
+    `// Waypoint generated public route host.`,
     ...imports,
     ``,
     `const key = ${JSON.stringify(WAYPOINT_HOST_RUNTIME_GLOBAL_KEY)};`,
@@ -52,6 +48,13 @@ export function createHostRuntimeSource(
     ``,
     `  runtime.modules.set(specifier, module);`,
     `}`,
+    ``,
+    `const { routeSlot } = module${modules.indexOf('@epikodelabs/waypoint')};`,
+    ``,
+    `export const routes = [`,
+    `  routeSlot('public'),`,
+    `  routeSlot('application'),`,
+    `];`,
     ``,
   ].join('\n');
 }

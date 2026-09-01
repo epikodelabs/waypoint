@@ -2,6 +2,8 @@
 
 # Compiled output
 **/dist
+**/src/.waypoint
+**/src/waypoint.generated
 /tmp
 /out-tsc
 /bazel-out

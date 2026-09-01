@@ -8,11 +8,14 @@ import {
   publishServerRouteOutput,
 } from './server-output.js';
 import {
-  createHostRuntimeSource,
-} from './host-runtime-entry.js';
-import {
   createBrowserBootstrapSource,
 } from './browser-bootstrap-entry.js';
+import {
+  createHostRoutesSource,
+} from './host-routes-entry.js';
+import {
+  createHostRuntimeSource,
+} from './host-runtime-entry.js';
 import {
   buildProtectedRouteArtifacts,
   publishProtectedRouteArtifacts,
@@ -22,12 +25,13 @@ import {
 export interface PrepareBuildOptions {
   readonly metadataRoot: string;
   readonly browserEntry: string;
+  readonly browserBootstrapRoot: string;
 }
 
 export interface PreparedWaypointBuild {
   readonly host: {
+    readonly browserEntry: string;
     readonly routesEntry: string;
-    readonly runtimeEntry: string;
   };
 
   publish(): Promise<{
@@ -42,6 +46,7 @@ export interface PreparedWaypointBuild {
   rollback(): Promise<void>;
   dispose(): Promise<void>;
 }
+
 
 export async function prepareBuild(
   analysis: WaypointAnalysis,
@@ -73,15 +78,21 @@ export async function prepareBuild(
       'routes.ts',
     );
 
+  // Keep the replacement entry inside the app's tsconfig include path.
+  const browserBootstrapRoot =
+    path.join(
+      path.resolve(options.browserBootstrapRoot),
+      'waypoint.generated',
+    );
   const runtimeEntry =
     path.join(
-      hostRoot,
-      'runtime.js',
+      browserBootstrapRoot,
+      'host-runtime.ts',
     );
   const browserEntry =
     path.join(
-      metadataRoot,
-      'waypoint-browser-bootstrap.mjs',
+      browserBootstrapRoot,
+      'browser.ts',
     );
 
   await fs.mkdir(
@@ -92,10 +103,8 @@ export async function prepareBuild(
   );
 
   /*
-   * Prepare protected artifacts before delegating to Angular so the generated
-   * browser bootstrap can register the exact host module identities referenced
-   * by independently delivered code. Publication still happens only after the
-   * public host build succeeds.
+   * Prepare protected artifacts before delegating to Angular. Publication
+   * still happens only after the public host build succeeds.
    */
   const preparedArtifacts =
     await buildProtectedRouteArtifacts(
@@ -108,16 +117,17 @@ export async function prepareBuild(
    */
   await fs.writeFile(
     routesEntry,
-    [
-      `import { routeSlot, type NavigationTree } from '@epikodelabs/waypoint';`,
-      ``,
-      `export const routes = [`,
-      `  routeSlot('public'),`,
-      `  routeSlot('application'),`,
-      `] as const satisfies NavigationTree;`,
-      ``,
-    ].join('\n'),
+    createHostRoutesSource(
+      preparedArtifacts.hostModules,
+    ),
     'utf8',
+  );
+
+  await fs.mkdir(
+    browserBootstrapRoot,
+    {
+      recursive: true,
+    },
   );
 
   await fs.writeFile(
@@ -140,9 +150,8 @@ export async function prepareBuild(
 
   return Object.freeze({
     host: Object.freeze({
-      routesEntry,
-      runtimeEntry,
       browserEntry,
+      routesEntry,
     }),
 
     async publish() {
@@ -233,4 +242,3 @@ export async function prepareBuild(
     async dispose() {},
   });
 }
-
