@@ -22,8 +22,6 @@ export interface CompiledRoute {
 }
 
 export interface CompiledRouteGroup {
-  readonly path: string;
-  readonly layouts: readonly LayoutDefinition[];
   readonly primary: CompiledRoute;
   readonly outlets: readonly CompiledRoute[];
 }
@@ -194,8 +192,6 @@ function groupRoutes(
       }
 
       group = {
-        path: route.path,
-        layouts: route.layouts,
         primary: route,
         outlets: [],
       };
@@ -359,7 +355,7 @@ function validateRouteGroups(
 
     if (group.primary.redirectTo && group.outlets.length > 0) {
       throw new Error(
-        `A redirect route cannot have named outlets. Path: "${group.path}"`,
+        `A redirect route cannot have named outlets. Path: "${group.primary.path}"`,
       );
     }
 
@@ -367,14 +363,14 @@ function validateRouteGroups(
     for (const outlet of group.outlets) {
       if (outlet.route.kind === 'redirect') {
         throw new Error(
-          `Named outlet routes cannot be redirects. Route path: "${group.path}"`,
+          `Named outlet routes cannot be redirects. Route path: "${group.primary.path}"`,
         );
       }
 
       const outletName = outlet.route.outlet!;
       if (outletNames.has(outletName)) {
         throw new Error(
-          `Duplicate outlet named "${outletName}" for route path "${group.path}".`,
+          `Duplicate outlet named "${outletName}" for route path "${group.primary.path}".`,
         );
       }
       outletNames.add(outletName);
@@ -382,7 +378,7 @@ function validateRouteGroups(
       if (outlet.route.name) {
         throw new Error(
           `Named outlet routes cannot have a "name" property. Route path: ` +
-          `"${group.path}", outlet: "${outletName}"`,
+          `"${group.primary.path}", outlet: "${outletName}"`,
         );
       }
       if (outlet.route.paramsSchema || outlet.route.querySchema) {

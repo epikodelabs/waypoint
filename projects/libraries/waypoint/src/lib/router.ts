@@ -329,8 +329,8 @@ function adaptFrameTransitions(
     }
 
     const renderableRoute = primaryRoute;
-    const enterFrames = collectEnterFrames(group.layouts, renderableRoute);
-    const leaveFrames = collectLeaveFrames(group.layouts, renderableRoute);
+    const enterFrames = collectEnterFrames(group.primary.layouts, renderableRoute);
+    const leaveFrames = collectLeaveFrames(group.primary.layouts, renderableRoute);
 
     for (const current of enterFrames) {
       if (!current.beforeEnter?.length && !current.afterEnter?.length) {
@@ -510,7 +510,7 @@ function adaptRoutes(
 ): Route[] {
   return groups.map((group): Route => {
     const sharedPreparers = adaptFramePreparers(
-      group.layouts
+      group.primary.layouts
         .map(layout => layout.frame)
         .filter((frame): frame is FrameView<any> => !!frame),
       injector,
@@ -522,15 +522,15 @@ function adaptRoutes(
     if (authoredPrimary.kind === 'redirect') {
       if (group.outlets.length > 0) {
         throw new Error(
-          `A redirect route cannot have named outlets. Path: "${group.path}"`,
+          `A redirect route cannot have named outlets. Path: "${group.primary.path}"`,
         );
       }
 
       return adaptRoute(
         authoredPrimary,
-        group.path,
+        group.primary.path,
         group.primary.redirectTo,
-        group.layouts,
+        group.primary.layouts,
         sharedPreparers,
         appRef,
         documentRef,
@@ -540,9 +540,9 @@ function adaptRoutes(
 
     const primary = adaptRoute(
       authoredPrimary,
-      group.path,
+      group.primary.path,
       group.primary.redirectTo,
-      group.layouts,
+      group.primary.layouts,
       sharedPreparers,
       appRef,
       documentRef,
@@ -556,15 +556,15 @@ function adaptRoutes(
 
         if (authoredOutlet.kind === 'redirect') {
           throw new Error(
-            `Named outlet routes cannot be redirects. Path: "${group.path}"`,
+            `Named outlet routes cannot be redirects. Path: "${group.primary.path}"`,
           );
         }
 
         return adaptRoute(
           authoredOutlet,
-          group.path,
+          group.primary.path,
           compiled.redirectTo,
-          group.layouts,
+          group.primary.layouts,
           sharedPreparers,
           appRef,
           documentRef,
@@ -1102,7 +1102,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private matchesRegisteredRoute(url: URL): boolean {
     const path = stripBaseHref(url.pathname, this.baseHref);
 
-    return this.registry.groups.some((group) => matchesCompiledPath(group.path, path));
+    return this.registry.groups.some((group) => matchesCompiledPath(group.primary.path, path));
   }
 
   private async resolveRoutesForUrl(
@@ -1310,7 +1310,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     const location = getRouterLocation(this.document);
     const path = stripBaseHref(location.pathname, this.baseHref);
     return this.registry.groups.find(group =>
-      matchesCompiledPath(group.path, path),
+      matchesCompiledPath(group.primary.path, path),
     )?.primary.contributionId;
   }
 
