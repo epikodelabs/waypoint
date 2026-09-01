@@ -41,6 +41,15 @@ describe('RouteCatalog', () => {
     expect(readCatalogRoutes(catalog)).toEqual([first]);
   });
 
+  it('reuses the immutable route snapshot across reads', () => {
+    const catalog = createRouteCatalog([
+      route('first'),
+    ]);
+
+    expect(readCatalogRoutes(catalog))
+      .toBe(readCatalogRoutes(catalog));
+  });
+
   it('preserves identity and version for an empty append', () => {
     const catalog = createRouteCatalog([
       route('first'),

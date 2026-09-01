@@ -35,12 +35,6 @@ const waypointProperty = {
       description:
         'Waypoint navigation entry relative to the Angular project root.',
     },
-    routesExport: {
-      type: 'string',
-      default: 'routes',
-      description:
-        'Named export containing the authored root navigation tree.',
-    },
     profile: {
       type: 'boolean',
       default: false,

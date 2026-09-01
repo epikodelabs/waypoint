@@ -12,10 +12,6 @@
           "type": "string",
           "default": "src/app/app.routes.ts"
         },
-        "routesExport": {
-          "type": "string",
-          "default": "routes"
-        },
         "profile": {
           "type": "boolean",
           "default": false

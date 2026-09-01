@@ -4,7 +4,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve app1",
-    "build": "ng build waypoint",
+    "build": "ng build waypoint && node projects/libraries/waypoint/scripts/copy-templates.mjs",
     "watch": "ng build waypoint --watch --configuration development",
     "test": "testify --headless --browser chrome",
     "test:watch": "npx testify",

@@ -44,7 +44,6 @@ test('Waypoint options are isolated under one namespace', async () => {
       'buildManifest',
       'entry',
       'profile',
-      'routesExport',
     ],
   );
 });

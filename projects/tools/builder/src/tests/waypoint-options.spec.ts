@@ -16,10 +16,6 @@ test('Waypoint build configuration is optional', () => {
     'projects/apps/app2/client/src/app/app.routes.ts',
   );
   assert.equal(
-    resolved.routesExport,
-    'routes',
-  );
-  assert.equal(
     resolved.profile,
     false,
   );
@@ -41,10 +37,6 @@ test('explicit Waypoint options override only named defaults', () => {
   assert.equal(
     resolved.entry,
     'projects/apps/app2/client/src/navigation.ts',
-  );
-  assert.equal(
-    resolved.routesExport,
-    'routes',
   );
   assert.equal(
     resolved.profile,

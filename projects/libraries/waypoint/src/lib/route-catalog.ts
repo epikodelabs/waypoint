@@ -31,6 +31,7 @@ export interface RouteMatcher {
 /** Immutable, versioned snapshot of the router's currently known routes. */
 export interface RouteCatalog {
   readonly version: number;
+  readonly routes: readonly Route[];
   readonly matchers: readonly RouteMatcher[];
 }
 
@@ -39,20 +40,19 @@ export function createRouteCatalog(
 ): RouteCatalog {
   validateRouteGroups(routes);
 
+  const snapshot = Object.freeze([...routes]);
+
   return Object.freeze({
     version: 0,
-    matchers: compileRouteMatchers(routes),
+    routes: snapshot,
+    matchers: compileRouteMatchers(snapshot),
   });
 }
 
 export function readCatalogRoutes(
   catalog: RouteCatalog,
 ): readonly Route[] {
-  return Object.freeze(
-    catalog.matchers.map(
-      matcher => matcher.route,
-    ),
-  );
+  return catalog.routes;
 }
 
 export function appendCatalogRoutes(
@@ -64,14 +64,17 @@ export function appendCatalogRoutes(
   }
 
   const nextRoutes = [
-    ...readCatalogRoutes(catalog),
+    ...catalog.routes,
     ...routes,
   ];
 
   validateRouteGroups(nextRoutes);
 
+  const snapshot = Object.freeze(nextRoutes);
+
   return Object.freeze({
     version: catalog.version + 1,
+    routes: snapshot,
     matchers: Object.freeze([
       ...catalog.matchers,
       ...compileRouteMatchers(routes),
@@ -89,9 +92,12 @@ export function replaceCatalogRoutes(
 
   validateRouteGroups(routes);
 
+  const snapshot = Object.freeze([...routes]);
+
   return Object.freeze({
     version: catalog.version + 1,
-    matchers: compileRouteMatchers(routes),
+    routes: snapshot,
+    matchers: compileRouteMatchers(snapshot),
   });
 }
 
@@ -99,7 +105,7 @@ export function removeCatalogRoutes(
   catalog: RouteCatalog,
   predicate: (route: Route) => boolean,
 ): RouteCatalog {
-  const nextRoutes = readCatalogRoutes(catalog)
+  const nextRoutes = catalog.routes
     .filter(route => !predicate(route));
 
   if (nextRoutes.length === catalog.matchers.length) {
@@ -108,9 +114,12 @@ export function removeCatalogRoutes(
 
   validateRouteGroups(nextRoutes);
 
+  const snapshot = Object.freeze(nextRoutes);
+
   return Object.freeze({
     version: catalog.version + 1,
-    matchers: compileRouteMatchers(nextRoutes),
+    routes: snapshot,
+    matchers: compileRouteMatchers(snapshot),
   });
 }
 
@@ -207,10 +216,10 @@ function sameRouteReferences(
   routes: readonly Route[],
 ): boolean {
   return (
-    catalog.matchers.length === routes.length
-    && catalog.matchers.every(
-      (matcher, index) =>
-        matcher.route === routes[index],
+    catalog.routes.length === routes.length
+    && catalog.routes.every(
+      (route, index) =>
+        route === routes[index],
     )
   );
 }
