@@ -1015,13 +1015,11 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       const url = resolveRouterUrl(href, this.baseHref, location, 'navigate');
       const key = stripBaseHref(url.pathname, this.baseHref);
 
+      let resolved = false;
+
       if (url.origin === location.origin && isPathInsideBase(url.pathname, this.baseHref)) {
         this.abortResolvedRouteRequests(key);
-        const resolved = await this.resolveRoutesForUrl(url, { install: false });
-        if (resolved) {
-          await this.installCurrentRegistry({ revalidate: false });
-          this.preResolvedNavigationKeys.add(key);
-        }
+        resolved = await this.resolveRoutesForUrl(url, { install: false });
       }
 
       if (
@@ -1031,8 +1029,30 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         return false;
       }
 
+      const engine = await this.requireStartedEngine();
+
+      if (
+        requestId !== this.navigationRequestId
+        || resolutionGeneration !== this.resolutionGeneration
+      ) {
+        return false;
+      }
+
+      if (resolved) {
+        await this.installCurrentRegistry({ revalidate: false });
+
+        if (
+          requestId !== this.navigationRequestId
+          || resolutionGeneration !== this.resolutionGeneration
+        ) {
+          return false;
+        }
+
+        this.preResolvedNavigationKeys.add(key);
+      }
+
       try {
-        return await this.requireEngine().navigate(href, options);
+        return await engine.navigate(href, options);
       } finally {
         this.preResolvedNavigationKeys.delete(key);
       }
@@ -1042,6 +1062,14 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     } finally {
       this.preResolvingNavigationCount--;
     }
+  }
+
+  private async requireStartedEngine(): Promise<VanillaRouter> {
+    if (!this.engine && this.engineStartupTask) {
+      await this.engineStartupTask;
+    }
+
+    return this.requireEngine();
   }
 
   private readNamedRouteRecord(name: string):
@@ -1114,7 +1142,10 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       signal: controller.signal,
     }))
       .then(async (resolved) => {
-        if (generation !== this.resolutionGeneration) {
+        if (
+          controller.signal.aborted
+          || generation !== this.resolutionGeneration
+        ) {
           return false;
         }
 
