@@ -5,10 +5,7 @@ import {
   routeSlot,
 } from '../lib/route-slots';
 import { layout, route } from '../lib/route-builders';
-import {
-  compileNavigation,
-  createRouteRegistry,
-} from '../lib/route-compiler';
+import { createRouteRegistry } from '../lib/route-compiler';
 
 @Component({ template: '' })
 class AppLayout {}
@@ -47,9 +44,9 @@ describe('Waypoint retained route slots', () => {
 
     const registry = createRouteRegistry(routes, [administration]);
 
-    expect(registry.namedRoutes.get('adminUsers')?.fullPath)
+    expect(registry.namedRoutes.get('adminUsers')?.path)
       .toBe('/app/admin/users');
-    expect(registry.namedRoutes.get('adminRoles')?.fullPath)
+    expect(registry.namedRoutes.get('adminRoles')?.path)
       .toBe('/app/admin/roles');
   });
 
@@ -64,7 +61,7 @@ describe('Waypoint retained route slots', () => {
     const registry = createRouteRegistry(routes);
     const slot = registry.slots.get('optional-features');
 
-    expect(registry.namedRoutes.get('home')?.fullPath).toBe('/app/home');
+    expect(registry.namedRoutes.get('home')?.path).toBe('/app/home');
     expect(registry.groups.length).toBe(1);
     expect(slot?.parentPath).toBe('/app');
     expect(slot?.layouts.map(layout => layout.path)).toEqual(['/app']);
@@ -93,21 +90,6 @@ describe('Waypoint retained route slots', () => {
     expect(compiledContribution?.routes[0].contributionId).toBe('admin-users');
     expect(namedRoute?.slotId).toBe('administration');
     expect(namedRoute?.contributionId).toBe('admin-users');
-  });
-
-  it('exposes retained identities through compileNavigation', () => {
-    const routes = [routeSlot('features')] as const;
-    const contribution = routesFor(
-      'features',
-      'feature-a',
-      [route('/feature', UsersPage)],
-    );
-
-    const compiled = compileNavigation(routes, [contribution]);
-
-    expect(compiled.slots.has('features')).toBeTrue();
-    expect(compiled.contributions.has('feature-a')).toBeTrue();
-    expect(compiled.routes[0].path).toBe('/feature');
   });
 
   it('rejects duplicate slot ids', () => {

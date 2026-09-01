@@ -17,10 +17,9 @@ import { runWithInjector, unwrapDefault } from './adapter-utils';
 import type { NamedNavigationTarget, NavigationTarget } from './navigation-targets';
 
 import {
-  CompiledRoute,
-  CompiledRouteGroup,
+  type CompiledRoute,
+  type CompiledRouteGroup,
   createRouteRegistry,
-  type RouteRegistryRecord,
 } from './route-compiler';
 
 import {
@@ -46,6 +45,7 @@ import type {
 } from './navigation-definitions';
 
 import type { TypedHref, TypedNavigate } from './typed-navigation';
+import type { RouteRuntime } from './route-runtime';
 
 import {
   ROUTE,
@@ -79,8 +79,6 @@ import {
   type NavigationContext,
   type NavigationOptions,
   type NavigationTransitionDefinition,
-  type ParseRouteParams,
-  type ParseRouteQuery,
   type PrepareRouteDataFn,
   type PreloadingStrategy,
   type Route,
@@ -366,7 +364,7 @@ function adaptFrameTransitions(
 function adaptParamsParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): ParseRouteParams {
+): RouteRuntime['parseParams'] {
   const schema = route.paramsSchema;
   if (!schema) return undefined;
 
@@ -377,7 +375,7 @@ function adaptParamsParser(
 function adaptQueryParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): ParseRouteQuery {
+): RouteRuntime['parseQuery'] {
   const schema = route.querySchema;
   if (!schema) return undefined;
 
@@ -981,7 +979,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     }
 
     const path = interpolateNamedPath(
-      record.fullPath,
+      record.path,
       target.params ?? {},
       record.route.paramsSchema,
     );
@@ -1074,10 +1072,10 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   }
 
   private readNamedRouteRecord(name: string):
-    | RouteRegistryRecord
+    | CompiledRoute
     | {
         readonly route: Pick<RenderableRoute, 'paramsSchema' | 'querySchema'>;
-        readonly fullPath: string;
+        readonly path: string;
       }
     | undefined {
     const existing = this.registry.namedRoutes.get(name);
@@ -1093,7 +1091,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     }
 
     return {
-      fullPath: deferred.path,
+      path: deferred.path,
       route: {
         paramsSchema: deferred.paramsSchema,
         querySchema: deferred.querySchema,

@@ -42,21 +42,8 @@ export interface CompiledRouteContribution {
   readonly routes: readonly CompiledRoute[];
 }
 
-export interface CompiledNavigation {
-  readonly routes: readonly CompiledRoute[];
-  readonly slots: ReadonlyMap<string, CompiledRouteSlot>;
-  readonly contributions: ReadonlyMap<string, CompiledRouteContribution>;
-}
-
-export interface RouteRegistryRecord {
-  readonly route: RouteDefinition;
-  readonly fullPath: string;
-  readonly slotId?: string;
-  readonly contributionId?: string;
-}
-
 export interface RouteRegistry {
-  readonly namedRoutes: ReadonlyMap<string, RouteRegistryRecord>;
+  readonly namedRoutes: ReadonlyMap<string, CompiledRoute>;
   readonly groups: readonly CompiledRouteGroup[];
   readonly slots: ReadonlyMap<string, CompiledRouteSlot>;
   readonly contributions: ReadonlyMap<string, CompiledRouteContribution>;
@@ -94,57 +81,6 @@ export function compileRedirect(
   return redirectTo.startsWith('/')
     ? joinRoutePath('/', redirectTo)
     : joinRoutePath(parentPath, redirectTo);
-}
-
-export function compileNavigation(
-  entries: NavigationTree,
-  contributions: readonly RouteContributionDefinition[] = [],
-): CompiledNavigation {
-  const contributionsBySlot = indexContributions(contributions);
-  const context: CompileContext = {
-    contributionsBySlot,
-    contributionIds: new Set(),
-    activeContributionIds: new Set(),
-    slots: new Map(),
-    contributions: new Map(),
-    output: [],
-  };
-
-  compileEntries(entries, '/', Object.freeze([]), context);
-
-  for (const contribution of contributions) {
-    if (!context.slots.has(contribution.slotId)) {
-      throw new Error(
-        `Route contribution "${contribution.id}" targets unknown route slot ` +
-        `"${contribution.slotId}".`,
-      );
-    }
-  }
-
-  return Object.freeze({
-    routes: Object.freeze([...context.output]),
-    slots: context.slots,
-    contributions: context.contributions,
-  });
-}
-
-export function compileRoutes(
-  entries: NavigationTree,
-  parentPath = '/',
-  layouts: readonly LayoutDefinition[] = [],
-  output: CompiledRoute[] = [],
-): readonly CompiledRoute[] {
-  const context: CompileContext = {
-    contributionsBySlot: new Map(),
-    contributionIds: new Set(),
-    activeContributionIds: new Set(),
-    slots: new Map(),
-    contributions: new Map(),
-    output,
-  };
-
-  compileEntries(entries, parentPath, layouts, context);
-  return output;
 }
 
 function compileEntries(
@@ -293,7 +229,7 @@ function indexContributions(
   return bySlot;
 }
 
-export function groupRoutes(
+function groupRoutes(
   compiled: readonly CompiledRoute[],
 ): readonly CompiledRouteGroup[] {
   const groups = new Map<string, CompiledRouteGroup>();
@@ -339,11 +275,30 @@ export function createRouteRegistry(
   entries: NavigationTree,
   contributions: readonly RouteContributionDefinition[] = [],
 ): RouteRegistry {
-  const compiled = compileNavigation(entries, contributions);
-  const groups = groupRoutes(compiled.routes);
+  const context: CompileContext = {
+    contributionsBySlot: indexContributions(contributions),
+    contributionIds: new Set(),
+    activeContributionIds: new Set(),
+    slots: new Map(),
+    contributions: new Map(),
+    output: [],
+  };
+
+  compileEntries(entries, '/', Object.freeze([]), context);
+
+  for (const contribution of contributions) {
+    if (!context.slots.has(contribution.slotId)) {
+      throw new Error(
+        `Route contribution "${contribution.id}" targets unknown route slot ` +
+        `"${contribution.slotId}".`,
+      );
+    }
+  }
+
+  const groups = groupRoutes(context.output);
   validateRouteGroups(groups);
 
-  const namedRoutes = new Map<string, RouteRegistryRecord>();
+  const namedRoutes = new Map<string, CompiledRoute>();
   const literalPaths = new Map<string, RouteDefinition>();
   const patterns = new Map<string, string>();
 
@@ -386,19 +341,14 @@ export function createRouteRegistry(
       );
     }
 
-    namedRoutes.set(route.name, {
-      route,
-      fullPath: path,
-      slotId: compiledRoute.slotId,
-      contributionId: compiledRoute.contributionId,
-    });
+    namedRoutes.set(route.name, compiledRoute);
   }
 
   return {
     namedRoutes,
     groups,
-    slots: compiled.slots,
-    contributions: compiled.contributions,
+    slots: context.slots,
+    contributions: context.contributions,
   };
 }
 
