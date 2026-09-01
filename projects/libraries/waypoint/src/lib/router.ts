@@ -16,11 +16,12 @@ import { runWithInjector, unwrapDefault } from './adapter-utils';
 
 import type { NamedNavigationTarget, NavigationTarget } from './navigation-targets';
 
-import {
-  type CompiledRoute,
-  type CompiledRouteGroup,
-  createRouteRegistry,
-} from './route-compiler';
+import { createRouteRegistry } from './route-compiler';
+
+type RouteRegistry = ReturnType<typeof createRouteRegistry>;
+type CompiledRouteGroup = RouteRegistry['groups'][number];
+type CompiledRoute = CompiledRouteGroup['primary'];
+type CompiledRenderableRoute = CompiledRouteGroup['outlets'][number];
 
 import {
   composeAngularLeafRouteView,
@@ -32,12 +33,10 @@ import type {
   FramePrepareFn,
   FrameAfterEnterFn,
   FrameBeforeLeaveFn,
-  MaybePromise,
   FrameView,
   LayoutDefinition,
   LayoutOptions,
   RenderableRoute,
-  RedirectRouteDefinition,
   RouteDefinition,
   RouteOptions,
   NavigationTree,
@@ -83,7 +82,6 @@ import {
   type PrepareRouteDataFn,
   type PreloadingStrategy,
   type Route,
-  type RedirectRoute as RuntimeRedirectRoute,
   type RenderableRoute as RuntimeRenderableRoute,
   type RouteRenderContext,
   type Router as VanillaRouter,
@@ -232,20 +230,12 @@ function readReloadLocation(payload: unknown): string {
   return location;
 }
 
-function execute<TContext, TResult>(
-  injector: EnvironmentInjector,
-  handler: (context: TContext) => MaybePromise<TResult>,
-  context: TContext,
-): Promise<TResult> {
-  return runWithInjector(injector, handler, context);
-}
-
 function adaptFrameBeforeEnter(
   handler: CanActivateFn,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
   return (transition) =>
-    execute(injector, handler, {
+    runWithInjector(injector, handler, {
       ...transition.to,
       signal: transition.signal,
     });
@@ -260,7 +250,7 @@ function adaptFrameBeforeLeave(
       return true;
     }
 
-    return execute(injector, handler, {
+    return runWithInjector(injector, handler, {
       ...transition.from,
       nextUrl: transition.to.url,
       signal: transition.signal,
@@ -272,14 +262,22 @@ function adaptFramePrepare(
   handler: FramePrepareFn,
   injector: EnvironmentInjector,
 ): PrepareRouteDataFn {
-  return (route) => execute(injector, handler, route);
+  return (route) => runWithInjector(injector, handler, route);
 }
 
 function adaptFrameAfterEnter(
   handler: FrameAfterEnterFn<any>,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
-  return (transition) => execute(injector, handler, transition.to);
+  return (transition) => runWithInjector(injector, handler, transition.to);
+}
+
+function collectLayoutFrames(
+  layouts: readonly LayoutDefinition[],
+): readonly FrameView<any>[] {
+  return layouts
+    .map(layout => layout.frame)
+    .filter((frame): frame is FrameView<any> => !!frame);
 }
 
 function collectEnterFrames(
@@ -287,7 +285,7 @@ function collectEnterFrames(
   route: RenderableRoute,
 ): readonly FrameView<any>[] {
   return Object.freeze([
-    ...layouts.map((layout) => layout.frame).filter((frame): frame is FrameView<any> => !!frame),
+    ...collectLayoutFrames(layouts),
     ...(route.frame ? [route.frame] : []),
   ]);
 }
@@ -296,13 +294,10 @@ function collectLeaveFrames(
   layouts: readonly LayoutDefinition[],
   route: RenderableRoute,
 ): readonly FrameView<any>[] {
-  const routeFrames = route.frame ? [route.frame] : [];
-  const layoutFrames = layouts
-    .map((layout) => layout.frame)
-    .filter((frame): frame is FrameView<any> => !!frame)
-    .reverse();
-
-  return Object.freeze([...routeFrames, ...layoutFrames]);
+  return Object.freeze([
+    ...(route.frame ? [route.frame] : []),
+    ...[...collectLayoutFrames(layouts)].reverse(),
+  ]);
 }
 
 function adaptFramePreparers(
@@ -408,69 +403,26 @@ async function resolveViews(
   ]);
 }
 
-function adaptRoute(
-  route: RedirectRouteDefinition,
-  path: string,
-  redirectTo: string | undefined,
-  layouts: readonly LayoutDefinition[],
-  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
-  appRef: ApplicationRef,
-  documentRef: Document,
-  injector: EnvironmentInjector,
-): RuntimeRedirectRoute;
-function adaptRoute(
-  route: RenderableRoute,
-  path: string,
-  redirectTo: string | undefined,
-  layouts: readonly LayoutDefinition[],
-  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
-  appRef: ApplicationRef,
-  documentRef: Document,
-  injector: EnvironmentInjector,
-): RuntimeRenderableRoute;
-function adaptRoute(
-  route: RouteDefinition,
-  path: string,
-  redirectTo: string | undefined,
-  layouts: readonly LayoutDefinition[],
-  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
-  appRef: ApplicationRef,
-  documentRef: Document,
-  injector: EnvironmentInjector,
-): Route;
-function adaptRoute(
-  route: RouteDefinition,
-  path: string,
-  redirectTo: string | undefined,
-  layouts: readonly LayoutDefinition[],
-  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
-  appRef: ApplicationRef,
-  documentRef: Document,
-  injector: EnvironmentInjector,
-): Route {
-  if (route.kind === 'redirect') {
-    if (!redirectTo) {
-      throw new Error(`Compiled redirect route "${path}" has no redirect target.`);
-    }
+function isCompiledRenderableRoute(
+  compiled: CompiledRoute,
+): compiled is CompiledRenderableRoute {
+  return compiled.route.kind === 'route';
+}
 
-    const runtimeRedirect: RuntimeRedirectRoute = {
-      kind: 'redirect',
-      name: route.name,
-      path,
-      sourceRoute: route,
-      redirectTo,
-      data: route.data ? { ...route.data } : undefined,
-    };
-
-    return runtimeRedirect;
-  }
-
+function adaptRenderableRoute(
+  compiled: CompiledRenderableRoute,
+  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
+  appRef: ApplicationRef,
+  documentRef: Document,
+  injector: EnvironmentInjector,
+): RuntimeRenderableRoute {
+  const { route, path, layouts } = compiled;
   const tokens = {
     routeToken: ROUTE,
     contextToken: ROUTE_CONTEXT,
   } as const;
 
-  const runtimeRoute: RuntimeRenderableRoute = {
+  return {
     kind: 'route',
     name: route.name,
     path,
@@ -499,8 +451,33 @@ function adaptRoute(
       };
     },
   };
+}
 
-  return runtimeRoute;
+function adaptCompiledRoute(
+  compiled: CompiledRoute,
+  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
+  appRef: ApplicationRef,
+  documentRef: Document,
+  injector: EnvironmentInjector,
+): Route {
+  if (isCompiledRenderableRoute(compiled)) {
+    return adaptRenderableRoute(
+      compiled,
+      sharedPreparers,
+      appRef,
+      documentRef,
+      injector,
+    );
+  }
+
+  return {
+    kind: 'redirect',
+    name: compiled.route.name,
+    path: compiled.path,
+    sourceRoute: compiled.route,
+    redirectTo: compiled.redirectTo,
+    data: compiled.route.data ? { ...compiled.route.data } : undefined,
+  };
 }
 
 function adaptRoutes(
@@ -511,21 +488,13 @@ function adaptRoutes(
 ): Route[] {
   return groups.map((group): Route => {
     const sharedPreparers = adaptFramePreparers(
-      group.primary.layouts
-        .map(layout => layout.frame)
-        .filter((frame): frame is FrameView<any> => !!frame),
+      collectLayoutFrames(group.primary.layouts),
       injector,
     );
 
-    const authoredPrimary =
-      group.primary.route;
-
-    if (authoredPrimary.kind === 'redirect') {
-      return adaptRoute(
-        authoredPrimary,
-        group.primary.path,
-        group.primary.redirectTo,
-        group.primary.layouts,
+    if (!isCompiledRenderableRoute(group.primary)) {
+      return adaptCompiledRoute(
+        group.primary,
         sharedPreparers,
         appRef,
         documentRef,
@@ -533,37 +502,32 @@ function adaptRoutes(
       );
     }
 
-    const primary = adaptRoute(
-      authoredPrimary,
-      group.primary.path,
-      group.primary.redirectTo,
-      group.primary.layouts,
+    const primary = adaptRenderableRoute(
+      group.primary,
       sharedPreparers,
       appRef,
       documentRef,
       injector,
     );
 
-    const outlets = group.outlets.map(
-      (compiled): RuntimeRenderableRoute =>
-        adaptRoute(
-          compiled.route as RenderableRoute,
-          group.primary.path,
-          compiled.redirectTo,
-          group.primary.layouts,
-          sharedPreparers,
-          appRef,
-          documentRef,
-          injector,
-        ),
-    );
+    if (group.outlets.length === 0) {
+      return primary;
+    }
 
-    return outlets.length === 0
-      ? primary
-      : {
-          ...primary,
-          outlets: Object.freeze(outlets),
-        };
+    return {
+      ...primary,
+      outlets: Object.freeze(
+        group.outlets.map(compiled =>
+          adaptRenderableRoute(
+            compiled,
+            sharedPreparers,
+            appRef,
+            documentRef,
+            injector,
+          ),
+        ),
+      ),
+    };
   });
 }
 

@@ -1,5 +1,6 @@
 import {
   layout,
+  redirectRoute,
   route,
   s,
 } from '@epikodelabs/waypoint';
@@ -79,6 +80,35 @@ describe('route compiler parameter validation', () => {
       permissions: ['admin:read'],
     });
     expect(registry.groups[0]?.primary.route).toBe(protectedRoute);
+  });
+
+  it('compiles redirects into a complete discriminated runtime record', () => {
+    const redirect = redirectRoute('/legacy', '/app/home');
+    const registry = createRouteRegistry([redirect]);
+    const compiled = registry.groups[0]?.primary;
+
+    expect(compiled?.route).toBe(redirect);
+    expect(compiled?.path).toBe('/legacy');
+    expect(compiled?.redirectTo).toBe('/app/home');
+  });
+
+  it('rejects empty redirect targets during compilation', () => {
+    const redirect = redirectRoute('/legacy', '');
+
+    expect(() => createRouteRegistry([redirect])).toThrowError(
+      /Redirect target must not be empty/,
+    );
+  });
+
+  it('keeps named outlets on a renderable compiled route group', () => {
+    const primary = route('/workspace', TestPage);
+    const sidebar = route('/workspace', TestPage, { outlet: 'sidebar' });
+    const registry = createRouteRegistry([primary, sidebar]);
+    const group = registry.groups[0];
+
+    expect(group?.primary.route).toBe(primary);
+    expect(group?.outlets.length).toBe(1);
+    expect(group?.outlets[0]?.route).toBe(sidebar);
   });
 
 });

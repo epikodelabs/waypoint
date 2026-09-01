@@ -1,6 +1,8 @@
 import type {
   LayoutDefinition,
   NavigationTree,
+  RedirectRouteDefinition,
+  RenderableRoute,
   RouteContributionDefinition,
   RouteDefinition,
   RouteSlotDefinition,
@@ -12,21 +14,33 @@ import {
 } from './route-path';
 import { normalizeRouteIdentity } from './route-slots';
 
-export interface CompiledRoute {
-  readonly route: RouteDefinition;
+interface CompiledRouteBase {
   readonly path: string;
-  readonly redirectTo?: string;
   readonly layouts: readonly LayoutDefinition[];
   readonly slotId?: string;
   readonly contributionId?: string;
 }
 
-export interface CompiledRouteGroup {
-  readonly primary: CompiledRoute;
-  readonly outlets: readonly CompiledRoute[];
+interface CompiledRenderableRoute extends CompiledRouteBase {
+  readonly route: RenderableRoute;
+  readonly redirectTo?: never;
 }
 
-export interface RouteRegistry {
+interface CompiledRedirectRoute extends CompiledRouteBase {
+  readonly route: RedirectRouteDefinition;
+  readonly redirectTo: string;
+}
+
+type CompiledRoute =
+  | CompiledRenderableRoute
+  | CompiledRedirectRoute;
+
+interface CompiledRouteGroup {
+  readonly primary: CompiledRoute;
+  readonly outlets: readonly CompiledRenderableRoute[];
+}
+
+interface RouteRegistry {
   readonly namedRoutes: ReadonlyMap<string, CompiledRoute>;
   readonly groups: readonly CompiledRouteGroup[];
 }
@@ -40,14 +54,12 @@ interface CompileContext {
   readonly output: CompiledRoute[];
 }
 
-export { joinRoutePath } from './route-path';
-
-export function compileRedirect(
+function compileRedirect(
   parentPath: string,
-  redirectTo: string | undefined,
-): string | undefined {
+  redirectTo: string,
+): string {
   if (!redirectTo) {
-    return undefined;
+    throw new Error('Redirect target must not be empty.');
   }
 
   if (
@@ -89,16 +101,26 @@ function compileEntries(
       continue;
     }
 
-    context.output.push({
-      route: entry,
-      path: joinRoutePath(parentPath, entry.path),
-      redirectTo: entry.kind === 'redirect'
-        ? compileRedirect(parentPath, entry.redirectTo)
-        : undefined,
+    const path = joinRoutePath(parentPath, entry.path);
+    const compiledBase = {
+      path,
       layouts,
       slotId: provenance?.slotId,
       contributionId: provenance?.contributionId,
-    });
+    } as const;
+
+    context.output.push(
+      entry.kind === 'redirect'
+        ? {
+            ...compiledBase,
+            route: entry,
+            redirectTo: compileRedirect(parentPath, entry.redirectTo),
+          }
+        : {
+            ...compiledBase,
+            route: entry,
+          },
+    );
   }
 }
 
@@ -174,6 +196,55 @@ function indexContributions(
   return bySlot;
 }
 
+function assertNamedOutlet(
+  route: CompiledRoute,
+  primary: CompiledRoute,
+  existing: readonly CompiledRenderableRoute[],
+): asserts route is CompiledRenderableRoute {
+  if (primary.route.kind === 'redirect') {
+    throw new Error(
+      `A redirect route cannot have named outlets. Path: "${primary.path}"`,
+    );
+  }
+
+  if (route.route.kind === 'redirect') {
+    throw new Error(
+      `Named outlet routes cannot be redirects. Route path: "${primary.path}"`,
+    );
+  }
+
+  const outletName = route.route.outlet;
+  if (!outletName) {
+    throw new Error(
+      `Duplicate primary route for path "${route.path}" under the same layout chain.`,
+    );
+  }
+
+  if (existing.some(outlet => outlet.route.outlet === outletName)) {
+    throw new Error(
+      `Duplicate outlet named "${outletName}" for route path "${primary.path}".`,
+    );
+  }
+
+  if (route.route.name) {
+    throw new Error(
+      `Named outlet routes cannot have a "name" property. Route path: ` +
+      `"${primary.path}", outlet: "${outletName}"`,
+    );
+  }
+  if (route.route.paramsSchema || route.route.querySchema) {
+    throw new Error(
+      'Named outlet routes cannot define paramsSchema or querySchema.',
+    );
+  }
+  if (route.route.viewTransition !== undefined) {
+    throw new Error('Named outlet routes cannot define viewTransition.');
+  }
+  if (route.route.preload !== undefined) {
+    throw new Error('Named outlet routes cannot define preload.');
+  }
+}
+
 function groupRoutes(
   compiled: readonly CompiledRoute[],
 ): readonly CompiledRouteGroup[] {
@@ -181,7 +252,7 @@ function groupRoutes(
 
   for (const route of compiled) {
     const key = `${route.path}#${route.layouts.map(layout => layout.path).join('/')}`;
-    let group = groups.get(key);
+    const group = groups.get(key);
 
     if (!group) {
       if (route.route.kind === 'route' && route.route.outlet) {
@@ -191,27 +262,21 @@ function groupRoutes(
         );
       }
 
-      group = {
+      groups.set(key, {
         primary: route,
-        outlets: [],
-      };
-      groups.set(key, group);
+        outlets: Object.freeze([]),
+      });
       continue;
     }
 
-    if (route.route.kind === 'redirect' || !route.route.outlet) {
-      throw new Error(
-        `Duplicate primary route for path "${route.path}" under the same layout chain.`,
-      );
-    }
-
+    assertNamedOutlet(route, group.primary, group.outlets);
     groups.set(key, {
-      ...group,
-      outlets: [...group.outlets, route],
+      primary: group.primary,
+      outlets: Object.freeze([...group.outlets, route]),
     });
   }
 
-  return Array.from(groups.values());
+  return Object.freeze(Array.from(groups.values()));
 }
 
 export function createRouteRegistry(
@@ -227,17 +292,20 @@ export function createRouteRegistry(
   compileEntries(entries, '/', Object.freeze([]), context);
 
   for (const contribution of contributions) {
-    if (!context.slots.has(contribution.slotId)) {
+    const id = normalizeRouteIdentity(contribution.id, 'Route contribution');
+    const slotId = normalizeRouteIdentity(
+      contribution.slotId,
+      `Route contribution "${id}" slot`,
+    );
+
+    if (!context.slots.has(slotId)) {
       throw new Error(
-        `Route contribution "${contribution.id}" targets unknown route slot ` +
-        `"${contribution.slotId}".`,
+        `Route contribution "${id}" targets unknown route slot "${slotId}".`,
       );
     }
   }
 
   const groups = groupRoutes(context.output);
-  validateRouteGroups(groups);
-
   const namedRoutes = new Map<string, CompiledRoute>();
   const literalPaths = new Map<string, RouteDefinition>();
   const patterns = new Map<string, string>();
@@ -333,55 +401,6 @@ function validateCompiledRouteParams(
         `Compiled route "${path}" contains ":${name}", but paramsSchema ` +
         'does not declare it. Declare every path parameter when paramsSchema is present.',
       );
-    }
-  }
-}
-
-function validateRouteGroups(
-  groups: readonly CompiledRouteGroup[],
-): void {
-  for (const group of groups) {
-    if (group.primary.redirectTo && group.outlets.length > 0) {
-      throw new Error(
-        `A redirect route cannot have named outlets. Path: "${group.primary.path}"`,
-      );
-    }
-
-    const outletNames = new Set<string>();
-    for (const outlet of group.outlets) {
-      if (outlet.route.kind === 'redirect') {
-        throw new Error(
-          `Named outlet routes cannot be redirects. Route path: "${group.primary.path}"`,
-        );
-      }
-
-      const outletName = outlet.route.outlet!;
-      if (outletNames.has(outletName)) {
-        throw new Error(
-          `Duplicate outlet named "${outletName}" for route path "${group.primary.path}".`,
-        );
-      }
-      outletNames.add(outletName);
-
-      if (outlet.route.name) {
-        throw new Error(
-          `Named outlet routes cannot have a "name" property. Route path: ` +
-          `"${group.primary.path}", outlet: "${outletName}"`,
-        );
-      }
-      if (outlet.route.paramsSchema || outlet.route.querySchema) {
-        throw new Error(
-          'Named outlet routes cannot define paramsSchema or querySchema.',
-        );
-      }
-      if (outlet.route.viewTransition !== undefined) {
-        throw new Error(
-          'Named outlet routes cannot define viewTransition.',
-        );
-      }
-      if (outlet.route.preload !== undefined) {
-        throw new Error('Named outlet routes cannot define preload.');
-      }
     }
   }
 }
