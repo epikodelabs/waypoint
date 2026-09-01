@@ -8,14 +8,11 @@ import {
   publishServerRouteOutput,
 } from './server-output.js';
 import {
-  createBrowserBootstrapSource,
-} from './browser-bootstrap-entry.js';
-import {
   createHostRoutesSource,
 } from './host-routes-entry.js';
 import {
-  createHostRuntimeSource,
-} from './host-runtime-entry.js';
+  createHostResolverSource,
+} from './host-resolver-entry.js';
 import {
   buildProtectedRouteArtifacts,
   publishProtectedRouteArtifacts,
@@ -24,14 +21,12 @@ import {
 
 export interface PrepareBuildOptions {
   readonly metadataRoot: string;
-  readonly browserEntry: string;
-  readonly browserBootstrapRoot: string;
 }
 
 export interface PreparedWaypointBuild {
   readonly host: {
-    readonly browserEntry: string;
     readonly routesEntry: string;
+    readonly resolverEntry: string;
   };
 
   publish(): Promise<{
@@ -77,23 +72,12 @@ export async function prepareBuild(
       hostRoot,
       'routes.ts',
     );
+  const resolverEntry =
+    path.join(
+      hostRoot,
+      'resolver.ts',
+    );
 
-  // Keep the replacement entry inside the app's tsconfig include path.
-  const browserBootstrapRoot =
-    path.join(
-      path.resolve(options.browserBootstrapRoot),
-      'waypoint.generated',
-    );
-  const runtimeEntry =
-    path.join(
-      browserBootstrapRoot,
-      'host-runtime.ts',
-    );
-  const browserEntry =
-    path.join(
-      browserBootstrapRoot,
-      'browser.ts',
-    );
 
   await fs.mkdir(
     hostRoot,
@@ -117,41 +101,23 @@ export async function prepareBuild(
    */
   await fs.writeFile(
     routesEntry,
-    createHostRoutesSource(
+    createHostRoutesSource(),
+    'utf8',
+  );
+
+  await fs.writeFile(
+    resolverEntry,
+    createHostResolverSource(
       preparedArtifacts.hostModules,
     ),
     'utf8',
   );
 
-  await fs.mkdir(
-    browserBootstrapRoot,
-    {
-      recursive: true,
-    },
-  );
-
-  await fs.writeFile(
-    runtimeEntry,
-    createHostRuntimeSource(
-      preparedArtifacts.hostModules,
-    ),
-    'utf8',
-  );
-
-  await fs.writeFile(
-    browserEntry,
-    createBrowserBootstrapSource(
-      path.resolve(options.browserEntry),
-      runtimeEntry,
-      browserEntry,
-    ),
-    'utf8',
-  );
 
   return Object.freeze({
     host: Object.freeze({
-      browserEntry,
       routesEntry,
+      resolverEntry,
     }),
 
     async publish() {

@@ -6,13 +6,14 @@ import {
 } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import {
-  createServerNavigationResolver,
   provideServerRouter,
 } from '@epikodelabs/waypoint';
+import {
+  resolveRoutes,
+} from './waypoint-resolver';
 
 import { routes } from './app.routes';
 
-const resolveRoutes = createServerNavigationResolver();
 
 export const appConfig: ApplicationConfig = {
   providers: [

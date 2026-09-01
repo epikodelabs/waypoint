@@ -114,14 +114,6 @@ async function execute(
       analysis,
       {
         metadataRoot: layout.metadataRoot,
-        browserEntry: path.resolve(
-          workspaceRoot,
-          String(angularOptions['browser']),
-        ),
-        browserBootstrapRoot: path.resolve(
-          workspaceRoot,
-          sourceRoot,
-        ),
       },
     );
 
@@ -135,12 +127,17 @@ async function execute(
             angularOptions['fileReplacements'],
           ),
           {
-            replace: String(
-              angularOptions['browser'],
+            replace: angularWorkspacePath(
+              workspaceRoot,
+              path.resolve(
+                workspaceRoot,
+                projectRoot,
+                'src/app/waypoint-resolver.ts',
+              ),
             ),
             with: angularWorkspacePath(
               workspaceRoot,
-              build.host.browserEntry,
+              build.host.resolverEntry,
             ),
           },
           {

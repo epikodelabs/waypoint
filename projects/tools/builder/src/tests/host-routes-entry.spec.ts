@@ -2,40 +2,21 @@ import {
   createHostRoutesSource,
 } from '../compiler/host-routes-entry.js';
 
-describe('Waypoint host routes entry', () => {
-  it('registers host module namespaces before exporting routes', () => {
-    const source =
-      createHostRoutesSource([
-        '@angular/core',
-      ]);
+describe('Waypoint generated host routes', () => {
+  it('contains only public ownership slots', () => {
+    const source = createHostRoutesSource();
 
     expect(source).toContain(
-      'import * as module',
+      `import { routeSlot } from '@epikodelabs/waypoint';`,
     );
     expect(source).toContain(
-      '"@epikodelabs/waypoint"',
+      `routeSlot('public')`,
     );
     expect(source).toContain(
-      '"@angular/core"',
+      `routeSlot('application')`,
     );
-    expect(source).toContain(
-      '__WAYPOINT_SERVER_NAVIGATION_HOST_RUNTIME_V1__',
-    );
-    expect(source).toContain(
-      'runtime.modules.set(specifier, module);',
-    );
-    expect(source).toContain(
-      "routeSlot('application')",
-    );
-
-    expect(
-      source.indexOf(
-        'runtime.modules.set(specifier, module);',
-      ),
-    ).toBeLessThan(
-      source.indexOf(
-        'export const routes',
-      ),
+    expect(source).not.toContain(
+      'registerServerNavigationHostModules',
     );
   });
 });
