@@ -166,7 +166,9 @@ export function createServerRouter<
       }
 
       const artifacts = snapshot.index.artifacts.filter(
-        candidate => candidate.routeSetId === branch.routeSetId,
+        candidate =>
+          candidate.kind !== 'shared'
+          && candidate.routeSetId === branch.routeSetId,
       );
       if (artifacts.length === 0) return null;
       if (artifacts.length > 1) {

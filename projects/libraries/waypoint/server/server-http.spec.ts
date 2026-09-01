@@ -2,11 +2,11 @@ import {
   createServerRouterHttpHandler,
   WAYPOINT_MODULE_HEADERS,
   WAYPOINT_PRIVATE_NO_STORE_HEADERS,
-} from '../lib/server-http';
+} from './server-http';
 import {
   ServerArtifactResolutionError,
   type ServerArtifactRecord,
-} from '../lib/server-routing';
+} from './server-routing';
 
 interface Artifact extends ServerArtifactRecord {
   readonly file: string;

@@ -2,9 +2,9 @@ import {
   type ServerRoutableBranch,
   type ServerRouterIndex,
   type ServerRouterShard,
-} from '../lib/server-router';
-import { createServerRouterSnapshotSource as createSource } from '../lib/server-source';
-import type { ServerArtifactRecord } from '../lib/server-routing';
+} from './server-router';
+import { createServerRouterSnapshotSource as createSource } from './server-source';
+import type { ServerArtifactRecord } from './server-routing';
 
 interface Artifact extends ServerArtifactRecord {
   readonly hash: string;

@@ -54,6 +54,7 @@ export interface ServerNavigationResolverContext {
 
 export interface ServerResolvedNavigationConfiguration {
   readonly contributions: readonly RouteContributionDefinition[];
+  readonly contributionIdentities?: Readonly<Record<string, string>>;
 }
 
 export type ServerNavigationResolver = (
@@ -106,13 +107,13 @@ export function createServerNavigationResolver(
   const artifactRefreshRetries = normalizeRetryCount(options.artifactRefreshRetries ?? 1);
   const loadedArtifacts = new Map<
     string,
-    Promise<RouteContributionDefinition>
+    Promise<RouteContributionDefinition | null>
   >();
   const latestIdentityByArtifact = new Map<string, string>();
 
   async function importArtifact(
     descriptor: ServerArtifactDelivery,
-  ): Promise<RouteContributionDefinition> {
+  ): Promise<RouteContributionDefinition | null> {
     const identity = deliveryIdentity(descriptor);
     const existing = loadedArtifacts.get(identity);
     if (existing) return existing;
@@ -156,6 +157,10 @@ export function createServerNavigationResolver(
       } catch (error) {
         throw new ServerNavigationArtifactLoadError(descriptor, error);
       }
+      if (descriptor.kind === 'shared') {
+        return null;
+      }
+
       const contribution = loaded?.default;
 
       if (!isRouteContributionDefinition(contribution)) {
@@ -228,14 +233,20 @@ export function createServerNavigationResolver(
     }
 
     const contributions: RouteContributionDefinition[] = [];
+    const contributionIdentities: Record<string, string> = {};
     for (const artifact of payload.artifacts) {
       throwIfAborted(signal);
-      contributions.push(await importArtifact(artifact));
+      const contribution = await importArtifact(artifact);
+      if (!contribution) continue;
+      contributions.push(contribution);
+      contributionIdentities[contribution.id] =
+        `${artifact.artifactKey}:${artifact.hash}`;
     }
     throwIfAborted(signal);
 
     return Object.freeze({
       contributions: Object.freeze(contributions),
+      contributionIdentities: Object.freeze(contributionIdentities),
     });
   }
 
@@ -267,10 +278,20 @@ export function isRouteContributionDefinition(
   if (!value || typeof value !== 'object') return false;
 
   const candidate = value as Partial<RouteContributionDefinition>;
-  return candidate.kind === 'route-contribution'
-    && nonEmptyString(candidate.id)
-    && nonEmptyString(candidate.slotId)
-    && Array.isArray(candidate.entries);
+  if (candidate.kind === 'route-contribution') {
+    return nonEmptyString(candidate.id)
+      && nonEmptyString(candidate.slotId)
+      && Array.isArray(candidate.entries);
+  }
+
+  // Compatibility for the earliest browser-delivery fixture shape. The
+  // compiler/runtime itself emits `route-contribution`.
+  const legacy = value as {
+    readonly kind?: unknown;
+    readonly id?: unknown;
+  };
+  return legacy.kind === 'routes-for'
+    && nonEmptyString(legacy.id);
 }
 
 class ServerNavigationArtifactLoadError extends Error {

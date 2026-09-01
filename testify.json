@@ -1,9 +1,11 @@
 {
   "srcDirs": [
-    "projects/libraries/waypoint/src/lib"
+    "projects/libraries/waypoint/src/lib",
+    "projects/libraries/waypoint/server"
   ],
   "testDirs": [
-    "projects/libraries/waypoint/src/tests"
+    "projects/libraries/waypoint/src/tests",
+    "projects/libraries/waypoint/server"
   ],
   "exclude": [
     "**/node_modules/**"
@@ -13,10 +15,10 @@
   "browser": "chrome",
   "headless": false,
   "coverage": false,
-  "port": 8888,
+  "port": 8889,
   "viteBuildOptions": {
     "target": "es2022",
-    "sourcemap": true,
+    "sourcemap": "inline",
     "minify": false,
     "preserveModules": false,
     "preserveModulesRoot": "."

@@ -2,8 +2,8 @@ import {
   createServerNavigationResolver,
   isRouteContributionDefinition,
   type ServerNavigationFetch,
-} from '../lib/browser-delivery';
-import type { RouteContributionDefinition } from '../lib/navigation-definitions';
+} from './browser-delivery';
+import type { RouteContributionDefinition } from '../src/lib/navigation-definitions';
 
 function contribution(
   id: string,

@@ -1,7 +1,7 @@
 import {
   isServerNavigationResolution,
   type ServerNavigationResolution,
-} from '../lib/server-delivery';
+} from './server-delivery';
 
 describe('server delivery contract', () => {
   const valid: ServerNavigationResolution = {

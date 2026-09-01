@@ -2,6 +2,13 @@ import {
   type ServerArtifactDelivery,
   type ServerNavigationResolution,
 } from './server-delivery';
+import {
+  serverArtifactDependencies,
+  type ServerArtifactRecord as DeliveryServerArtifactRecord,
+} from './server-artifact';
+import {
+  isServerDeliveryArtifactAuthorized,
+} from './server-artifact-authorization';
 
 export interface ServerRoutePolicy {
   readonly allowAnonymous?: boolean;
@@ -23,11 +30,24 @@ export interface ServerRouteBranch {
 }
 
 /** Minimal compiler artifact metadata needed by the server routing contract. */
+/**
+ * Backward-compatible routing artifact shape. New compiler output uses the
+ * discriminated records from `server-artifact.ts`; legacy tests/sources may
+ * omit `kind` and authorization metadata and are treated as route artifacts.
+ */
 export interface ServerArtifactRecord {
+  readonly kind?: 'route' | 'shared';
   readonly artifactKey: string;
-  readonly routeSetId: string;
+  readonly routeSetId?: string;
   readonly dependencies: readonly string[];
-  readonly branchIds: readonly string[];
+  readonly sharedDependencies?: readonly string[];
+  readonly branchIds?: readonly string[];
+  readonly consumers?: readonly string[];
+  readonly authorization?: Readonly<{
+    readonly allowAnonymous: boolean;
+    readonly roles: readonly string[];
+    readonly permissions: readonly string[];
+  }>;
   readonly file?: string;
   readonly hash?: string;
 }
@@ -89,7 +109,7 @@ export function resolveServerArtifactChain<T extends ServerArtifactRecord>(
     }
 
     active.add(key);
-    for (const dependency of artifact.dependencies) visit(dependency);
+    for (const dependency of artifactDependencies(artifact)) visit(dependency);
     active.delete(key);
     completed.add(key);
     ordered.push(artifact);
@@ -102,7 +122,8 @@ export function resolveServerArtifactChain<T extends ServerArtifactRecord>(
 export function requiredServerBranchIds(
   artifacts: readonly ServerArtifactRecord[],
 ): ReadonlySet<string> {
-  return new Set(artifacts.flatMap(artifact => artifact.branchIds));
+  return new Set(artifacts.flatMap(artifact =>
+    artifact.kind === 'shared' ? [] : (artifact.branchIds ?? [])));
 }
 
 export function isServerPolicyAllowed(
@@ -128,11 +149,22 @@ export function isServerArtifactAuthorized(
   branches: ReadonlyMap<string, ServerRouteBranch>,
   principal?: ServerPrincipal,
 ): boolean {
-  return artifact.branchIds.length > 0
-    && artifact.branchIds.every(branchId => {
+  if (artifact.authorization && (artifact.kind === 'route' || artifact.kind === 'shared')) {
+    return isServerDeliveryArtifactAuthorized(
+      artifact as DeliveryServerArtifactRecord,
+      branches,
+      principal,
+    );
+  }
+
+  const branchIds = artifact.branchIds ?? [];
+  const routeSetId = artifact.routeSetId;
+  return branchIds.length > 0
+    && !!routeSetId
+    && branchIds.every(branchId => {
       const branch = branches.get(branchId);
       return !!branch
-        && branch.routeSetId === artifact.routeSetId
+        && branch.routeSetId === routeSetId
         && branch.policies.every(policy =>
           isServerPolicyAllowed(policy, principal));
     });
@@ -180,6 +212,13 @@ export function serverArtifactEffectiveIdentity<
   return `v1:${hashes.join('.')}`;
 }
 
+function artifactDependencies(artifact: ServerArtifactRecord): readonly string[] {
+  if (artifact.kind === 'route' || artifact.kind === 'shared') {
+    return serverArtifactDependencies(artifact as DeliveryServerArtifactRecord);
+  }
+  return artifact.dependencies;
+}
+
 /**
  * Converts an already-authorized dependency chain to the public wire contract.
  * No route, slot, policy, branch, source-file, or dependency metadata crosses
@@ -214,6 +253,7 @@ export function createServerNavigationResolution<T extends ServerArtifactRecord>
     }
 
     return Object.freeze({
+      ...(artifact.kind ? { kind: artifact.kind } : {}),
       artifactKey: artifact.artifactKey,
       moduleUrl,
       hash: artifact.hash,

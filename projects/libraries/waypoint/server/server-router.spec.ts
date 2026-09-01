@@ -7,8 +7,8 @@ import {
   type ServerRoutableBranch,
   type ServerRouterIndex,
   type ServerRouterShard,
-} from '../lib/server-router';
-import type { ServerPrincipal } from '../lib/server-routing';
+} from './server-router';
+import type { ServerPrincipal } from './server-routing';
 
 interface Artifact extends ServerArtifactRecord {
   readonly file: string;

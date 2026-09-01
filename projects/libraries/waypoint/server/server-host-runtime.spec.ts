@@ -2,7 +2,7 @@ import {
   readServerNavigationHostRuntime,
   registerServerNavigationHostModules,
   WAYPOINT_SERVER_HOST_RUNTIME_GLOBAL_KEY,
-} from '../lib/server-host-runtime';
+} from './server-host-runtime';
 
 describe(
   'server navigation host runtime',

@@ -1,4 +1,4 @@
-﻿import {
+import {
   inject,
   Injectable,
   InjectionToken,
@@ -243,4 +243,3 @@ export function provideLocalDemoPrincipalSwitching(): Provider {
     },
   };
 }
-

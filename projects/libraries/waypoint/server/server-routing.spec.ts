@@ -9,7 +9,7 @@ import {
   type ServerArtifactRecord,
   type ServerPrincipal,
   type ServerRouteBranch,
-} from '../lib/server-routing';
+} from './server-routing';
 
 function artifact(
   artifactKey: string,

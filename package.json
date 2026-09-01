@@ -39,7 +39,7 @@
     "@angular/build": "22.1.2",
     "@angular/cli": "22.1.2",
     "@angular/compiler-cli": "22.1.0",
-    "@epikodelabs/testify": "^1.0.38",
+    "@epikodelabs/testify": "^1.0.51",
     "@types/express": "5.0.3",
     "@types/jasmine": "^6.0.0",
     "@types/node": "24.3.0",

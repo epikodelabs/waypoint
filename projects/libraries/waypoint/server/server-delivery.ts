@@ -4,6 +4,8 @@ export type ServerArtifactDeliveryKind = 'route' | 'shared';
  * Target-resolution descriptor.
  */
 export interface ServerArtifactDelivery {
+  /** Route artifacts contribute routes; shared artifacts are import-only dependencies. */
+  readonly kind?: ServerArtifactDeliveryKind;
   readonly artifactKey: string;
   readonly moduleUrl: string;
   readonly hash: string;

@@ -5,6 +5,7 @@ import {
   DestroyRef,
   EnvironmentInjector,
   InjectionToken,
+  PendingTasks,
   inject,
   runInInjectionContext,
   type Provider,
@@ -94,6 +95,15 @@ import {
 export interface ResolvedNavigationConfiguration {
   readonly routes?: NavigationTree;
   readonly contributions?: readonly RouteContributionDefinition[];
+  /** Opaque executable identity for each delivered contribution. */
+  readonly contributionIdentities?: Readonly<Record<string, string>>;
+  /** Optional full-configuration revision supplied by server delivery. */
+  readonly revision?: string;
+  readonly landing?: string;
+}
+
+interface RouteConfigurationResolver {
+  resolveConfiguration?: () => Promise<ResolvedNavigationConfiguration>;
 }
 
 export type RouteResolution =
@@ -635,6 +645,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private readonly injector: EnvironmentInjector;
   private readonly destroyRef: DestroyRef;
   private readonly document: Document;
+  private readonly pendingTasks: PendingTasks;
   private readonly appBaseHref: string;
   private registry: ReturnType<typeof createRouteRegistry>;
   private readonly namedRouteCatalog = new Map<string, NamedRouteDefinition>();
@@ -645,6 +656,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private readonly unresolvedRouteKeys = new Set<string>();
   private resolvedRoutes: NavigationTree = Object.freeze([]);
   private readonly resolvedContributionsById = new Map<string, RouteContributionDefinition>();
+  private readonly resolvedContributionIdentitiesById = new Map<string, string>();
   private resolutionGeneration = 0;
   private navigationRequestId = 0;
   private engine: VanillaRouter | null = null;
@@ -663,6 +675,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     this.injector = inject(EnvironmentInjector);
     this.destroyRef = inject(DestroyRef);
     this.document = inject(DOCUMENT);
+    this.pendingTasks = inject(PendingTasks);
     this.appBaseHref =
       inject(APP_BASE_HREF, {
         optional: true,
@@ -714,112 +727,6 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     }
 
     this.startEngine();
-    return;
-
-    const engine = createRouter({
-      routes: adaptRoutes(this.registry.groups, this.appRef, this.document, this.injector),
-
-      baseHref: this.baseHref,
-
-      enableTracing: this.configuration.enableTracing,
-
-      maxRedirects: this.configuration.maxRedirects,
-
-      onSameUrlNavigation: this.configuration.onSameUrlNavigation,
-
-      scrollRestoration: this.configuration.scrollRestoration,
-
-      preloading: this.configuration.preloading,
-
-      transitions: [...adaptFrameTransitions(this.registry.groups, this.injector)],
-
-      viewTransitions: this.configuration.viewTransitions,
-
-      render: (targetName, node) => {
-        const target = this.getOutlet(targetName);
-
-        if (!target) {
-          throw new Error(`Router outlet "${targetName}" is not connected.`);
-        }
-
-        replaceChildNodes(target, node);
-      },
-
-      commit: (outlets) => {
-        // First phase: validate all outlets exist before any DOM mutation.
-        for (const outlet of outlets) {
-          if (!this.outlets.has(outlet.name)) {
-            throw new Error(`Router outlet "${outlet.name}" is not connected.`);
-          }
-        }
-
-        // Second phase: perform synchronous DOM mutations.
-        for (const outlet of outlets) {
-          const target = this.getOutlet(outlet.name);
-
-          if (!target) {
-            throw new Error(`Router outlet "${outlet.name}" is not connected.`);
-          }
-
-          replaceChildNodes(target, outlet.node);
-          dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, outlet.component);
-        }
-      },
-
-      renderNotFound: (targetName, url, _router) => {
-        const target = this.getOutlet(targetName);
-
-        if (!target) {
-          return;
-        }
-
-        const heading = this.document.createElement('h1');
-
-        heading.textContent = '404 — Page Not Found';
-
-        replaceChildNodes(target, heading);
-
-        if (this.shouldResolveNotFoundUrl(url)) {
-          this.scheduleNotFoundRecovery(url);
-        }
-      },
-
-      renderError: (targetName, _error, _router) => {
-        const target = this.getOutlet(targetName);
-
-        if (!target) {
-          return;
-        }
-
-        const heading = this.document.createElement('h1');
-
-        heading.textContent = 'Page failed to load';
-
-        replaceChildNodes(target, heading);
-      },
-
-      onStateChange: (state) => {
-        this.currentState = snapshotRouterState(state);
-        this.requestTick();
-      },
-
-      onOutletActivate: (target, component) => {
-        dispatchOutletLifecycleEvent(target, OUTLET_ACTIVATE_EVENT, component);
-      },
-    });
-
-    try {
-      engine.start();
-    } catch (error) {
-      this.outlets.delete(outletName);
-      engine.dispose();
-      throw error;
-    }
-
-    this.engine = engine;
-
-    this.currentState = snapshotRouterState(engine.state);
-    this.requestTick();
   }
 
   disconnect(name: string, outlet: HTMLElement): void {
@@ -873,7 +780,10 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   }
 
   async revalidate(options: RouterRevalidationOptions = {}): Promise<boolean> {
-    if (!options.resetResolvedRoutes) {
+    const resolveRoutes = this.configuration.resolveRoutes;
+
+    // Static/authored-only routers can delegate directly to the active engine.
+    if (!resolveRoutes) {
       try {
         return await this.requireEngine().revalidate();
       } catch (error) {
@@ -882,10 +792,30 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       }
     }
 
+    const configurationResolver =
+      resolveRoutes as typeof resolveRoutes & RouteConfigurationResolver;
+
+    // A complete server configuration lets us preserve the active component
+    // when its executable artifact identity is unchanged while still replacing
+    // revoked/changed branches authoritatively.
+    if (!options.resetResolvedRoutes && configurationResolver.resolveConfiguration) {
+      return this.revalidateResolvedConfiguration(
+        configurationResolver.resolveConfiguration,
+      );
+    }
+
+    // Without a complete configuration endpoint, revalidation is an explicit
+    // authorization boundary: revoke delivered routes first, then resolve the
+    // current URL again. This is deliberately fail-closed.
+    return this.revalidateByRevocation();
+  }
+
+  private async revalidateByRevocation(): Promise<boolean> {
     this.resolutionGeneration++;
     this.navigationRequestId++;
     this.resolvedRoutes = Object.freeze([]);
     this.resolvedContributionsById.clear();
+    this.resolvedContributionIdentitiesById.clear();
     this.unresolvedRouteKeys.clear();
     this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
@@ -910,15 +840,51 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
       return await this.installCurrentRegistry();
     } catch (error) {
-      // Revocation is the fail-closed half of an authorization-boundary change.
-      // Even when reauthorization cannot be completed, the engine must stop
-      // using the previously delivered protected configuration.
       try {
         await this.installCurrentRegistry();
       } catch {
-        // Preserve the first failure as the actionable error. The engine
-        // configuration was already replaced before its revalidation started.
+        // Preserve the authorization/transport failure as the actionable error.
       }
+      this.recordNavigationError(error);
+      throw error;
+    }
+  }
+
+  private async revalidateResolvedConfiguration(
+    resolveConfiguration: () => Promise<ResolvedNavigationConfiguration>,
+  ): Promise<boolean> {
+    const generation = ++this.resolutionGeneration;
+    this.navigationRequestId++;
+    this.abortResolvedRouteRequests();
+    this.resolvingRouteKeys.clear();
+    this.unresolvedRouteKeys.clear();
+
+    const activeContributionId = this.currentContributionId();
+    const activeIdentity = activeContributionId
+      ? this.resolvedContributionIdentitiesById.get(activeContributionId)
+      : undefined;
+
+    try {
+      const resolved = await resolveConfiguration();
+      if (generation !== this.resolutionGeneration) {
+        return false;
+      }
+
+      this.replaceResolvedNavigation(resolved);
+
+      const activeStillEquivalent = !!activeContributionId
+        && !!activeIdentity
+        && this.resolvedContributionIdentitiesById.get(activeContributionId)
+          === activeIdentity;
+
+      await this.installCurrentRegistry({ revalidate: false });
+
+      if (activeStillEquivalent) {
+        return true;
+      }
+
+      return await this.requireEngine().revalidate();
+    } catch (error) {
       this.recordNavigationError(error);
       throw error;
     }
@@ -1202,6 +1168,9 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     const incomingContributions = isNavigationTreeResolution(resolved)
       ? Object.freeze([] as RouteContributionDefinition[])
       : resolved.contributions ?? Object.freeze([]);
+    const incomingIdentities = isNavigationTreeResolution(resolved)
+      ? undefined
+      : resolved.contributionIdentities;
 
     if (routes.length === 0 && incomingContributions.length === 0) {
       return false;
@@ -1240,8 +1209,79 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     for (const [id, contribution] of nextContributions) {
       this.resolvedContributionsById.set(id, contribution);
     }
+    if (incomingIdentities) {
+      for (const contribution of incomingContributions) {
+        const identity = incomingIdentities[contribution.id];
+        if (identity) {
+          this.resolvedContributionIdentitiesById.set(
+            contribution.id,
+            identity,
+          );
+        }
+      }
+    }
     this.registry = nextRegistry;
     return true;
+  }
+
+  private replaceResolvedNavigation(
+    resolved: ResolvedNavigationConfiguration,
+  ): void {
+    const routes = resolved.routes ?? Object.freeze([]);
+    const identities = resolved.contributionIdentities ?? {};
+    const nextContributions = new Map<string, RouteContributionDefinition>();
+    const nextIdentities = new Map<string, string>();
+    const authoredContributionIds = new Set(
+      (this.configuration.contributions ?? []).map(contribution => contribution.id),
+    );
+
+    for (const incoming of resolved.contributions ?? []) {
+      if (authoredContributionIds.has(incoming.id)) {
+        throw new Error(
+          `Resolved route contribution "${incoming.id}" conflicts with an authored contribution.`,
+        );
+      }
+
+      const identity = identities[incoming.id];
+      const previousIdentity =
+        this.resolvedContributionIdentitiesById.get(incoming.id);
+      const previous = this.resolvedContributionsById.get(incoming.id);
+
+      nextContributions.set(
+        incoming.id,
+        identity && previous && previousIdentity === identity
+          ? previous
+          : incoming,
+      );
+
+      if (identity) {
+        nextIdentities.set(incoming.id, identity);
+      }
+    }
+
+    const nextRegistry = this.createResolvedRegistry(
+      routes,
+      nextContributions,
+    );
+
+    this.resolvedRoutes = routes;
+    this.resolvedContributionsById.clear();
+    for (const [id, contribution] of nextContributions) {
+      this.resolvedContributionsById.set(id, contribution);
+    }
+    this.resolvedContributionIdentitiesById.clear();
+    for (const [id, identity] of nextIdentities) {
+      this.resolvedContributionIdentitiesById.set(id, identity);
+    }
+    this.registry = nextRegistry;
+  }
+
+  private currentContributionId(): string | undefined {
+    const location = getRouterLocation(this.document);
+    const path = stripBaseHref(location.pathname, this.baseHref);
+    return this.registry.groups.find(group =>
+      matchesCompiledPath(group.path, path),
+    )?.primary.contributionId;
   }
 
   private rebuildResolvedRegistry(): void {
@@ -1337,45 +1377,56 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
   private startEngine(): void {
     let task!: Promise<void>;
+
+    // Keep engine creation deferred. connect() can run while Angular is still
+    // constructing the outlet tree, and the task identity must be assigned
+    // before startup checks whether it is still the current attempt.
+    const startup = async (): Promise<void> => {
+      const location = getRouterLocation(this.document);
+      const url = new URL(location.href);
+
+      if (
+        this.configuration.resolveRoutes
+        && url.origin === location.origin
+        && isPathInsideBase(url.pathname, this.baseHref)
+      ) {
+        await this.resolveRoutesForUrl(url, { install: false });
+      }
+
+      if (
+        this.engineStartupTask !== task
+        || this.engine
+        || this.outlets.size === 0
+      ) {
+        return;
+      }
+
+      const engine = this.createEngine();
+
+      try {
+        engine.start();
+      } catch (error) {
+        engine.dispose();
+        throw error;
+      }
+
+      if (this.engineStartupTask !== task) {
+        engine.dispose();
+        return;
+      }
+
+      this.engine = engine;
+      this.currentState = snapshotRouterState(engine.state);
+      this.requestTick();
+    };
+
+    const completePendingTask = this.pendingTasks.add();
     task = Promise.resolve()
-      .then(async () => {
-        const location = getRouterLocation(this.document);
-        const url = new URL(location.href);
+      .then(startup)
+      .finally(completePendingTask);
+    this.engineStartupTask = task;
 
-        if (
-          this.configuration.resolveRoutes
-          && url.origin === location.origin
-          && isPathInsideBase(url.pathname, this.baseHref)
-        ) {
-          await this.resolveRoutesForUrl(url, { install: false });
-        }
-
-        if (
-          this.engineStartupTask !== task
-          || this.engine
-          || this.outlets.size === 0
-        ) {
-          return;
-        }
-
-        const engine = this.createEngine();
-
-        try {
-          engine.start();
-        } catch (error) {
-          engine.dispose();
-          throw error;
-        }
-
-        if (this.engineStartupTask !== task) {
-          engine.dispose();
-          return;
-        }
-
-        this.engine = engine;
-        this.currentState = snapshotRouterState(engine.state);
-        this.requestTick();
-      })
+    void task
       .catch((error) => {
         if (this.engineStartupTask === task) {
           this.recordNavigationError(error);
@@ -1387,8 +1438,6 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
           this.engineStartupTask = null;
         }
       });
-
-    this.engineStartupTask = task;
   }
 
   private renderStartupError(error: unknown): void {

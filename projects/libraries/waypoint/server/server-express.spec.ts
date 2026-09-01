@@ -3,8 +3,8 @@ import {
   type ExpressLikeNext,
   type ExpressLikeRequest,
   type ExpressLikeResponse,
-} from '../lib/server-express';
-import type { ServerArtifactRecord } from '../lib/server-routing';
+} from './server-express';
+import type { ServerArtifactRecord } from './server-routing';
 
 interface Artifact extends ServerArtifactRecord {
   readonly file: string;
