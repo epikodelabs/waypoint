@@ -92,12 +92,24 @@ async function execute(
       analysis,
       {
         metadataRoot: layout.metadataRoot,
+        browserEntry:
+          angularWorkspacePathToAbsolute(
+            workspaceRoot,
+            requireBrowserEntry(
+              angularOptions['browser'],
+            ),
+          ),
       },
     );
 
     try {
       const delegatedOptions = {
         ...angularOptions,
+
+        browser: angularWorkspacePath(
+          workspaceRoot,
+          build.host.browserEntry,
+        ),
 
         fileReplacements: [
           ...normalizeReplacements(
@@ -115,15 +127,9 @@ async function execute(
           },
         ],
 
-        polyfills: [
-          ...normalizePolyfills(
-            angularOptions['polyfills'],
-          ),
-          angularWorkspacePath(
-            workspaceRoot,
-            build.host.runtimeEntry,
-          ),
-        ],
+        polyfills: normalizePolyfills(
+          angularOptions['polyfills'],
+        ),
       };
 
       /*
@@ -249,6 +255,32 @@ function normalizeReplacements(
       with: (item as any).with,
     }];
   });
+}
+
+
+function requireBrowserEntry(
+  value: unknown,
+): string {
+  if (
+    typeof value !== 'string'
+    || value.trim().length === 0
+  ) {
+    throw new Error(
+      'Waypoint build requires Angular option "browser" to be a source entry path.',
+    );
+  }
+
+  return value;
+}
+
+function angularWorkspacePathToAbsolute(
+  workspaceRoot: string,
+  value: string,
+): string {
+  return path.resolve(
+    workspaceRoot,
+    value.replace(/\//g, path.sep),
+  );
 }
 
 function normalizePolyfills(

@@ -11,6 +11,9 @@ import {
   createHostRuntimeSource,
 } from './host-runtime-entry.js';
 import {
+  createBrowserBootstrapSource,
+} from './browser-bootstrap-entry.js';
+import {
   buildProtectedRouteArtifacts,
   publishProtectedRouteArtifacts,
   removeStaleProtectedRouteArtifacts,
@@ -18,6 +21,7 @@ import {
 
 export interface PrepareBuildOptions {
   readonly metadataRoot: string;
+  readonly browserEntry: string;
 }
 
 export interface PreparedWaypointBuild {
@@ -74,6 +78,11 @@ export async function prepareBuild(
       hostRoot,
       'runtime.js',
     );
+  const browserEntry =
+    path.join(
+      metadataRoot,
+      'waypoint-browser-bootstrap.mjs',
+    );
 
   await fs.mkdir(
     hostRoot,
@@ -119,10 +128,21 @@ export async function prepareBuild(
     'utf8',
   );
 
+  await fs.writeFile(
+    browserEntry,
+    createBrowserBootstrapSource(
+      path.resolve(options.browserEntry),
+      runtimeEntry,
+      browserEntry,
+    ),
+    'utf8',
+  );
+
   return Object.freeze({
     host: Object.freeze({
       routesEntry,
       runtimeEntry,
+      browserEntry,
     }),
 
     async publish() {
