@@ -1,9 +1,4 @@
 import type { RouteContributionDefinition } from './navigation-definitions';
-import {
-  readServerNavigationHostRuntime,
-  registerServerNavigationHostModules,
-  type ServerNavigationHostModules,
-} from './server-host-runtime';
 interface ServerArtifactDelivery {
   readonly artifactKey: string;
   readonly moduleUrl: string;
@@ -47,12 +42,6 @@ export interface ServerNavigationResolverOptions {
   readonly importModule?: ServerNavigationModuleImporter;
   /** Re-resolve once when an artifact URL becomes stale during publication. */
   readonly artifactRefreshRetries?: number;
-  /**
-   * Module namespaces shared with independently delivered artifacts. At
-   * minimum, Angular packages used by protected code and
-   * `@epikodelabs/waypoint` must point at the host application's identities.
-   */
-  readonly hostModules?: ServerNavigationHostModules;
 }
 
 export interface ServerNavigationResolverContext {
@@ -110,30 +99,6 @@ function isServerNavigationResolution(
 export function createServerNavigationResolver(
   options: ServerNavigationResolverOptions = {},
 ): ServerNavigationResolver {
-  if (!options.importModule && !options.hostModules) {
-    throw new Error(
-      'Native server navigation imports require hostModules so delivered Angular artifacts share the host application runtime.',
-    );
-  }
-
-  if (
-    !options.importModule
-    && !options.hostModules?.['@epikodelabs/waypoint']
-  ) {
-    throw new Error(
-      'Native server navigation imports require hostModules["@epikodelabs/waypoint"] to share the active Waypoint runtime identity.',
-    );
-  }
-
-  const hostModules =
-    options.hostModules;
-
-  if (hostModules) {
-    registerServerNavigationHostModules(
-      hostModules,
-    );
-  }
-
   const endpoint = normalizeEndpoint(options.endpoint ?? '/api/navigation/resolve');
   const fetchNavigation = options.fetch ?? defaultFetch;
   const importModule = options.importModule ?? defaultImportModule;
@@ -160,30 +125,6 @@ export function createServerNavigationResolver(
     const pending = (async () => {
       let loaded: RouteModule;
       try {
-        if (!options.importModule && hostModules) {
-          registerServerNavigationHostModules(
-            hostModules,
-          );
-
-          const runtime =
-            readServerNavigationHostRuntime();
-
-          for (
-            const specifier
-            of Object.keys(hostModules)
-          ) {
-            if (
-              !runtime?.modules.has(
-                specifier,
-              )
-            ) {
-              throw new Error(
-                `Waypoint host runtime failed to register module "${specifier}" before artifact import.`,
-              );
-            }
-          }
-        }
-
         loaded = await importModule(
           descriptor.moduleUrl,
         ) as RouteModule;

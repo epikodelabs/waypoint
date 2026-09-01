@@ -96,7 +96,7 @@ function hostModuleSource(
       specifier,
     )});`,
     `if (!module) throw new Error(${JSON.stringify(
-      `Waypoint artifact requires host module "${specifier}". Register it with createServerNavigationResolver({ hostModules: ... }).`,
+      `Waypoint artifact requires host module "${specifier}". Ensure the generated Waypoint host runtime bootstrap is included in the application build.`,
     )});`,
   ];
 

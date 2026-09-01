@@ -37,7 +37,7 @@ export interface PublishedRouteArtifact {
   readonly inputs: readonly string[];
 }
 
-interface PreparedArtifact {
+export interface PreparedArtifact {
   readonly descriptor:
     PublishedRouteArtifact;
   readonly outputFile: OutputFile;
@@ -74,9 +74,14 @@ const {
  * discovered routesFor() contribution. No protected contribution is reachable
  * from the public Angular host graph.
  */
+export interface PreparedProtectedRouteArtifacts {
+  readonly artifacts: readonly PreparedArtifact[];
+  readonly hostModules: readonly string[];
+}
+
 export async function buildProtectedRouteArtifacts(
   analysis: WaypointAnalysis,
-): Promise<readonly PreparedArtifact[]> {
+): Promise<PreparedProtectedRouteArtifacts> {
   if (!analysis.plan) {
     throw new Error(
       'Cannot build protected artifacts without a route plan.',
@@ -151,7 +156,12 @@ export async function buildProtectedRouteArtifacts(
       );
     }
 
-    return Object.freeze(prepared);
+    return Object.freeze({
+      artifacts: Object.freeze(prepared),
+      hostModules: Object.freeze(
+        [...hostExports.keys()].sort(),
+      ),
+    });
   } finally {
     await fs.rm(
       aotRoot,

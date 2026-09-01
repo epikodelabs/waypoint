@@ -218,36 +218,24 @@ TypeScript decorator source. The route compiler performs Angular **full AOT**
 compilation before isolated artifact bundling. This matches Angular's application
 compilation model and avoids requiring JIT compilation in the browser.
 
-Independently bundled artifacts must not create second identities for Angular,
-Waypoint, or application services/tokens that are intentionally shared across
-artifacts. The compiler therefore rewrites configured host-shared imports to a
-small runtime bridge. Angular package specifiers and `@epikodelabs/waypoint` are
-shared by default; applications may explicitly add stable bare specifiers for
-additional shared runtime modules.
+Independently bundled artifacts must not create second identities for Angular
+or Waypoint. The compiler therefore rewrites host-shared imports to a small
+runtime bridge. During protected AOT preparation the builder discovers the exact
+host module specifiers used by delivered artifacts, then generates a browser
+bootstrap that imports and registers those host namespace objects before native
+artifact imports can occur.
 
-The browser must register the exact module namespace objects used by the host
-application before native artifact imports occur:
+Application code does not register host modules manually:
 
 ```ts
-import * as angularCore from '@angular/core';
-import * as waypoint from '@epikodelabs/waypoint';
-
-const resolveRoutes = waypoint.createServerNavigationResolver({
-  hostModules: {
-    '@angular/core': angularCore,
-    '@epikodelabs/waypoint': waypoint,
-  },
-});
+const resolveRoutes = createServerNavigationResolver();
 ```
 
-Registering a different namespace for an already registered specifier is an
-error. This prevents accidentally mixing multiple Angular/Waypoint runtime
-identities in one document realm.
-
-Host modules are an **already-delivered runtime boundary**, not a privacy
-boundary. A route component, admin-only service, or other code that must remain
-undiscoverable to a principal must stay inside an authorized route artifact and
-must not be configured as a host module.
+Registering a different namespace for an already registered specifier remains
+an error inside the bridge. This prevents accidentally mixing multiple
+Angular/Waypoint runtime identities in one document realm. Protected application
+code remains inside authorized route artifacts; the generated host bridge only
+contains framework/runtime module identities discovered by the compiler.
 
 ## Compiler-output snapshots
 

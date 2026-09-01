@@ -210,16 +210,8 @@ describe('browser server delivery', () => {
       .toBeRejectedWithError(/did not export a route contribution/i);
   });
 
-  it('requires host module identities when using native artifact imports', () => {
-    expect(() => createServerNavigationResolver()).toThrowError(/hostModules/i);
-  });
-
-  it('requires the active Waypoint identity for native artifact imports', () => {
-    expect(() => createServerNavigationResolver({
-      hostModules: {
-        '@angular/core': {},
-      },
-    })).toThrowError(/@epikodelabs\/waypoint/i);
+  it('creates a native resolver without manual host module registration', () => {
+    expect(() => createServerNavigationResolver()).not.toThrow();
   });
 
   it('supports a custom resolution endpoint', async () => {

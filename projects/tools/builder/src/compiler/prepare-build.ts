@@ -8,6 +8,9 @@ import {
   publishServerRouteOutput,
 } from './server-output.js';
 import {
+  createHostRuntimeSource,
+} from './host-runtime-entry.js';
+import {
   buildProtectedRouteArtifacts,
   publishProtectedRouteArtifacts,
   removeStaleProtectedRouteArtifacts,
@@ -80,6 +83,17 @@ export async function prepareBuild(
   );
 
   /*
+   * Prepare protected artifacts before delegating to Angular so the generated
+   * browser bootstrap can register the exact host module identities referenced
+   * by independently delivered code. Publication still happens only after the
+   * public host build succeeds.
+   */
+  const preparedArtifacts =
+    await buildProtectedRouteArtifacts(
+      analysis,
+    );
+
+  /*
    * Keep the browser host route source minimal. The protected contribution
    * modules are deliberately absent from the initial application build.
    */
@@ -99,10 +113,9 @@ export async function prepareBuild(
 
   await fs.writeFile(
     runtimeEntry,
-    [
-      `// Waypoint generated host runtime bootstrap.`,
-      ``,
-    ].join('\n'),
+    createHostRuntimeSource(
+      preparedArtifacts.hostModules,
+    ),
     'utf8',
   );
 
@@ -113,15 +126,10 @@ export async function prepareBuild(
     }),
 
     async publish() {
-      const preparedArtifacts =
-        await buildProtectedRouteArtifacts(
-          analysis,
-        );
-
       const publishedArtifacts =
         await publishProtectedRouteArtifacts(
           analysis.planned.artifactsOutput,
-          preparedArtifacts,
+          preparedArtifacts.artifacts,
         );
 
       /*
@@ -205,3 +213,4 @@ export async function prepareBuild(
     async dispose() {},
   });
 }
+
