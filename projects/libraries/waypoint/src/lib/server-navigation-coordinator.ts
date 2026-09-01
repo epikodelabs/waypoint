@@ -30,12 +30,14 @@ import {
   stripBaseHref,
 } from './router-url';
 
-export interface ServerNavigationCoordinatorOptions {
+export interface ServerNavigationOptions {
   readonly document: Document;
   readonly baseHref: string;
-  readonly resolvedNavigation: ResolvedNavigationState;
-  readonly routeResolution: RouteResolutionCoordinator;
-  readonly runtime: () => AngularRouterRuntime;
+  readonly resolvedNavigation:
+    ResolvedNavigationState;
+  readonly routeResolution:
+    RouteResolutionCoordinator;
+  readonly runtime: AngularRouterRuntime;
   readonly href: (
     target: NavigationTarget,
   ) => string | null;
@@ -44,49 +46,51 @@ export interface ServerNavigationCoordinatorOptions {
 }
 
 export class ServerNavigationCoordinator {
-  private readonly preResolvedNavigationKeys =
+  private readonly preResolvedKeys =
     new Set<string>();
-  private preResolvingNavigationCount = 0;
-  private navigationRequestId = 0;
+  private resolvingNavigationCount = 0;
+  private requestId = 0;
 
   constructor(
     private readonly options:
-      ServerNavigationCoordinatorOptions,
+      ServerNavigationOptions,
   ) {}
 
   navigate(
     target: NavigationTarget,
-    navigationOptions?: NavigationOptions,
+    options?: NavigationOptions,
   ): Promise<boolean> {
     return this.navigateResolved(
       target,
-      navigationOptions,
+      options,
     );
   }
 
   async revalidate(
-    options: RouterRevalidationOptions = {},
+    options:
+      RouterRevalidationOptions = {},
   ): Promise<boolean> {
+    const resolver =
+      this.options.resolveConfiguration;
+
     if (
-      !this.options.routeResolution.hasResolver()
+      !this.options.routeResolution
+        .hasResolver()
     ) {
-      try {
-        return await this.options.runtime()
-          .requireEngine()
-          .revalidate();
-      } catch (error) {
-        this.options.runtime()
-          .recordError(error);
-        throw error;
-      }
+      return this.captureError(
+        () =>
+          this.options.runtime
+            .requireEngine()
+            .revalidate(),
+      );
     }
 
     if (
       !options.resetResolvedRoutes
-      && this.options.resolveConfiguration
+      && resolver
     ) {
-      return this.revalidateResolvedConfiguration(
-        this.options.resolveConfiguration,
+      return this.revalidateConfiguration(
+        resolver,
       );
     }
 
@@ -102,14 +106,15 @@ export class ServerNavigationCoordinator {
       );
 
     if (
-      this.options.routeResolution.hasResolver()
+      this.options.routeResolution
+        .hasResolver()
       && url.origin === location.origin
       && isPathInsideBase(
         url.pathname,
         this.options.baseHref,
       )
     ) {
-      await this.resolveRoutesForUrl(
+      await this.resolveUrl(
         url,
         { install: false },
       );
@@ -120,22 +125,22 @@ export class ServerNavigationCoordinator {
     url: URL,
   ): Promise<void> {
     const resolved =
-      await this.resolveRoutesForUrl(
+      await this.resolveUrl(
         url,
         { install: false },
       );
 
     if (resolved) {
-      await this.installCurrentRegistry();
+      await this.installRegistry();
     }
   }
 
-  shouldResolveNotFoundUrl(
+  shouldRecoverNotFound(
     url: URL,
   ): boolean {
     if (
-      this.preResolvingNavigationCount > 0
-      || this.preResolvedNavigationKeys.size > 0
+      this.resolvingNavigationCount > 0
+      || this.preResolvedKeys.size > 0
     ) {
       return false;
     }
@@ -145,30 +150,32 @@ export class ServerNavigationCoordinator {
       this.options.baseHref,
     );
 
-    return this.navigationRequestId > 0
+    return this.requestId > 0
       || path !== '/'
       || url.search.length > 0
       || url.hash.length > 0;
   }
 
   dispose(): void {
-    this.navigationRequestId++;
-    this.options.routeResolution.invalidate();
-    this.options.runtime().dispose();
+    this.requestId++;
+    this.options.routeResolution
+      .invalidate();
+    this.options.runtime.dispose();
   }
 
   private async navigateResolved(
     target: NavigationTarget,
     navigationOptions?: NavigationOptions,
   ): Promise<boolean> {
-    this.preResolvingNavigationCount++;
+    this.resolvingNavigationCount++;
 
     try {
-      const requestId =
-        ++this.navigationRequestId;
-      const resolutionGeneration =
-        this.options.routeResolution.generation;
-      const href = this.options.href(target);
+      const requestId = ++this.requestId;
+      const generation =
+        this.options.routeResolution
+          .generation;
+      const href =
+        this.options.href(target);
 
       if (href === null) {
         return false;
@@ -198,56 +205,52 @@ export class ServerNavigationCoordinator {
           this.options.baseHref,
         )
       ) {
-        this.options.routeResolution.abort(
-          key,
-        );
+        this.options.routeResolution
+          .abort(key);
 
-        resolved =
-          await this.resolveRoutesForUrl(
-            url,
-            { install: false },
-          );
+        resolved = await this.resolveUrl(
+          url,
+          { install: false },
+        );
       }
 
       if (
         !this.isCurrent(
           requestId,
-          resolutionGeneration,
+          generation,
         )
       ) {
         return false;
       }
 
       const engine =
-        await this.options.runtime()
+        await this.options.runtime
           .requireStartedEngine();
 
       if (
         !this.isCurrent(
           requestId,
-          resolutionGeneration,
+          generation,
         )
       ) {
         return false;
       }
 
       if (resolved) {
-        await this.installCurrentRegistry({
+        await this.installRegistry({
           revalidate: false,
         });
 
         if (
           !this.isCurrent(
             requestId,
-            resolutionGeneration,
+            generation,
           )
         ) {
           return false;
         }
 
-        this.preResolvedNavigationKeys.add(
-          key,
-        );
+        this.preResolvedKeys.add(key);
       }
 
       try {
@@ -256,32 +259,33 @@ export class ServerNavigationCoordinator {
           navigationOptions,
         );
       } finally {
-        this.preResolvedNavigationKeys.delete(
-          key,
-        );
+        this.preResolvedKeys.delete(key);
       }
     } catch (error) {
-      this.options.runtime()
+      this.options.runtime
         .recordError(error);
       throw error;
     } finally {
-      this.preResolvingNavigationCount--;
+      this.resolvingNavigationCount--;
     }
   }
 
   private async revalidateByRevocation():
     Promise<boolean> {
-    this.navigationRequestId++;
-    this.options.routeResolution.invalidate({
-      resetState: true,
-    });
+    this.requestId++;
+    this.options.routeResolution
+      .invalidate({
+        resetState: true,
+      });
 
     const location =
       getRouterLocation(
         this.options.document,
       );
     const url = resolveRouterUrl(
-      `${location.pathname}${location.search}${location.hash}`,
+      `${location.pathname}` +
+        `${location.search}` +
+        `${location.hash}`,
       this.options.baseHref,
       location,
       'navigate',
@@ -289,14 +293,15 @@ export class ServerNavigationCoordinator {
 
     try {
       if (
-        this.options.routeResolution.hasResolver()
+        this.options.routeResolution
+          .hasResolver()
         && url.origin === location.origin
         && isPathInsideBase(
           url.pathname,
           this.options.baseHref,
         )
       ) {
-        await this.resolveRoutesForUrl(
+        await this.resolveUrl(
           url,
           {
             force: true,
@@ -305,39 +310,40 @@ export class ServerNavigationCoordinator {
         );
       }
 
-      return await this.installCurrentRegistry();
+      return await this.installRegistry();
     } catch (error) {
       try {
-        await this.installCurrentRegistry();
+        await this.installRegistry();
       } catch {
-        // Keep the authorization/transport
-        // failure as the actionable error.
+        // Preserve the authorization or
+        // transport failure as the cause.
       }
 
-      this.options.runtime()
+      this.options.runtime
         .recordError(error);
       throw error;
     }
   }
 
-  private async revalidateResolvedConfiguration(
+  private async revalidateConfiguration(
     resolveConfiguration: () =>
       Promise<ResolvedNavigationConfiguration>,
   ): Promise<boolean> {
-    this.navigationRequestId++;
-    this.options.routeResolution.invalidate();
+    this.requestId++;
+    this.options.routeResolution
+      .invalidate();
 
     const generation =
-      this.options.routeResolution.generation;
-    const activeContributionId =
+      this.options.routeResolution
+        .generation;
+    const contributionId =
       this.currentContributionId();
-    const activeIdentity =
-      activeContributionId
-        ? this.options.resolvedNavigation
-            .contributionIdentity(
-              activeContributionId,
-            )
-        : undefined;
+    const identity = contributionId
+      ? this.options.resolvedNavigation
+          .contributionIdentity(
+            contributionId,
+          )
+      : undefined;
 
     try {
       const resolved =
@@ -345,42 +351,43 @@ export class ServerNavigationCoordinator {
 
       if (
         generation !==
-        this.options.routeResolution.generation
+        this.options.routeResolution
+          .generation
       ) {
         return false;
       }
 
-      this.options.resolvedNavigation.replace(
-        resolved,
-      );
+      this.options.resolvedNavigation
+        .replace(resolved);
 
-      const activeStillEquivalent =
-        !!activeContributionId
-        && !!activeIdentity
-        && this.options.resolvedNavigation
+      const sameArtifact =
+        !!contributionId
+        && !!identity
+        && this.options
+          .resolvedNavigation
           .contributionIdentity(
-            activeContributionId,
-          ) === activeIdentity;
+            contributionId,
+          ) === identity;
 
-      await this.installCurrentRegistry({
+      await this.installRegistry({
         revalidate: false,
       });
 
-      if (activeStillEquivalent) {
+      if (sameArtifact) {
         return true;
       }
 
-      return await this.options.runtime()
+      return await this.options.runtime
         .requireEngine()
         .revalidate();
     } catch (error) {
-      this.options.runtime()
+      this.options.runtime
         .recordError(error);
       throw error;
     }
   }
 
-  private async resolveRoutesForUrl(
+  private async resolveUrl(
     url: URL,
     options: Readonly<{
       force?: boolean;
@@ -391,18 +398,22 @@ export class ServerNavigationCoordinator {
       url.pathname,
       this.options.baseHref,
     );
+
     const resolved =
-      await this.options.routeResolution.resolve(
-        url,
-        key,
-        { force: options.force },
-      );
+      await this.options.routeResolution
+        .resolve(
+          url,
+          key,
+          {
+            force: options.force,
+          },
+        );
 
     if (
       resolved
       && options.install !== false
     ) {
-      await this.installCurrentRegistry();
+      await this.installRegistry();
     }
 
     return resolved;
@@ -419,17 +430,19 @@ export class ServerNavigationCoordinator {
       this.options.baseHref,
     );
 
-    return this.options.resolvedNavigation
+    return this.options
+      .resolvedNavigation
       .contributionIdForPath(path);
   }
 
-  private installCurrentRegistry(
+  private installRegistry(
     options: Readonly<{
       revalidate?: boolean;
     }> = {},
   ): Promise<boolean> {
-    return this.options.runtime().install(
-      this.options.resolvedNavigation.registry,
+    return this.options.runtime.install(
+      this.options.resolvedNavigation
+        .registry,
       options,
     );
   }
@@ -438,8 +451,21 @@ export class ServerNavigationCoordinator {
     requestId: number,
     generation: number,
   ): boolean {
-    return requestId === this.navigationRequestId
+    return requestId === this.requestId
       && generation ===
-        this.options.routeResolution.generation;
+        this.options.routeResolution
+          .generation;
+  }
+
+  private async captureError(
+    action: () => Promise<boolean>,
+  ): Promise<boolean> {
+    try {
+      return await action();
+    } catch (error) {
+      this.options.runtime
+        .recordError(error);
+      throw error;
+    }
   }
 }

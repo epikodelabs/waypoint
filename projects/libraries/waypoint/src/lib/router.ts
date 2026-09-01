@@ -43,14 +43,8 @@ export type {
   RouteResolutionContext,
 } from './resolved-navigation';
 
-interface RouteConfigurationResolver {
-  resolveConfiguration?: () =>
-    Promise<ResolvedNavigationConfiguration>;
-}
-
 import type {
   LayoutOptions,
-  RouteDefinition,
   RouteOptions,
   NavigationTree,
   RouteContributionDefinition,
@@ -68,21 +62,20 @@ import {
 } from './router-reload';
 
 import {
-  ROUTE,
-  ROUTE_CONTEXT,
   Router as RouterContract,
   type RouterReloadOptions,
   type RouterRevalidationOptions,
 } from './router-contract';
 
-import { getRouterLocation, isPathInsideBase, resolveRouterUrl, routerHref, stripBaseHref } from './router-url';
+import {
+  getRouterLocation,
+  resolveRouterUrl,
+  routerHref,
+} from './router-url';
 
 import {
-  type CanDeactivateFn,
-  type ActivatedRoute,
-  type NavigationContext,
+  type NavigationOptions,
   type PreloadingStrategy,
-  type RouteRenderContext,
   type ScrollRestorationMode,
   type ViewTransitionsOption,
 } from './vanilla-router';
@@ -96,7 +89,10 @@ export interface RouterOptions {
   readonly preloading?: PreloadingStrategy;
   readonly viewTransitions?: ViewTransitionsOption;
   readonly namedRoutes?: readonly NamedRouteDefinition[];
-  readonly resolveRoutes?: (url: URL, context: RouteResolutionContext) => Promise<RouteResolution>;
+  readonly resolveRoutes?: (
+    url: URL,
+    context: RouteResolutionContext,
+  ) => Promise<RouteResolution>;
   readonly contributions?: readonly RouteContributionDefinition[];
 }
 
@@ -107,7 +103,10 @@ interface RouterConfiguration<
   routes: TRoutes;
 }
 
-const ROUTER_CONFIGURATION = new InjectionToken<RouterConfiguration>('ROUTER_CONFIGURATION');
+const ROUTER_CONFIGURATION =
+  new InjectionToken<RouterConfiguration>(
+    'ROUTER_CONFIGURATION',
+  );
 
 export class ServerRouter<TRoutes extends NavigationTree = any>
   extends RouterContract<TRoutes> {
@@ -117,12 +116,13 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     ResolvedNavigationState<TRoutes>;
   private readonly namedNavigation: NamedNavigationCatalog;
   private readonly runtime: AngularRouterRuntime;
-  private readonly navigation: ServerNavigationCoordinator;
+  private readonly navigation:
+    ServerNavigationCoordinator;
 
   public readonly navigateTo: TypedNavigate<TRoutes>;
   public readonly hrefTo: TypedHref<TRoutes>;
 
-  constructor(private configuration: RouterConfiguration<TRoutes>) {
+  constructor(private readonly configuration: RouterConfiguration<TRoutes>) {
     super();
     const appRef = inject(ApplicationRef);
     const injector = inject(EnvironmentInjector);
@@ -148,27 +148,8 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         this.configuration.resolveRoutes,
       );
 
-    const configurationResolver =
-      this.configuration.resolveRoutes as
-        | (
-            typeof this.configuration.resolveRoutes
-            & RouteConfigurationResolver
-          )
-        | undefined;
-
-    this.navigation =
-      new ServerNavigationCoordinator({
-        document: this.document,
-        baseHref: this.baseHref,
-        resolvedNavigation:
-          this.resolvedNavigation,
-        routeResolution,
-        runtime: () => this.runtime,
-        href: (target) => this.href(target),
-        resolveConfiguration:
-          configurationResolver
-            ?.resolveConfiguration,
-      });
+    let navigation!:
+      ServerNavigationCoordinator;
 
     this.runtime = new AngularRouterRuntime({
       appRef,
@@ -190,14 +171,43 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         this.configuration.viewTransitions,
       registry: () => this.registry,
       prepareStartup: (url) =>
-        this.navigation.prepareStartup(url),
+        navigation.prepareStartup(url),
       shouldRecoverNotFound: (url) =>
-        this.navigation.shouldResolveNotFoundUrl(
+        navigation.shouldRecoverNotFound(
           url,
         ),
       recoverNotFound: (url) =>
-        this.navigation.recoverNotFound(url),
+        navigation.recoverNotFound(url),
     });
+
+    const routeResolver =
+      this.configuration.resolveRoutes as
+        | (
+            typeof this.configuration.resolveRoutes
+            & {
+              resolveConfiguration?: () =>
+                Promise<
+                  ResolvedNavigationConfiguration
+                >;
+            }
+          )
+        | undefined;
+
+    navigation =
+      new ServerNavigationCoordinator({
+        document: this.document,
+        baseHref: this.baseHref,
+        resolvedNavigation:
+          this.resolvedNavigation,
+        routeResolution,
+        runtime: this.runtime,
+        href: (target) => this.href(target),
+        resolveConfiguration:
+          routeResolver
+            ?.resolveConfiguration,
+      });
+
+    this.navigation = navigation;
 
     this.navigateTo =
       createTypedNavigateProxy(
@@ -251,9 +261,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
   navigate(
     target: NavigationTarget,
-    options?: Parameters<
-      ServerNavigationCoordinator['navigate']
-    >[1],
+    options?: NavigationOptions,
   ): Promise<boolean> {
     return this.navigation.navigate(
       target,
@@ -282,7 +290,8 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   }
 
   revalidate(
-    options: RouterRevalidationOptions = {},
+    options:
+      RouterRevalidationOptions = {},
   ): Promise<boolean> {
     return this.navigation.revalidate(
       options,
@@ -318,8 +327,17 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     return this.resolvedNavigation.registry;
   }
 
-  private resolveHref(target: string | URL): string {
-    return routerHref(resolveRouterUrl(target, this.baseHref, getRouterLocation(this.document), 'href'));
+  private resolveHref(
+    target: string | URL,
+  ): string {
+    return routerHref(
+      resolveRouterUrl(
+        target,
+        this.baseHref,
+        getRouterLocation(this.document),
+        'href',
+      ),
+    );
   }
 
   private generateNamedHref(
@@ -332,5 +350,56 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     );
   }
 
-
 }
+
+export function provideRouter<
+  const TRoutes extends NavigationTree,
+>(
+  routes: TRoutes,
+  options: RouterOptions = {},
+): Provider[] {
+  const config:
+    RouterConfiguration<TRoutes> = {
+      ...options,
+      routes,
+    };
+
+  return [
+    {
+      provide: ROUTER_CONFIGURATION,
+      useValue: config,
+    },
+    {
+      provide: ServerRouter,
+      useFactory: (
+        configuration:
+          RouterConfiguration<TRoutes>,
+      ) =>
+        new ServerRouter<TRoutes>(
+          configuration,
+        ),
+      deps: [ROUTER_CONFIGURATION],
+    },
+    {
+      provide: RouterContract,
+      useExisting: ServerRouter,
+    },
+  ];
+}
+
+export const provideServerRouter =
+  provideRouter;
+
+export {
+  type LayoutOptions,
+  type RouteOptions,
+};
+
+export {
+  layout,
+  lazyLayout,
+  lazyRoute,
+  redirectRoute,
+  route,
+} from './route-builders';
+

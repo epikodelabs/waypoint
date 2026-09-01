@@ -47,7 +47,6 @@ import {
 type RouteRegistry = ReturnType<typeof createRouteRegistry>;
 type CompiledRouteGroup = RouteRegistry['groups'][number];
 type CompiledRoute = CompiledRouteGroup['primary'];
-type CompiledRenderableRoute = CompiledRouteGroup['outlets'][number];
 
 const lazyComponents = new WeakMap<object, Promise<Type<unknown>>>();
 
@@ -288,13 +287,19 @@ async function resolveViews(
 }
 
 function adaptRenderableRoute(
-  compiled: CompiledRenderableRoute,
+  compiled: CompiledRoute,
   sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
   appRef: ApplicationRef,
   documentRef: Document,
   injector: EnvironmentInjector,
 ): RuntimeRenderableRoute {
   const { route, path, layouts } = compiled;
+
+  if (route.kind !== 'route') {
+    throw new Error(
+      `Expected a renderable route for "${path}".`,
+    );
+  }
   const tokens = {
     routeToken: ROUTE,
     contextToken: ROUTE_CONTEXT,
@@ -352,11 +357,19 @@ function adaptCompiledRoute(
 ): Route {
   if (compiled.route.kind === 'route') {
     return adaptRenderableRoute(
-      compiled as CompiledRenderableRoute,
+      compiled,
       sharedPreparers,
       appRef,
       documentRef,
       injector,
+    );
+  }
+
+  const redirectTo = compiled.redirectTo;
+
+  if (redirectTo === undefined) {
+    throw new Error(
+      `Compiled redirect "${compiled.path}" has no target.`,
     );
   }
 
@@ -365,7 +378,7 @@ function adaptCompiledRoute(
     name: compiled.route.name,
     path: compiled.path,
     sourceRoute: compiled.route,
-    redirectTo: compiled.redirectTo,
+    redirectTo,
     data: compiled.route.data
       ? { ...compiled.route.data }
       : undefined,
