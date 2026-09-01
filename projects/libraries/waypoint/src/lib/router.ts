@@ -7,34 +7,39 @@ import {
   InjectionToken,
   PendingTasks,
   inject,
-  runInInjectionContext,
   type Provider,
-  type Type,
 } from '@angular/core';
-
-import { runWithInjector, unwrapDefault } from './adapter-utils';
 
 import type { NamedNavigationTarget, NavigationTarget } from './navigation-targets';
 
-import { createRouteRegistry } from './route-compiler';
-
-type RouteRegistry = ReturnType<typeof createRouteRegistry>;
-type CompiledRouteGroup = RouteRegistry['groups'][number];
-type CompiledRoute = CompiledRouteGroup['primary'];
-type CompiledRenderableRoute = CompiledRouteGroup['outlets'][number];
+import {
+  adaptFrameTransitions,
+  adaptRoutes,
+} from './angular-route-adapter';
 
 import {
-  composeAngularLeafRouteView,
-  composeAngularRouteView,
-  type ResolvedRouteView,
-} from './route-renderer';
+  ResolvedNavigationState,
+  type ResolvedNavigationConfiguration,
+  type RouteRegistry,
+  type RouteResolution,
+  type RouteResolutionContext,
+} from './resolved-navigation';
+
+export type {
+  ResolvedNavigationConfiguration,
+  RouteResolution,
+  RouteResolutionContext,
+} from './resolved-navigation';
+
+type CompiledRoute =
+  RouteRegistry['groups'][number]['primary'];
+
+interface RouteConfigurationResolver {
+  resolveConfiguration?: () =>
+    Promise<ResolvedNavigationConfiguration>;
+}
 
 import type {
-  FramePrepareFn,
-  FrameAfterEnterFn,
-  FrameBeforeLeaveFn,
-  FrameView,
-  LayoutDefinition,
   LayoutOptions,
   RenderableRoute,
   RouteDefinition,
@@ -59,8 +64,6 @@ import { OUTLET_ACTIVATE_EVENT, dispatchOutletLifecycleEvent } from './router-ev
 import { getRouterLocation, isPathInsideBase, resolveRouterUrl, routerHref, stripBaseHref } from './router-url';
 
 import {
-  parseParamsRecord,
-  parseQueryRecord,
   serializeParams,
   serializeQuery,
   type InferParamType,
@@ -69,56 +72,18 @@ import {
 } from './query-schema';
 
 import {
-  type CanActivateFn,
   type CanDeactivateFn,
   createRouter,
   type ActivatedRoute,
-  type NavigationTransitionFn,
   type NavigationContext,
   type NavigationOptions,
-  type NavigationTransitionDefinition,
-  type ParseRouteParams,
-  type ParseRouteQuery,
-  type PrepareRouteDataFn,
   type PreloadingStrategy,
-  type Route,
-  type RenderableRoute as RuntimeRenderableRoute,
   type RouteRenderContext,
   type Router as VanillaRouter,
   type RouterState,
   type ScrollRestorationMode,
   type ViewTransitionsOption,
 } from './vanilla-router';
-
-export interface ResolvedNavigationConfiguration {
-  readonly routes?: NavigationTree;
-  readonly contributions?: readonly RouteContributionDefinition[];
-  /** Opaque executable identity for each delivered contribution. */
-  readonly contributionIdentities?: Readonly<Record<string, string>>;
-  /** Optional full-configuration revision supplied by server delivery. */
-  readonly revision?: string;
-  readonly landing?: string;
-}
-
-interface RouteConfigurationResolver {
-  resolveConfiguration?: () => Promise<ResolvedNavigationConfiguration>;
-}
-
-export type RouteResolution =
-  | NavigationTree
-  | ResolvedNavigationConfiguration
-  | null
-  | undefined;
-
-function isNavigationTreeResolution(
-  value: Exclude<RouteResolution, null | undefined>,
-): value is NavigationTree {
-  return Array.isArray(value);
-}
-
-export interface RouteResolutionContext {
-  readonly signal: AbortSignal;
-}
 
 export interface RouterOptions {
   readonly baseHref?: string;
@@ -161,43 +126,6 @@ const EMPTY_ROUTER_STATE: RouterState = Object.freeze({
   routeConfig: null,
 });
 
-const lazyComponents = new WeakMap<object, Promise<Type<unknown>>>();
-
-function loadComponent(owner: LayoutDefinition | RenderableRoute): Promise<Type<unknown>> {
-  if (owner.component) {
-    return Promise.resolve(owner.component);
-  }
-
-  if (!owner.loadComponent) {
-    return Promise.reject(new Error('A route view must define component or loadComponent.'));
-  }
-
-  let pending = lazyComponents.get(owner);
-
-  if (!pending) {
-    pending = Promise.resolve(owner.loadComponent())
-      .then((value) =>
-        unwrapDefault<Type<unknown>>(value as Type<unknown> | { readonly default: Type<unknown> }),
-      )
-      .then((component) => {
-        if (!component) {
-          throw new Error('Lazy component loader returned no component.');
-        }
-
-        return component;
-      })
-      .catch((error) => {
-        lazyComponents.delete(owner);
-
-        throw error;
-      });
-
-    lazyComponents.set(owner, pending);
-  }
-
-  return pending;
-}
-
 function snapshotRouterState(state: RouterState): RouterState {
   return Object.freeze({
     current: state.current ?? null,
@@ -228,307 +156,6 @@ function readReloadLocation(payload: unknown): string {
   }
 
   return location;
-}
-
-function adaptFrameBeforeEnter(
-  handler: CanActivateFn,
-  injector: EnvironmentInjector,
-): NavigationTransitionFn {
-  return (transition) =>
-    runWithInjector(injector, handler, {
-      ...transition.to,
-      signal: transition.signal,
-    });
-}
-
-function adaptFrameBeforeLeave(
-  handler: FrameBeforeLeaveFn<any>,
-  injector: EnvironmentInjector,
-): NavigationTransitionFn {
-  return (transition) => {
-    if (!transition.from) {
-      return true;
-    }
-
-    return runWithInjector(injector, handler, {
-      ...transition.from,
-      nextUrl: transition.to.url,
-      signal: transition.signal,
-    });
-  };
-}
-
-function adaptFramePrepare(
-  handler: FramePrepareFn,
-  injector: EnvironmentInjector,
-): PrepareRouteDataFn {
-  return (route) => runWithInjector(injector, handler, route);
-}
-
-function adaptFrameAfterEnter(
-  handler: FrameAfterEnterFn<any>,
-  injector: EnvironmentInjector,
-): NavigationTransitionFn {
-  return (transition) => runWithInjector(injector, handler, transition.to);
-}
-
-function collectLayoutFrames(
-  layouts: readonly LayoutDefinition[],
-): readonly FrameView<any>[] {
-  return layouts
-    .map(layout => layout.frame)
-    .filter((frame): frame is FrameView<any> => !!frame);
-}
-
-function collectEnterFrames(
-  layouts: readonly LayoutDefinition[],
-  route: RenderableRoute,
-): readonly FrameView<any>[] {
-  return Object.freeze([
-    ...collectLayoutFrames(layouts),
-    ...(route.frame ? [route.frame] : []),
-  ]);
-}
-
-function collectLeaveFrames(
-  layouts: readonly LayoutDefinition[],
-  route: RenderableRoute,
-): readonly FrameView<any>[] {
-  return Object.freeze([
-    ...(route.frame ? [route.frame] : []),
-    ...[...collectLayoutFrames(layouts)].reverse(),
-  ]);
-}
-
-function adaptFramePreparers(
-  frames: readonly FrameView<any>[],
-  injector: EnvironmentInjector,
-): readonly PrepareRouteDataFn[] | undefined {
-  const handlers = frames.flatMap(
-    (frame) => frame.prepare?.map((handler) => adaptFramePrepare(handler, injector)) ?? [],
-  );
-
-  return handlers.length > 0 ? Object.freeze(handlers) : undefined;
-}
-
-function adaptFrameTransitions(
-  groups: readonly CompiledRouteGroup[],
-  injector: EnvironmentInjector,
-): readonly NavigationTransitionDefinition[] {
-  const transitions: NavigationTransitionDefinition[] = [];
-
-  for (const group of groups) {
-    const primaryRoute = group.primary.route;
-
-    if (primaryRoute.kind === 'redirect') {
-      continue;
-    }
-
-    const renderableRoute = primaryRoute;
-    const enterFrames = collectEnterFrames(group.primary.layouts, renderableRoute);
-    const leaveFrames = collectLeaveFrames(group.primary.layouts, renderableRoute);
-
-    for (const current of enterFrames) {
-      if (!current.beforeEnter?.length && !current.afterEnter?.length) {
-        continue;
-      }
-
-      transitions.push({
-        to: (route) => route?.config.sourceRoute === primaryRoute,
-        beforeEnter: current.beforeEnter?.map((handler) =>
-          adaptFrameBeforeEnter(handler, injector),
-        ),
-        afterEnter: current.afterEnter?.map((handler) => adaptFrameAfterEnter(handler, injector)),
-      });
-    }
-
-    for (const current of leaveFrames) {
-      if (!current.beforeLeave?.length) {
-        continue;
-      }
-
-      transitions.push({
-        from: (route) => route?.config.sourceRoute === primaryRoute,
-        beforeLeave: current.beforeLeave.map((handler) => adaptFrameBeforeLeave(handler, injector)),
-      });
-    }
-  }
-
-  return transitions;
-}
-
-function adaptParamsParser(
-  route: RenderableRoute,
-  injector: EnvironmentInjector,
-): ParseRouteParams | undefined {
-  const schema = route.paramsSchema;
-  if (!schema) return undefined;
-
-  return (params, _url, _signal) =>
-    runInInjectionContext(injector, () => Promise.resolve(parseParamsRecord(schema, params)));
-}
-
-function adaptQueryParser(
-  route: RenderableRoute,
-  injector: EnvironmentInjector,
-): ParseRouteQuery | undefined {
-  const schema = route.querySchema;
-  if (!schema) return undefined;
-
-  return (url, _signal) =>
-    runInInjectionContext(injector, () => Promise.resolve(parseQueryRecord(schema, url)));
-}
-
-async function resolveViews(
-  layouts: readonly LayoutDefinition[],
-  route: RenderableRoute,
-): Promise<readonly ResolvedRouteView[]> {
-  const resolvedLayouts = await Promise.all(
-    layouts.map(async (layout, index) => ({
-      component: await loadComponent(layout),
-      providers: (layout.providers ?? []).flat().filter((p) => p),
-      label: `LayoutDefinition(${layout.path || index})`,
-    })),
-  );
-
-  const page = await loadComponent(route);
-
-  return Object.freeze([
-    ...resolvedLayouts,
-    {
-      component: page,
-      providers: (route.providers ?? []).flat().filter((p) => p),
-      label: `RouteDefinition(${route.path})`,
-    },
-  ]);
-}
-
-function isCompiledRenderableRoute(
-  compiled: CompiledRoute,
-): compiled is CompiledRenderableRoute {
-  return compiled.route.kind === 'route';
-}
-
-function adaptRenderableRoute(
-  compiled: CompiledRenderableRoute,
-  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
-  appRef: ApplicationRef,
-  documentRef: Document,
-  injector: EnvironmentInjector,
-): RuntimeRenderableRoute {
-  const { route, path, layouts } = compiled;
-  const tokens = {
-    routeToken: ROUTE,
-    contextToken: ROUTE_CONTEXT,
-  } as const;
-
-  return {
-    kind: 'route',
-    name: route.name,
-    path,
-    outlet: route.outlet,
-    sourceRoute: route,
-    data: route.data ? { ...route.data } : undefined,
-    preload: route.preload,
-    viewTransition: route.viewTransition,
-
-    load: async () => {
-      const views = await resolveViews(layouts, route);
-
-      return {
-        component: route.outlet
-          ? composeAngularLeafRouteView(appRef, documentRef, injector, tokens, views)
-          : composeAngularRouteView(appRef, documentRef, injector, tokens, views),
-        prepare: [
-          ...(sharedPreparers ?? []),
-          ...(adaptFramePreparers(
-            route.frame ? [route.frame] : [],
-            injector,
-          ) ?? []),
-        ],
-        parseParams: adaptParamsParser(route, injector),
-        parseQuery: adaptQueryParser(route, injector),
-      };
-    },
-  };
-}
-
-function adaptCompiledRoute(
-  compiled: CompiledRoute,
-  sharedPreparers: readonly PrepareRouteDataFn[] | undefined,
-  appRef: ApplicationRef,
-  documentRef: Document,
-  injector: EnvironmentInjector,
-): Route {
-  if (isCompiledRenderableRoute(compiled)) {
-    return adaptRenderableRoute(
-      compiled,
-      sharedPreparers,
-      appRef,
-      documentRef,
-      injector,
-    );
-  }
-
-  return {
-    kind: 'redirect',
-    name: compiled.route.name,
-    path: compiled.path,
-    sourceRoute: compiled.route,
-    redirectTo: compiled.redirectTo,
-    data: compiled.route.data ? { ...compiled.route.data } : undefined,
-  };
-}
-
-function adaptRoutes(
-  groups: readonly CompiledRouteGroup[],
-  appRef: ApplicationRef,
-  documentRef: Document,
-  injector: EnvironmentInjector,
-): Route[] {
-  return groups.map((group): Route => {
-    const sharedPreparers = adaptFramePreparers(
-      collectLayoutFrames(group.primary.layouts),
-      injector,
-    );
-
-    if (!isCompiledRenderableRoute(group.primary)) {
-      return adaptCompiledRoute(
-        group.primary,
-        sharedPreparers,
-        appRef,
-        documentRef,
-        injector,
-      );
-    }
-
-    const primary = adaptRenderableRoute(
-      group.primary,
-      sharedPreparers,
-      appRef,
-      documentRef,
-      injector,
-    );
-
-    if (group.outlets.length === 0) {
-      return primary;
-    }
-
-    return {
-      ...primary,
-      outlets: Object.freeze(
-        group.outlets.map(compiled =>
-          adaptRenderableRoute(
-            compiled,
-            sharedPreparers,
-            appRef,
-            documentRef,
-            injector,
-          ),
-        ),
-      ),
-    };
-  });
 }
 
 function replaceChildNodes(
@@ -595,16 +222,15 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private readonly document: Document;
   private readonly pendingTasks: PendingTasks;
   private readonly appBaseHref: string;
-  private registry: ReturnType<typeof createRouteRegistry>;
-  private readonly namedRouteCatalog = new Map<string, NamedRouteDefinition>();
+  private readonly resolvedNavigation:
+    ResolvedNavigationState<TRoutes>;
+  private readonly namedRouteCatalog =
+    new Map<string, NamedRouteDefinition>();
   private readonly resolvingRouteKeys = new Map<string, Promise<boolean>>();
   private readonly resolvingRouteControllers = new Map<string, AbortController>();
   private readonly preResolvedNavigationKeys = new Set<string>();
   private preResolvingNavigationCount = 0;
   private readonly unresolvedRouteKeys = new Set<string>();
-  private resolvedRoutes: NavigationTree = Object.freeze([]);
-  private readonly resolvedContributionsById = new Map<string, RouteContributionDefinition>();
-  private readonly resolvedContributionIdentitiesById = new Map<string, string>();
   private resolutionGeneration = 0;
   private navigationRequestId = 0;
   private engine: VanillaRouter | null = null;
@@ -629,10 +255,11 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         optional: true,
       }) ?? '/';
 
-    this.registry = createRouteRegistry(
-      this.configuration.routes,
-      this.configuration.contributions,
-    );
+    this.resolvedNavigation =
+      new ResolvedNavigationState(
+        this.configuration.routes,
+        this.configuration.contributions,
+      );
     for (const route of this.configuration.namedRoutes ?? []) {
       this.namedRouteCatalog.set(route.name, route);
     }
@@ -761,13 +388,10 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private async revalidateByRevocation(): Promise<boolean> {
     this.resolutionGeneration++;
     this.navigationRequestId++;
-    this.resolvedRoutes = Object.freeze([]);
-    this.resolvedContributionsById.clear();
-    this.resolvedContributionIdentitiesById.clear();
+    this.resolvedNavigation.reset();
     this.unresolvedRouteKeys.clear();
     this.abortResolvedRouteRequests();
     this.resolvingRouteKeys.clear();
-    this.rebuildResolvedRegistry();
 
     const location = getRouterLocation(this.document);
     const url = resolveRouterUrl(
@@ -809,7 +433,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
     const activeContributionId = this.currentContributionId();
     const activeIdentity = activeContributionId
-      ? this.resolvedContributionIdentitiesById.get(activeContributionId)
+      ? this.resolvedNavigation.contributionIdentity(activeContributionId)
       : undefined;
 
     try {
@@ -818,11 +442,11 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
         return false;
       }
 
-      this.replaceResolvedNavigation(resolved);
+      this.resolvedNavigation.replace(resolved);
 
       const activeStillEquivalent = !!activeContributionId
         && !!activeIdentity
-        && this.resolvedContributionIdentitiesById.get(activeContributionId)
+        && this.resolvedNavigation.contributionIdentity(activeContributionId)
           === activeIdentity;
 
       await this.installCurrentRegistry({ revalidate: false });
@@ -890,6 +514,10 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
 
   private get baseHref(): string {
     return this.configuration.baseHref ?? this.appBaseHref;
+  }
+
+  private get registry(): RouteRegistry {
+    return this.resolvedNavigation.registry;
   }
 
   private recordNavigationError(error: unknown): void {
@@ -1051,7 +679,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
   private matchesRegisteredRoute(url: URL): boolean {
     const path = stripBaseHref(url.pathname, this.baseHref);
 
-    return this.registry.groups.some((group) => matchesCompiledPath(group.primary.path, path));
+    return this.resolvedNavigation.matchesPath(path);
   }
 
   private async resolveRoutesForUrl(
@@ -1097,7 +725,7 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
           return false;
         }
 
-        if (!resolved || !this.mergeResolvedNavigation(resolved)) {
+        if (!resolved || !this.resolvedNavigation.merge(resolved)) {
           this.unresolvedRouteKeys.add(key);
           return false;
         }
@@ -1140,159 +768,15 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
     }
   }
 
-  private mergeResolvedNavigation(resolved: Exclude<RouteResolution, null | undefined>): boolean {
-    const routes = isNavigationTreeResolution(resolved)
-      ? resolved
-      : resolved.routes ?? Object.freeze([]);
-    const incomingContributions = isNavigationTreeResolution(resolved)
-      ? Object.freeze([] as RouteContributionDefinition[])
-      : resolved.contributions ?? Object.freeze([]);
-    const incomingIdentities = isNavigationTreeResolution(resolved)
-      ? undefined
-      : resolved.contributionIdentities;
-
-    if (routes.length === 0 && incomingContributions.length === 0) {
-      return false;
-    }
-
-    const nextRoutes = routes.length > 0
-      ? Object.freeze([
-          ...this.resolvedRoutes,
-          ...routes,
-        ]) as NavigationTree
-      : this.resolvedRoutes;
-    const nextContributions = new Map(this.resolvedContributionsById);
-    const authoredContributionIds = new Set(
-      (this.configuration.contributions ?? []).map(contribution => contribution.id),
-    );
-
-    for (const contribution of incomingContributions) {
-      if (authoredContributionIds.has(contribution.id)) {
-        throw new Error(
-          `Resolved route contribution "${contribution.id}" conflicts with an authored contribution.`,
-        );
-      }
-      nextContributions.set(contribution.id, contribution);
-    }
-
-    // Build and validate the complete candidate registry before mutating any
-    // resolved state. Malformed or conflicting artifacts therefore cannot leave
-    // a half-installed dynamic configuration behind.
-    const nextRegistry = this.createResolvedRegistry(
-      nextRoutes,
-      nextContributions,
-    );
-
-    this.resolvedRoutes = nextRoutes;
-    this.resolvedContributionsById.clear();
-    for (const [id, contribution] of nextContributions) {
-      this.resolvedContributionsById.set(id, contribution);
-    }
-    if (incomingIdentities) {
-      for (const contribution of incomingContributions) {
-        const identity = incomingIdentities[contribution.id];
-        if (identity) {
-          this.resolvedContributionIdentitiesById.set(
-            contribution.id,
-            identity,
-          );
-        }
-      }
-    }
-    this.registry = nextRegistry;
-    return true;
-  }
-
-  private replaceResolvedNavigation(
-    resolved: ResolvedNavigationConfiguration,
-  ): void {
-    const routes = resolved.routes ?? Object.freeze([]);
-    const identities = resolved.contributionIdentities ?? {};
-    const nextContributions = new Map<string, RouteContributionDefinition>();
-    const nextIdentities = new Map<string, string>();
-    const authoredContributionIds = new Set(
-      (this.configuration.contributions ?? []).map(contribution => contribution.id),
-    );
-
-    for (const incoming of resolved.contributions ?? []) {
-      if (authoredContributionIds.has(incoming.id)) {
-        throw new Error(
-          `Resolved route contribution "${incoming.id}" conflicts with an authored contribution.`,
-        );
-      }
-
-      const identity = identities[incoming.id];
-      const previousIdentity =
-        this.resolvedContributionIdentitiesById.get(incoming.id);
-      const previous = this.resolvedContributionsById.get(incoming.id);
-
-      nextContributions.set(
-        incoming.id,
-        identity && previous && previousIdentity === identity
-          ? previous
-          : incoming,
-      );
-
-      if (identity) {
-        nextIdentities.set(incoming.id, identity);
-      }
-    }
-
-    const nextRegistry = this.createResolvedRegistry(
-      routes,
-      nextContributions,
-    );
-
-    this.resolvedRoutes = routes;
-    this.resolvedContributionsById.clear();
-    for (const [id, contribution] of nextContributions) {
-      this.resolvedContributionsById.set(id, contribution);
-    }
-    this.resolvedContributionIdentitiesById.clear();
-    for (const [id, identity] of nextIdentities) {
-      this.resolvedContributionIdentitiesById.set(id, identity);
-    }
-    this.registry = nextRegistry;
-  }
-
   private currentContributionId(): string | undefined {
     const location = getRouterLocation(this.document);
-    const path = stripBaseHref(location.pathname, this.baseHref);
-    return this.registry.groups.find(group =>
-      matchesCompiledPath(group.primary.path, path),
-    )?.primary.contributionId;
-  }
-
-  private rebuildResolvedRegistry(): void {
-    this.registry = this.createResolvedRegistry(
-      this.resolvedRoutes,
-      this.resolvedContributionsById,
-    );
-  }
-
-  private createResolvedRegistry(
-    resolvedRoutes: NavigationTree,
-    resolvedContributions: ReadonlyMap<string, RouteContributionDefinition>,
-  ): ReturnType<typeof createRouteRegistry> {
-    const routes = Object.freeze([
-      ...this.configuration.routes,
-      ...resolvedRoutes,
-    ]) as TRoutes;
-    const contributionsById = new Map(
-      (this.configuration.contributions ?? []).map(contribution => [
-        contribution.id,
-        contribution,
-      ] as const),
+    const path = stripBaseHref(
+      location.pathname,
+      this.baseHref,
     );
 
-    for (const [id, contribution] of resolvedContributions) {
-      contributionsById.set(id, contribution);
-    }
-
-    return createRouteRegistry(
-      routes,
-      Object.freeze([...contributionsById.values()]),
-    );
+    return this.resolvedNavigation
+      .contributionIdForPath(path);
   }
 
   private async installCurrentRegistry(
@@ -1605,53 +1089,3 @@ export class ServerRouter<TRoutes extends NavigationTree = any>
       || url.hash.length > 0;
   }
 }
-
-function matchesCompiledPath(pattern: string, pathname: string): boolean {
-  const regex = new RegExp(
-    `^${pattern
-      .split('/')
-      .map((segment) => {
-        if (!segment) {
-          return '';
-        }
-
-        return segment.startsWith(':') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      })
-      .join('/')}$`,
-  );
-
-  return regex.test(pathname);
-}
-
-export function provideRouter<const TRoutes extends NavigationTree>(
-  routes: TRoutes,
-  options: RouterOptions = {},
-): Provider[] {
-  const config: RouterConfiguration<TRoutes> = {
-    ...options,
-    routes,
-  };
-
-  return [
-    {
-      provide: ROUTER_CONFIGURATION,
-      useValue: config,
-    },
-    {
-      provide: ServerRouter,
-      useFactory: (configuration: RouterConfiguration<TRoutes>) =>
-        new ServerRouter<TRoutes>(configuration),
-      deps: [ROUTER_CONFIGURATION],
-    },
-    {
-      provide: RouterContract,
-      useExisting: ServerRouter,
-    },
-  ];
-}
-
-export const provideServerRouter = provideRouter;
-
-export { type LayoutOptions, type RouteOptions };
-
-export { layout, lazyLayout, lazyRoute, redirectRoute, route } from './route-builders';
