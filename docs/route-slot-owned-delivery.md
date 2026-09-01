@@ -21,6 +21,8 @@ In a server-delivery build:
 3. the parent protected artifact does **not** bundle the child route-set module;
 4. the server independently authorizes and delivers the child artifact.
 
+The Builder derives the route-set artifact key from the contribution's source module and export. `routesFor()` therefore needs only the ownership slot and the route entries; artifact identity is not application-authored metadata.
+
 A loader-less slot remains valid:
 
 ```ts

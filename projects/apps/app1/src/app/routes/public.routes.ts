@@ -16,4 +16,4 @@ export const legacyRoute = redirect(
 
 const entries = [introRoute, legacyRoute] as const satisfies NavigationTree;
 
-export const publicRoutes = routesFor('public', 'public-core', entries);
+export const publicRoutes = routesFor('public', entries);

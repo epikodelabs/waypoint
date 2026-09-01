@@ -268,7 +268,11 @@ export function createServerNavigationResolver(
         );
       }
 
-      return contribution;
+      return Object.freeze({
+        ...contribution,
+        // Artifact identity is compiler-owned. Route authors never provide it.
+        id: descriptor.artifactKey,
+      });
     })();
 
     loadedArtifacts.set(identity, pending);

@@ -1,37 +1,50 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-/**
- * Verifies that server-delivered routesFor() identities are absent from the
- * public Angular host output. Contribution ids are runtime strings and survive
- * bundling/minification; the browser should learn them only after authorization.
- */
-export async function assertNoRouteArtifactKeysInHost(
-  publicRoot: string,
-  artifactKeys: readonly string[],
-): Promise<void> {
-  const keys = [...new Set(
-    artifactKeys
-      .map(key => key.trim())
-      .filter(Boolean),
-  )];
+export interface ProtectedRouteModuleMarker {
+  readonly artifactKey: string;
+  readonly sourceFile: string;
+  readonly exportName: string;
+}
 
-  if (keys.length === 0) return;
+/**
+ * Verifies that protected route source modules are absent from the public host
+ * output. Artifact ids are compiler-owned now, so isolation is checked from
+ * source provenance rather than from author-written routesFor() ids.
+ */
+export async function assertNoProtectedRouteModulesInHost(
+  publicRoot: string,
+  artifacts: readonly ProtectedRouteModuleMarker[],
+): Promise<void> {
+  if (artifacts.length === 0) return;
 
   const files = await readableHostFiles(publicRoot);
 
   for (const file of files) {
     const contents = await fs.readFile(file, 'utf8');
 
-    for (const artifactKey of keys) {
-      if (!contents.includes(artifactKey)) continue;
+    for (const artifact of artifacts) {
+      if (!containsSourceReference(contents, artifact.sourceFile)) continue;
 
       throw new Error(
-        `Server-delivered route artifact "${artifactKey}" leaked into public host output: ${file}. ` +
-        'Remove static routesFor() imports from the Angular host configuration.',
+        `Server-delivered route artifact "${artifact.artifactKey}" leaked into public host output: ${file}. ` +
+        `Protected source ${JSON.stringify(artifact.sourceFile)} must not be imported by the Angular host graph.`,
       );
     }
   }
+}
+
+function containsSourceReference(
+  contents: string,
+  sourceFile: string,
+): boolean {
+  const normalized = sourceFile.split(path.sep).join('/');
+  const basename = path.basename(sourceFile);
+  const withoutDrive = normalized.replace(/^[A-Za-z]:/, '');
+
+  return contents.includes(normalized)
+    || contents.includes(withoutDrive)
+    || contents.includes(basename);
 }
 
 async function readableHostFiles(root: string): Promise<string[]> {

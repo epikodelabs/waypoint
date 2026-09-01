@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 
 import {
+  defineRouteContribution,
   routesFor,
   routeSlot,
 } from '../lib/route-slots';
@@ -33,7 +34,7 @@ describe('Waypoint route slots', () => {
       ]),
     ] as const;
 
-    const administration = routesFor(
+    const administration = defineRouteContribution(
       'administration',
       'admin-core',
       [
@@ -69,7 +70,7 @@ describe('Waypoint route slots', () => {
         routeSlot('administration'),
       ]),
     ] as const;
-    const contribution = routesFor(
+    const contribution = defineRouteContribution(
       'administration',
       'admin-users',
       [route('/users', UsersPage, { name: 'adminUsers' })],
@@ -94,7 +95,7 @@ describe('Waypoint route slots', () => {
   });
 
   it('rejects unknown contribution slots', () => {
-    const contribution = routesFor(
+    const contribution = defineRouteContribution(
       'missing',
       'missing-feature',
       [route('/feature', UsersPage)],
@@ -110,8 +111,8 @@ describe('Waypoint route slots', () => {
       routeSlot('first'),
       routeSlot('second'),
     ] as const;
-    const first = routesFor('first', 'feature', []);
-    const second = routesFor('second', 'feature', []);
+    const first = defineRouteContribution('first', 'feature', []);
+    const second = defineRouteContribution('second', 'feature', []);
 
     expect(() => createRouteRegistry(routes, [first, second])).toThrowError(
       /Duplicate route contribution id "feature"/,
@@ -124,7 +125,7 @@ describe('Waypoint route slots', () => {
         routeSlot('device-features'),
       ]),
     ] as const;
-    const contribution = routesFor(
+    const contribution = defineRouteContribution(
       'device-features',
       'boards',
       [route('/boards/:id', UsersPage)],

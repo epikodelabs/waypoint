@@ -3,6 +3,7 @@ import {
   routeSlot,
   routesFor,
 } from '@epikodelabs/waypoint';
+import { defineRouteContribution } from '../lib/route-slots';
 
 import {
   ResolvedNavigationState,
@@ -32,7 +33,7 @@ describe('ResolvedNavigationState', () => {
   });
 
   it('rejects delivered contributions that collide with authored ids', () => {
-    const authored = routesFor(
+    const authored = defineRouteContribution(
       'features',
       'feature-a',
       [route('/authored', FeaturePage)],
@@ -42,7 +43,7 @@ describe('ResolvedNavigationState', () => {
       [authored],
     );
 
-    const conflicting = routesFor(
+    const conflicting = defineRouteContribution(
       'features',
       'feature-a',
       [route('/delivered', FeaturePage)],
@@ -64,7 +65,7 @@ describe('ResolvedNavigationState', () => {
     const state = new ResolvedNavigationState(
       [routeSlot('features')] as const,
     );
-    const first = routesFor(
+    const first = defineRouteContribution(
       'features',
       'feature-a',
       [route('/feature', FeaturePage)],

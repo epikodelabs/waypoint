@@ -167,10 +167,11 @@ Contributions attach to slots:
 ```ts
 export const applicationRoutes = routesFor(
   'application',
-  'application-core',
   applicationEntries,
 );
 ```
+
+Route-set artifact identity is derived by the Builder from the source module and exported contribution. Application code does not name artifact ids.
 
 Nested slots use dynamic imports to express ownership (the Builder decides physical artifacts).
 

@@ -6,7 +6,6 @@ import { DemoSessionService } from '../core/demo-session.service';
 
 export const administrationRoutes = routesFor(
   'administration',
-  'administration-core',
   [
     route('/admin', AdminPage, {
       name: 'admin',

@@ -149,7 +149,14 @@ export async function loadNavigationSnapshot(
       if (!isContribution(value)) continue;
 
       contributions.push(Object.freeze({
-        definition: value,
+        definition: Object.freeze({
+          ...value,
+          id: contributionArtifactKey(
+            projectRoot,
+            module.sourceFile,
+            exportName,
+          ),
+        }),
         sourceFile: module.sourceFile,
         exportName,
       }));
@@ -402,8 +409,9 @@ function waypointStubSource(): string {
     `  return { kind: 'route-slot', id };`,
     `}`,
     ``,
-    `export function routesFor(slotId, id, entries) {`,
-    `  return { kind: 'route-contribution', slotId, id, entries };`,
+    `let nextContributionIdentity = 1;`,
+    `export function routesFor(slotId, entries) {`,
+    `  return { kind: 'route-contribution', slotId, id: slotId + '@' + nextContributionIdentity++, entries };`,
     `}`,
     ``,
     `export function route(path, view, options = {}) {`,
@@ -431,6 +439,20 @@ function waypointStubSource(): string {
     `});`,
     '',
   ].join('\n');
+}
+
+function contributionArtifactKey(
+  projectRoot: string,
+  sourceFile: string,
+  exportName: string,
+): string {
+  const relative = path
+    .relative(projectRoot, sourceFile)
+    .split(path.sep)
+    .join('/')
+    .replace(/\.routes\.ts$/i, '');
+
+  return `${relative}#${exportName}`;
 }
 
 function isContribution(

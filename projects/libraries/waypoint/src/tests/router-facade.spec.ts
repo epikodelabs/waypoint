@@ -15,6 +15,7 @@ import {
   Router,
   type NavigationTree,
 } from '@epikodelabs/waypoint';
+import { defineRouteContribution } from '../lib/route-slots';
 
 ensureAngularTestEnvironment();
 
@@ -299,7 +300,7 @@ describe('Router: flat routes and layouts', () => {
 
 
   it('resolves a protected direct deep link during initial bootstrap', async () => {
-    const deepRoutes = routesFor(
+    const deepRoutes = defineRouteContribution(
       'application',
       'deep-link-routes',
       [route('/app/deep', SettingsComponent, { name: 'deep' })],
@@ -366,12 +367,12 @@ describe('Router: flat routes and layouts', () => {
   });
 
   it('follows a server-delivered redirect whose target is delivered in the same resolution', async () => {
-    const legacyRoutes = routesFor(
+    const legacyRoutes = defineRouteContribution(
       'legacy',
       'legacy-core',
       [redirect('/legacy', '/target')],
     );
-    const targetRoutes = routesFor(
+    const targetRoutes = defineRouteContribution(
       'target',
       'target-core',
       [route('/target', SettingsComponent)],
@@ -398,7 +399,7 @@ describe('Router: flat routes and layouts', () => {
   });
 
   it('attaches server-resolved route contributions to existing route slots', async () => {
-    const applicationRoutes = routesFor(
+    const applicationRoutes = defineRouteContribution(
       'application',
       'application-core',
       [
@@ -428,7 +429,7 @@ describe('Router: flat routes and layouts', () => {
 
   it('revokes resolved contributions at an explicit authorization boundary', async () => {
     let allowed = true;
-    const protectedRoutes = routesFor(
+    const protectedRoutes = defineRouteContribution(
       'application',
       'protected',
       [route('/admin', SettingsComponent, { name: 'admin' })],
@@ -458,7 +459,7 @@ describe('Router: flat routes and layouts', () => {
 
   it('restores a revoked contribution when the current destination becomes authorized again', async () => {
     let allowed = true;
-    const protectedRoutes = routesFor(
+    const protectedRoutes = defineRouteContribution(
       'application',
       'protected',
       [route('/admin', SettingsComponent, { name: 'admin' })],
@@ -490,7 +491,7 @@ describe('Router: flat routes and layouts', () => {
     const stale = new Promise<ReturnType<typeof routesFor>>(resolve => {
       release = resolve;
     });
-    const staleContribution = routesFor(
+    const staleContribution = defineRouteContribution(
       'application',
       'stale',
       [route('/admin', SettingsComponent, { name: 'admin' })],
@@ -526,7 +527,7 @@ describe('Router: flat routes and layouts', () => {
 
   it('fails closed when reauthorization fails after resolved routes are revoked', async () => {
     let fail = false;
-    const protectedRoutes = routesFor(
+    const protectedRoutes = defineRouteContribution(
       'application',
       'protected-fail-closed',
       [route('/admin', SettingsComponent, { name: 'admin' })],
@@ -558,7 +559,7 @@ describe('Router: flat routes and layouts', () => {
 
   it('retries transient route-resolution failures instead of negative-caching them', async () => {
     let attempts = 0;
-    const retryRoutes = routesFor(
+    const retryRoutes = defineRouteContribution(
       'application',
       'retry-routes',
       [route('/retry', SettingsComponent, { name: 'retry' })],
@@ -592,12 +593,12 @@ describe('Router: flat routes and layouts', () => {
     const slowGate = new Promise<void>(resolve => {
       releaseSlow = resolve;
     });
-    const slowRoutes = routesFor(
+    const slowRoutes = defineRouteContribution(
       'application',
       'slow-routes',
       [route('/slow', ChildComponent, { name: 'slow' })],
     );
-    const fastRoutes = routesFor(
+    const fastRoutes = defineRouteContribution(
       'application',
       'fast-routes',
       [route('/fast', SettingsComponent, { name: 'fast' })],
@@ -634,12 +635,12 @@ describe('Router: flat routes and layouts', () => {
 
   it('keeps resolved state transactional when a malformed contribution is rejected', async () => {
     let attempt = 0;
-    const malformed = routesFor(
+    const malformed = defineRouteContribution(
       'missing-slot',
       'malformed',
       [route('/dynamic', ChildComponent)],
     );
-    const valid = routesFor(
+    const valid = defineRouteContribution(
       'application',
       'valid-dynamic',
       [route('/dynamic', SettingsComponent, { name: 'dynamic' })],
@@ -669,12 +670,12 @@ describe('Router: flat routes and layouts', () => {
   });
 
   it('rejects resolved contributions that collide with authored contribution identity', async () => {
-    const authored = routesFor(
+    const authored = defineRouteContribution(
       'application',
       'authored-core',
       [route('/static', ChildComponent, { name: 'static' })],
     );
-    const conflicting = routesFor(
+    const conflicting = defineRouteContribution(
       'application',
       'authored-core',
       [route('/dynamic', SettingsComponent, { name: 'dynamic' })],
@@ -703,12 +704,12 @@ describe('Router: flat routes and layouts', () => {
     const slowGate = new Promise<void>(resolve => {
       releaseSlow = resolve;
     });
-    const slowRoutes = routesFor(
+    const slowRoutes = defineRouteContribution(
       'application',
       'abort-slow-routes',
       [route('/abort-slow', ChildComponent)],
     );
-    const fastRoutes = routesFor(
+    const fastRoutes = defineRouteContribution(
       'application',
       'abort-fast-routes',
       [route('/abort-fast', SettingsComponent)],
@@ -860,7 +861,7 @@ describe('Router: identity-preserving server revalidation', () => {
   }
 
   it('does not recreate the active component when the authorized artifact tree is unchanged', async () => {
-    const contribution = routesFor(
+    const contribution = defineRouteContribution(
       'application',
       'application-core',
       [
@@ -920,7 +921,7 @@ describe('Router: identity-preserving server revalidation', () => {
   });
 
   it('preserves the active page when only an unrelated delivered branch changes', async () => {
-    const stable = routesFor(
+    const stable = defineRouteContribution(
       'application',
       'application-core',
       [
@@ -931,7 +932,7 @@ describe('Router: identity-preserving server revalidation', () => {
       ],
     );
 
-    const oldAdmin = routesFor(
+    const oldAdmin = defineRouteContribution(
       'administration',
       'administration-core',
       [
@@ -942,7 +943,7 @@ describe('Router: identity-preserving server revalidation', () => {
       ],
     );
 
-    const newAdmin = routesFor(
+    const newAdmin = defineRouteContribution(
       'administration',
       'administration-core',
       [
@@ -1096,7 +1097,7 @@ describe('Router: revalidation preserves active layout internals', () => {
   });
 
   it('keeps layout, page, prepared lifecycle and history untouched when only an unrelated artifact changes', async () => {
-    const stable = routesFor(
+    const stable = defineRouteContribution(
       'application',
       'application-core',
       [
@@ -1134,7 +1135,7 @@ describe('Router: revalidation preserves active layout internals', () => {
       ],
     );
 
-    const oldUnrelated = routesFor(
+    const oldUnrelated = defineRouteContribution(
       'other',
       'other-core',
       [
@@ -1145,7 +1146,7 @@ describe('Router: revalidation preserves active layout internals', () => {
       ],
     );
 
-    const newUnrelated = routesFor(
+    const newUnrelated = defineRouteContribution(
       'other',
       'other-core',
       [

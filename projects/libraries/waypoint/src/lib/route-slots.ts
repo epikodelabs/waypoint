@@ -30,7 +30,29 @@ export function routeSlot(
   });
 }
 
+let nextContributionIdentity = 1;
+
 export function routesFor<
+  const TSlotId extends string,
+  const TEntries extends NavigationTree,
+>(
+  slotId: TSlotId,
+  entries: TEntries,
+): RouteContributionDefinition<TSlotId, string, TEntries> {
+  const normalizedSlotId = normalizeRouteIdentity(
+    slotId,
+    'Route contribution slot',
+  ) as TSlotId;
+
+  return defineRouteContribution(
+    normalizedSlotId,
+    `${normalizedSlotId}@${nextContributionIdentity++}`,
+    entries,
+  );
+}
+
+/** @internal Compiler/test hook for binding an authoritative contribution id. */
+export function defineRouteContribution<
   const TSlotId extends string,
   const TId extends string,
   const TEntries extends NavigationTree,
@@ -41,14 +63,8 @@ export function routesFor<
 ): RouteContributionDefinition<TSlotId, TId, TEntries> {
   return Object.freeze({
     kind: 'route-contribution',
-    slotId: normalizeRouteIdentity(
-      slotId,
-      'Route contribution slot',
-    ) as TSlotId,
-    id: normalizeRouteIdentity(
-      id,
-      'Route contribution',
-    ) as TId,
+    slotId: normalizeRouteIdentity(slotId, 'Route contribution slot') as TSlotId,
+    id: normalizeRouteIdentity(id, 'Route contribution') as TId,
     entries,
   });
 }

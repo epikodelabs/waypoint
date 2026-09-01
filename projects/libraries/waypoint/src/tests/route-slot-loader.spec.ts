@@ -3,6 +3,7 @@ import {
   routeSlot,
   routesFor,
 } from '@epikodelabs/waypoint';
+import { defineRouteContribution } from '../lib/route-slots';
 
 describe('routeSlot contribution loader', () => {
   it('retains an authored lazy contribution edge without executing it', () => {
@@ -12,13 +13,13 @@ describe('routeSlot contribution loader', () => {
       'feature',
       async () => {
         loads++;
-        return routesFor(
-          'feature',
-          'feature-core',
-          [
+        return defineRouteContribution(
+      'feature',
+      'feature-core',
+      [
             route('/feature', class FeaturePage {}),
           ],
-        );
+    );
       },
     );
 

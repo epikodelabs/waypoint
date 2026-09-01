@@ -13,7 +13,7 @@ import {
   prepareBuild,
 } from '../compiler/index.js';
 import {
-  assertNoRouteArtifactKeysInHost,
+  assertNoProtectedRouteModulesInHost,
 } from '../compiler/host-isolation.js';
 
 interface WaypointBuildOptions extends Record<string, unknown> {
@@ -182,16 +182,13 @@ async function execute(
       }
 
       /*
-       * Security boundary: no server-delivered routesFor() contribution may be
-       * reachable from the public Angular host graph. Contribution ids are
-       * stable runtime strings, so scanning the final browser output catches
-       * accidental imports even after Angular/esbuild transforms the modules.
+       * Security boundary: no protected route source module may be reachable
+       * from the public Angular host graph. Artifact identity is compiler-owned,
+       * so the post-build check uses source provenance rather than authored ids.
        */
-      await assertNoRouteArtifactKeysInHost(
+      await assertNoProtectedRouteModulesInHost(
         layout.publicRoot,
-        analysis.plan.artifacts.map(
-          artifact => artifact.artifactKey,
-        ),
+        analysis.plan.artifacts,
       );
 
       const published = await build.publish();

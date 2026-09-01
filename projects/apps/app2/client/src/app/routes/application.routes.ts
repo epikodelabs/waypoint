@@ -22,7 +22,6 @@ import {
 
 export const applicationRoutes = routesFor(
   'application',
-  'application-core',
   [
     layout('/app', DemoShellComponent, [
       redirect(
