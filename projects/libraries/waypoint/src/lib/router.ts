@@ -45,7 +45,6 @@ import type {
 } from './navigation-definitions';
 
 import type { TypedHref, TypedNavigate } from './typed-navigation';
-import type { RouteRuntime } from './route-runtime';
 
 import {
   ROUTE,
@@ -79,6 +78,8 @@ import {
   type NavigationContext,
   type NavigationOptions,
   type NavigationTransitionDefinition,
+  type ParseRouteParams,
+  type ParseRouteQuery,
   type PrepareRouteDataFn,
   type PreloadingStrategy,
   type Route,
@@ -364,7 +365,7 @@ function adaptFrameTransitions(
 function adaptParamsParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): RouteRuntime['parseParams'] {
+): ParseRouteParams | undefined {
   const schema = route.paramsSchema;
   if (!schema) return undefined;
 
@@ -375,7 +376,7 @@ function adaptParamsParser(
 function adaptQueryParser(
   route: RenderableRoute,
   injector: EnvironmentInjector,
-): RouteRuntime['parseQuery'] {
+): ParseRouteQuery | undefined {
   const schema = route.querySchema;
   if (!schema) return undefined;
 
@@ -520,12 +521,6 @@ function adaptRoutes(
       group.primary.route;
 
     if (authoredPrimary.kind === 'redirect') {
-      if (group.outlets.length > 0) {
-        throw new Error(
-          `A redirect route cannot have named outlets. Path: "${group.primary.path}"`,
-        );
-      }
-
       return adaptRoute(
         authoredPrimary,
         group.primary.path,
@@ -550,18 +545,9 @@ function adaptRoutes(
     );
 
     const outlets = group.outlets.map(
-      (compiled): RuntimeRenderableRoute => {
-        const authoredOutlet =
-          compiled.route;
-
-        if (authoredOutlet.kind === 'redirect') {
-          throw new Error(
-            `Named outlet routes cannot be redirects. Path: "${group.primary.path}"`,
-          );
-        }
-
-        return adaptRoute(
-          authoredOutlet,
+      (compiled): RuntimeRenderableRoute =>
+        adaptRoute(
+          compiled.route as RenderableRoute,
           group.primary.path,
           compiled.redirectTo,
           group.primary.layouts,
@@ -569,8 +555,7 @@ function adaptRoutes(
           appRef,
           documentRef,
           injector,
-        );
-      },
+        ),
     );
 
     return outlets.length === 0
