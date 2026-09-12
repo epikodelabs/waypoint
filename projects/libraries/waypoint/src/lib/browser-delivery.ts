@@ -60,7 +60,7 @@ type RuntimeGlobal =
       ServerNavigationHostRuntimeState;
   };
 
-function registerServerNavigationHostModules(
+export function registerServerNavigationHostModules(
   modules: ServerNavigationHostModules,
 ): void {
   const global =
@@ -194,24 +194,6 @@ function isServerNavigationResolution(
 export function createServerNavigationResolver(
   options: ServerNavigationResolverOptions = {},
 ): ServerNavigationResolver {
-  if (!options.importModule) {
-    if (!options.hostModules) {
-      throw new Error(
-        'Native server navigation imports require hostModules.',
-      );
-    }
-
-    if (
-      !options.hostModules[
-        '@epikodelabs/waypoint'
-      ]
-    ) {
-      throw new Error(
-        'Native server navigation imports require hostModules["@epikodelabs/waypoint"].',
-      );
-    }
-  }
-
   if (options.hostModules) {
     registerServerNavigationHostModules(
       options.hostModules,
