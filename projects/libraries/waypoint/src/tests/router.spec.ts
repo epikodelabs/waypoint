@@ -290,7 +290,7 @@ idescribe('Router', () => {
                                 componentLoads++;
                                 return Promise.resolve(createComponent('Same'));
                             })()),
-                            canActivate: [() => {
+                            beforeEnter: [() => {
                                     guardCalls++;
                                     return true;
                                 }],
@@ -457,7 +457,7 @@ idescribe('Router', () => {
                         path: 'protected',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Protected')))()),
-                            canActivate: [() => true]
+                            beforeEnter: [() => true]
                         })
                     },
                 ],
@@ -478,7 +478,7 @@ idescribe('Router', () => {
                         path: 'protected',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Protected')))()),
-                            canActivate: [() => false]
+                            beforeEnter: [() => false]
                         })
                     },
                     routeWithComponent('', 'Home'),
@@ -497,7 +497,7 @@ idescribe('Router', () => {
                         path: 'protected',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Protected')))()),
-                            canActivate: [() => false]
+                            beforeEnter: [() => false]
                         })
                     }], render: (name, node) => {
                     outlet.replaceChildren(node);
@@ -514,7 +514,7 @@ idescribe('Router', () => {
                         path: 'old',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Old')))()),
-                            canActivate: [() => '/new']
+                            beforeEnter: [() => '/new']
                         })
                     },
                     routeWithComponent('new', 'New'),
@@ -534,7 +534,7 @@ idescribe('Router', () => {
                         path: 'old',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Old')))()),
-                            canActivate: [() => ({ redirectTo: '/new', replace: true })]
+                            beforeEnter: [() => ({ redirectTo: '/new', replace: true })]
                         })
                     },
                     routeWithComponent('new', 'New'),
@@ -554,7 +554,7 @@ idescribe('Router', () => {
                         path: 'async',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Async')))()),
-                            canActivate: [
+                            beforeEnter: [
                                 async () => {
                                     await delay(10);
                                     return true;
@@ -581,7 +581,7 @@ idescribe('Router', () => {
                         path: 'guarded',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Guarded')))()),
-                            canActivate: [
+                            beforeEnter: [
                                 () => { order.push('first'); return true; },
                                 () => { order.push('second'); return true; },
                             ]
@@ -606,7 +606,7 @@ idescribe('Router', () => {
                         path: 'guarded',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Guarded')))()),
-                            canActivate: [
+                            beforeEnter: [
                                 () => { order.push('first'); return true; },
                                 () => { order.push('second'); return false; },
                                 () => { order.push('third'); return true; },
@@ -631,7 +631,7 @@ idescribe('Router', () => {
                         path: 'protected',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Protected')))()),
-                            canActivate: [() => true]
+                            beforeEnter: [() => true]
                         })
                     },
                 ],
@@ -644,14 +644,14 @@ idescribe('Router', () => {
             await router.navigate('/protected');
             expect(router.state.current?.path).toBe('/protected');
         });
-        it('should block navigation when canDeactivate returns false', async () => {
+        it('should block navigation when beforeLeave returns false', async () => {
             const config: VanillaRouterConfig = {
                 routes: [
                     {
                         path: 'edit',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Edit')))()),
-                            canDeactivate: [() => false]
+                            beforeLeave: [() => false]
                         })
                     },
                     routeWithComponent('other', 'Other'),
@@ -666,14 +666,14 @@ idescribe('Router', () => {
             expect(outlet.textContent).toBe('Edit');
             expect(router.state.error).toBeNull();
         });
-        it('should redirect when canDeactivate returns a redirect', async () => {
+        it('should redirect when beforeLeave returns a redirect', async () => {
             const config: VanillaRouterConfig = {
                 routes: [
                     {
                         path: 'edit',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Edit')))()),
-                            canDeactivate: [() => '/confirm']
+                            beforeLeave: [() => '/confirm']
                         })
                     },
                     routeWithComponent('confirm', 'Confirm'),
@@ -688,7 +688,7 @@ idescribe('Router', () => {
             expect(router.state.current?.path).toBe('/confirm');
             expect(outlet.textContent).toBe('Confirm');
         });
-        it('should warn when canDeactivate redirects to the pending URL', async () => {
+        it('should warn when beforeLeave redirects to the pending URL', async () => {
             const warnSpy = spyOn(console, 'warn');
             router = createRouter({
                 routes: [
@@ -696,7 +696,7 @@ idescribe('Router', () => {
                         path: 'edit',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Edit')))()),
-                            canDeactivate: [() => ({ redirectTo: '/target', replace: true })]
+                            beforeLeave: [() => ({ redirectTo: '/target', replace: true })]
                         })
                     },
                     routeWithComponent('target', 'Target'),
@@ -705,7 +705,7 @@ idescribe('Router', () => {
             });
             await router.navigate('/edit');
             await router.navigate('/target');
-            expect(warnSpy).toHaveBeenCalledWith('[Router] Ignoring canDeactivate redirect to the pending URL', '/target');
+            expect(warnSpy).toHaveBeenCalledWith('[Router] Ignoring beforeLeave redirect to the pending URL', '/target');
             expect(router.state.current?.path).toBe('/target');
         });
     });
@@ -1127,7 +1127,7 @@ idescribe('Router', () => {
                         path: 'blocked',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Blocked')))()),
-                            canActivate: [() => false]
+                            beforeEnter: [() => false]
                         })
                     },
                 ], render: (name, node) => {
@@ -1340,7 +1340,7 @@ idescribe('Router', () => {
                         path: 'blocked',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Blocked')))()),
-                            canActivate: [() => false]
+                            beforeEnter: [() => false]
                         })
                     },
                 ],
@@ -1917,7 +1917,7 @@ idescribe('Router', () => {
                         path: 'error',
                         load: async () => ({
                             component: unwrapTestComponent(await (() => Promise.resolve(createComponent('Error')))()),
-                            canActivate: [
+                            beforeEnter: [
                                 () => {
                                     throw new Error('Guard failed');
                                 },

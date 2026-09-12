@@ -2,7 +2,7 @@ import type { EnvironmentProviders, Provider, Type } from '@angular/core';
 import type { ParamSchemaRecord, QuerySchemaRecord } from './query-schema';
 import type {
   ActivatedRoute,
-  CanActivateFn as RouterCanActivateFn,
+  BeforeEnterFn as RouterBeforeEnterFn,
   DeactivationContext,
   GuardResult,
   NavigationContext,
@@ -69,7 +69,7 @@ export interface FrameHooks<
   TPrepare extends HookList<FramePrepareFn> | undefined =
     HookList<FramePrepareFn> | undefined,
 > {
-  readonly beforeEnter?: HookList<RouterCanActivateFn>;
+  readonly beforeEnter?: HookList<RouterBeforeEnterFn>;
   readonly beforeLeave?: HookList<FrameBeforeLeaveFn<InferPreparedData<TPrepare>>>;
   readonly prepare?: TPrepare;
   readonly afterEnter?: HookList<FrameAfterEnterFn<InferPreparedData<TPrepare>>>;
@@ -90,7 +90,7 @@ export type ViewDefinition = EagerViewDefinition | LazyViewDefinition;
 export type FrameView<TData extends RouteData = EmptyRouteData> =
   ViewDefinition & {
     readonly kind: 'frame';
-    readonly beforeEnter?: readonly RouterCanActivateFn[];
+    readonly beforeEnter?: readonly RouterBeforeEnterFn[];
     readonly beforeLeave?: readonly FrameBeforeLeaveFn<TData>[];
     readonly prepare?: readonly FramePrepareFn[];
     readonly afterEnter?: readonly FrameAfterEnterFn<TData>[];

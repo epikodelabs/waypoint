@@ -34,7 +34,7 @@ import {
 } from './query-schema';
 
 import {
-  type CanActivateFn,
+  type BeforeEnterFn,
   type NavigationTransitionFn,
   type NavigationTransitionDefinition,
   type ParseRouteParams,
@@ -91,7 +91,7 @@ function loadComponent(
 }
 
 function adaptFrameBeforeEnter(
-  handler: CanActivateFn,
+  handler: BeforeEnterFn,
   injector: EnvironmentInjector,
 ): NavigationTransitionFn {
   return (transition) =>
